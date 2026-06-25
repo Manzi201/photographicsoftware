@@ -3,347 +3,343 @@ const { PDFDocument, rgb, StandardFonts, degrees } = require('pdf-lib');
 const https = require('https');
 const http  = require('http');
 
-// ── Helpers ───────────────────────────────────────────────────
-function fetchImageBuffer(url) {
+// ── Fetch image helper ────────────────────────────────────────
+function fetchBuf(url) {
   return new Promise((resolve, reject) => {
-    const protocol = url.startsWith('https') ? https : http;
-    protocol.get(url, (res) => {
-      const chunks = [];
-      res.on('data', c => chunks.push(c));
-      res.on('end',  () => resolve(Buffer.concat(chunks)));
+    const mod = url.startsWith('https') ? https : http;
+    mod.get(url, res => {
+      const ch = [];
+      res.on('data', c => ch.push(c));
+      res.on('end',  () => resolve(Buffer.concat(ch)));
       res.on('error', reject);
     }).on('error', reject);
   });
 }
-
-async function embedImage(pdfDoc, buffer) {
-  try { return await pdfDoc.embedJpg(buffer); } catch {}
-  try { return await pdfDoc.embedPng(buffer); } catch {}
+async function embedImg(doc, buf) {
+  try { return await doc.embedJpg(buf); } catch {}
+  try { return await doc.embedPng(buf); } catch {}
   return null;
 }
 
-// ── Per-class theme + motivational phrases ─────────────────────
-const THEMES = {
-  'Top Class': {
-    primary: rgb(0.70, 0.50, 0.02),
-    accent:  rgb(0.90, 0.68, 0.10),
-    light:   rgb(0.99, 0.97, 0.88),
-    title:   'CERTIFICATE OF TOP CLASS COMPLETION',
-    line1:   'has successfully completed the Top Class programme',
-    line2:   'demonstrating exceptional ability, curiosity, and a love of learning.',
-    praise:  '"A bright mind, a brilliant future ahead."',
-  },
-  'P6': {
-    primary: rgb(0.07, 0.36, 0.75),
-    accent:  rgb(0.23, 0.56, 0.94),
-    light:   rgb(0.92, 0.96, 1.00),
-    title:   'CERTIFICATE OF PRIMARY 6 COMPLETION',
-    line1:   'has successfully completed Primary Six (P6)',
-    line2:   'and is hereby recognised for outstanding academic achievement and dedication.',
-    praise:  '"Knowledge is a gift — and you have embraced it fully."',
-  },
-  'S3': {
-    primary: rgb(0.05, 0.55, 0.18),
-    accent:  rgb(0.13, 0.72, 0.30),
-    light:   rgb(0.90, 0.99, 0.92),
-    title:   'CERTIFICATE OF SENIOR 3 COMPLETION',
-    line1:   'has successfully completed Senior Three (S3)',
-    line2:   'showing remarkable perseverance, integrity, and academic excellence.',
-    praise:  '"Every step forward is a step toward greatness."',
-  },
-  'S6': {
-    primary: rgb(0.72, 0.06, 0.06),
-    accent:  rgb(0.90, 0.20, 0.20),
-    light:   rgb(0.99, 0.92, 0.92),
-    title:   'CERTIFICATE OF SENIOR 6 COMPLETION',
-    line1:   'has successfully completed Senior Six (S6)',
-    line2:   'and is commended for six years of dedication, hard work, and scholastic achievement.',
-    praise:  '"The world awaits a mind as capable as yours."',
-  },
-  'Nursery': {
-    primary: rgb(0.50, 0.05, 0.72),
-    accent:  rgb(0.68, 0.28, 0.92),
-    light:   rgb(0.97, 0.92, 1.00),
-    title:   'CERTIFICATE OF NURSERY COMPLETION',
-    line1:   'has joyfully completed the Nursery programme',
-    line2:   'and has shown wonderful growth, creativity, and a beautiful eagerness to learn.',
-    praise:  '"Every great journey begins with a single step — yours has begun!"',
-  },
-  'Graduation': {
-    primary: rgb(0.50, 0.33, 0.00),
-    accent:  rgb(0.78, 0.56, 0.02),
-    light:   rgb(0.99, 0.96, 0.84),
-    title:   'CERTIFICATE OF GRADUATION',
-    line1:   'has fulfilled all academic requirements and is hereby awarded this',
-    line2:   'Certificate of Graduation with distinction, honour, and great pride.',
-    praise:  '"Today you graduate — tomorrow you change the world."',
-  },
-};
-
-// ── Corner ornaments ───────────────────────────────────────────
-function drawCorners(page, w, h, color) {
-  const sz = 38, m = 26;
-  [[m, h-m, 1, 0], [m, h-m, 0, -1],
-   [w-m, h-m, -1, 0], [w-m, h-m, 0, -1],
-   [m, m, 1, 0], [m, m, 0, 1],
-   [w-m, m, -1, 0], [w-m, m, 0, 1]
-  ].forEach(([x,y,dx,dy]) =>
-    page.drawLine({ start:{x,y}, end:{x:x+dx*sz, y:y+dy*sz}, thickness:3, color })
-  );
-}
-
-// ── Diamond divider ────────────────────────────────────────────
-function diamonds(page, x, y, len, color) {
-  for (let i = 0; i < len; i += 13) {
-    page.drawRectangle({ x:x+i, y:y-3, width:5, height:5, rotate:degrees(45), color, borderWidth:0 });
-  }
-}
-
-// ── Centered text helper ───────────────────────────────────────
-function centerText(page, text, y, size, font, color, maxX, minX = 30) {
-  const w = font.widthOfTextAtSize(text, size);
-  const cx = minX + (maxX - minX) / 2;
-  page.drawText(text, { x: cx - w/2, y, size, font, color });
-}
-
-// ══════════════════════════════════════════════════════════════
-// CERTIFICATE PDF GENERATOR
-// Layout (A4 Landscape 841.89 × 595.28 pt):
-//
-//  ┌──────────────────────────────────────────────────────────┐
-//  │  [LOGO]   SCHOOL NAME            [PHOTO hejuru]          │
-//  │           ─────────────          ┌────────────┐          │
-//  │  ██████████████████████████████  │            │          │
-//  │  █  CERTIFICATE TITLE BAND  █   │   STUDENT  │          │
-//  │  ██████████████████████████████  │   PHOTO    │          │
-//  │                                  │            │          │
-//  │  This is to certify that         └────────────┘          │
-//  │  ◆ ◆ ◆ ◆ ◆ ◆                    PHOTO NO: XXX          │
-//  │  STUDENT FULL NAME                                        │
-//  │  ────────────────                                        │
-//  │  ██ CLASS BAND ██                                        │
-//  │  "Motivational quote"                                    │
-//  │  award text...                                           │
-//  │                                                          │
-//  │  DATE          SIGNATURE         STAMP                   │
-//  └──────────────────────────────────────────────────────────┘
-// ══════════════════════════════════════════════════════════════
-async function generateCertificatePDF(student, template, settings) {
-  const pdfDoc = await PDFDocument.create();
-  const W = 841.89, H = 595.28;
-  const page = pdfDoc.addPage([W, H]);
-
-  const theme = THEMES[template] || THEMES['Top Class'];
-  const B = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-  const R = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const I = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
-
-  // ── 1. Background ────────────────────────────────────────────
-  if (settings.background_url) {
-    try {
-      const buf = await fetchImageBuffer(settings.background_url);
-      const img = await embedImage(pdfDoc, buf);
-      if (img) page.drawImage(img, { x:0, y:0, width:W, height:H, opacity:0.15 });
-    } catch {}
-  } else {
-    page.drawRectangle({ x:0, y:0, width:W, height:H, color:theme.light });
-  }
-
-  // ── 2. Frame stripes ─────────────────────────────────────────
-  page.drawRectangle({ x:0, y:0,    width:W,  height:13, color:theme.primary });
-  page.drawRectangle({ x:0, y:H-13, width:W,  height:13, color:theme.primary });
-  page.drawRectangle({ x:0, y:0,    width:13, height:H,  color:theme.primary });
-  page.drawRectangle({ x:W-13, y:0, width:13, height:H,  color:theme.primary });
-  // Inner border
-  page.drawRectangle({ x:18, y:18, width:W-36, height:H-36, borderColor:theme.accent, borderWidth:1.2, color:rgb(1,1,1,0) });
-  // Corner ornaments
-  drawCorners(page, W, H, theme.primary);
-
-  // ── 3. PHOTO — top-right corner ──────────────────────────────
-  // Photo positioned at top-right, touching the inner border
-  const pW = 160, pH = 200;
-  const pX = W - pW - 32;   // right side with margin
-  const pY = H - pH - 32;   // top with margin (hejuru)
-
-  // Photo frame
-  page.drawRectangle({ x:pX-5, y:pY-5, width:pW+10, height:pH+10,
-    color:rgb(1,1,1), borderColor:theme.accent, borderWidth:2 });
-  page.drawRectangle({ x:pX-2, y:pY-2, width:pW+4, height:pH+4,
-    borderColor:theme.primary, borderWidth:0.5, color:rgb(1,1,1,0) });
-
-  if (student.photo_url) {
-    try {
-      const buf = await fetchImageBuffer(student.photo_url);
-      const img = await embedImage(pdfDoc, buf);
-      if (img) page.drawImage(img, { x:pX, y:pY, width:pW, height:pH });
-    } catch {}
-  } else {
-    page.drawRectangle({ x:pX, y:pY, width:pW, height:pH, color:rgb(0.94,0.94,0.94) });
-    const nw = R.widthOfTextAtSize('NO PHOTO', 10);
-    page.drawText('NO PHOTO', { x:pX+(pW-nw)/2, y:pY+pH/2-5, size:10, font:R, color:rgb(0.7,0.7,0.7) });
-  }
-
-  // Photo number label below photo
-  page.drawRectangle({ x:pX, y:pY-20, width:pW, height:20, color:theme.primary });
-  const pnTxt = `PHOTO NO: ${student.photo_number}`;
-  const pnW = B.widthOfTextAtSize(pnTxt, 8);
-  page.drawText(pnTxt, { x:pX+(pW-pnW)/2, y:pY-14, size:8, font:B, color:rgb(1,1,1) });
-
-  // ── 4. Header — Logo + School name ──────────────────────────
-  const contentMaxX = pX - 20; // content area ends before photo
-
-  // Logo
-  let logoY = H - 105;
-  if (settings.logo_url) {
-    try {
-      const buf = await fetchImageBuffer(settings.logo_url);
-      const img = await embedImage(pdfDoc, buf);
-      if (img) { page.drawImage(img, { x:28, y:logoY, width:68, height:68 }); }
-    } catch {}
-  } else {
-    page.drawCircle({ x:62, y:logoY+34, size:28, color:theme.light, borderColor:theme.accent, borderWidth:2 });
-    page.drawText((settings.school_name||'S').charAt(0).toUpperCase(),
-      { x:56, y:logoY+26, size:18, font:B, color:theme.primary });
-  }
-
-  // School name
-  const sName = (settings.school_name || 'YOUR SCHOOL NAME').toUpperCase();
-  let sSize = 22;
-  while (B.widthOfTextAtSize(sName, sSize) > contentMaxX - 115 && sSize > 12) sSize--;
-  const sNameW = B.widthOfTextAtSize(sName, sSize);
-  page.drawText(sName, { x:110, y:H-62, size:sSize, font:B, color:theme.primary });
-  page.drawLine({ start:{x:110, y:H-68}, end:{x:110+sNameW, y:H-68}, thickness:1, color:theme.accent });
-
-  // Subtitle
-  page.drawText('EXCELLENCE IN EDUCATION', { x:110, y:H-80, size:9, font:I, color:theme.accent });
-
-  // ── 5. Certificate Title Band ────────────────────────────────
-  const bandY = H - 138;
-  const bandW = contentMaxX - 28;
-  page.drawRectangle({ x:28, y:bandY, width:bandW, height:36, color:theme.primary });
-  // Accent line on band
-  page.drawLine({ start:{x:28, y:bandY+36}, end:{x:28+bandW, y:bandY+36}, thickness:2, color:theme.accent });
-
-  const tSize = Math.min(17, 17);
-  const tW = B.widthOfTextAtSize(theme.title, tSize);
-  page.drawText(theme.title, { x:28+(bandW-tW)/2, y:bandY+11, size:tSize, font:B, color:rgb(1,1,1) });
-
-  // ── 6. Body ──────────────────────────────────────────────────
-  const bL = 36;
-  const bMaxW = contentMaxX - bL;
-
-  // "This is to certify that"
-  page.drawText('This is to certify that', { x:bL+8, y:bandY-26, size:12, font:I, color:rgb(0.35,0.35,0.35) });
-  diamonds(page, bL+8, bandY-34, 180, theme.accent);
-
-  // Student name
-  const fullName = `${student.first_name.toUpperCase()} ${student.last_name.toUpperCase()}`;
-  let nSize = 34;
-  while (B.widthOfTextAtSize(fullName, nSize) > bMaxW - 10 && nSize > 18) nSize--;
-  const nY = bandY - 76;
-  page.drawText(fullName, { x:bL, y:nY, size:nSize, font:B, color:rgb(0.06,0.06,0.06) });
-
-  // Double underline
-  const nlY = nY - 5;
-  page.drawLine({ start:{x:bL, y:nlY},   end:{x:bL+bMaxW-10, y:nlY},   thickness:2,   color:theme.primary });
-  page.drawLine({ start:{x:bL, y:nlY-3}, end:{x:bL+bMaxW-10, y:nlY-3}, thickness:0.5, color:theme.accent  });
-
-  // Line 1 (class-specific)
-  page.drawText(theme.line1, { x:bL+8, y:nlY-20, size:11, font:I, color:rgb(0.30,0.30,0.30) });
-
-  // Class highlighted band
-  const classTxt = template === 'Graduation'
-    ? `Graduation Programme · Academic Year ${student.year}`
-    : `${template} · Academic Year ${student.year}`;
-  let cSize = 15;
-  while (B.widthOfTextAtSize(classTxt, cSize) > bMaxW - 30 && cSize > 10) cSize--;
-  const cBandW = Math.min(B.widthOfTextAtSize(classTxt, cSize) + 28, bMaxW - 10);
-  const cBandY = nlY - 52;
-  page.drawRectangle({ x:bL, y:cBandY, width:cBandW, height:26, color:theme.accent });
-  page.drawText(classTxt, { x:bL+14, y:cBandY+7, size:cSize, font:B, color:rgb(1,1,1) });
-
-  // Line 2 (class-specific award text)
-  const l2Lines = splitText(theme.line2, R, 10, bMaxW - 10);
-  l2Lines.forEach((line, idx) => {
-    page.drawText(line, { x:bL+6, y:cBandY-18-(idx*13), size:10, font:R, color:rgb(0.40,0.40,0.40) });
-  });
-
-  // Motivational quote
-  const quoteY = cBandY - 18 - l2Lines.length * 13 - 10;
-  if (quoteY > 70) {
-    const qLines = splitText(theme.praise, I, 10, bMaxW - 30);
-    qLines.forEach((line, idx) => {
-      const qW = I.widthOfTextAtSize(line, 10);
-      page.drawText(line, { x:bL + (bMaxW - qW)/2, y:quoteY - idx*13, size:10, font:I, color:theme.primary });
-    });
-  }
-
-  // ── 7. Footer row ────────────────────────────────────────────
-  const fY = 46;
-  const today = new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'long', year:'numeric' });
-
-  // Date
-  page.drawText('DATE ISSUED', { x:bL, y:fY+20, size:7, font:B, color:theme.primary });
-  page.drawLine({ start:{x:bL, y:fY+16}, end:{x:bL+110, y:fY+16}, thickness:0.8, color:theme.accent });
-  page.drawText(today, { x:bL, y:fY+3, size:10, font:R, color:rgb(0.2,0.2,0.2) });
-
-  // Signature
-  const sigX = bL + 160;
-  page.drawText('AUTHORIZED SIGNATURE', { x:sigX, y:fY+20, size:7, font:B, color:theme.primary });
-  page.drawLine({ start:{x:sigX, y:fY+16}, end:{x:sigX+140, y:fY+16}, thickness:0.8, color:theme.accent });
-  if (settings.signature_url) {
-    try {
-      const buf = await fetchImageBuffer(settings.signature_url);
-      const img = await embedImage(pdfDoc, buf);
-      if (img) page.drawImage(img, { x:sigX+5, y:fY+17, width:120, height:28, opacity:0.9 });
-    } catch {}
-  }
-  const sigName = settings.signatory_name || 'Head Teacher';
-  page.drawText(sigName, { x:sigX, y:fY+3, size:10, font:R, color:rgb(0.2,0.2,0.2) });
-
-  // Stamp (bottom near photo, right side)
-  const stX = pX + pW/2;
-  const stY = fY + 30;
-  if (settings.stamp_url) {
-    try {
-      const buf = await fetchImageBuffer(settings.stamp_url);
-      const img = await embedImage(pdfDoc, buf);
-      if (img) page.drawImage(img, { x:stX-32, y:stY-32, width:65, height:65, opacity:0.75 });
-    } catch {}
-  } else {
-    page.drawCircle({ x:stX, y:stY, size:32, borderColor:theme.accent, borderWidth:1.5, color:rgb(1,1,1,0) });
-    page.drawCircle({ x:stX, y:stY, size:25, borderColor:theme.accent, borderWidth:0.8, color:rgb(1,1,1,0) });
-    page.drawText('OFFICIAL', { x:stX-18, y:stY+5,  size:6, font:B, color:theme.accent });
-    page.drawText('STAMP',    { x:stX-12, y:stY-4, size:6, font:B, color:theme.accent });
-  }
-
-  // Watermark
-  try {
-    const wm = (settings.school_name || 'SCHOOL').toUpperCase();
-    const wmSize = 48;
-    const wmW = B.widthOfTextAtSize(wm, wmSize);
-    page.drawText(wm, {
-      x:(W-wmW)/2, y:H/2-24, size:wmSize, font:B,
-      color:rgb(theme.primary.red, theme.primary.green, theme.primary.blue),
-      opacity:0.04, rotate:degrees(-28),
-    });
-  } catch {}
-
-  return await pdfDoc.save();
-}
-
-// ── Utility: split long text into lines ────────────────────────
-function splitText(text, font, size, maxW) {
-  const words = text.split(' ');
-  const lines = [];
+// ── Split text into wrapped lines ─────────────────────────────
+function wrap(text, font, size, maxW) {
+  const words = text.split(' '), lines = [];
   let cur = '';
-  for (const word of words) {
-    const test = cur ? `${cur} ${word}` : word;
-    if (font.widthOfTextAtSize(test, size) > maxW) { lines.push(cur); cur = word; }
-    else cur = test;
+  for (const w of words) {
+    const t = cur ? `${cur} ${w}` : w;
+    if (font.widthOfTextAtSize(t, size) > maxW) { if (cur) lines.push(cur); cur = w; }
+    else cur = t;
   }
   if (cur) lines.push(cur);
   return lines;
+}
+
+// ── Ordinal suffix: 1st, 2nd, 3rd... ─────────────────────────
+function ordinal(n) {
+  const s = ['th','st','nd','rd'], v = n % 100;
+  return n + (s[(v-20)%10] || s[v] || s[0]);
+}
+
+// ── Format date like "3rd July 2026" ─────────────────────────
+function fmtDate(d = new Date()) {
+  const months = ['January','February','March','April','May','June',
+    'July','August','September','October','November','December'];
+  return `${ordinal(d.getDate())} ${months[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+// ══════════════════════════════════════════════════════════════
+// TEMPLATES — 3 visual styles
+// ══════════════════════════════════════════════════════════════
+// Each template defines: border colors, layout style, fonts
+// Style A = Clean white (like the reference image)
+// Style B = Dark header band
+// Style C = Elegant bordered
+
+const STYLE_A = 'clean';    // white background, thin blue border, school name in box
+const STYLE_B = 'classic';  // colored header band, ribbon decoration
+const STYLE_C = 'elegant';  // double border, gold accents
+
+// ── Per-class copy ─────────────────────────────────────────────
+const CLASS_COPY = {
+  'Top Class': {
+    completeText: 'Has completed in Top Class at',
+    purposeText:  'This certificate is given for whichever purpose it may serve',
+  },
+  'P6': {
+    completeText: 'Has completed Primary Six (P6) at',
+    purposeText:  'This certificate is given for whichever purpose it may serve',
+  },
+  'S3': {
+    completeText: 'Has completed Senior Three (S3) at',
+    purposeText:  'This certificate is given for whichever purpose it may serve',
+  },
+  'S6': {
+    completeText: 'Has completed Senior Six (S6) at',
+    purposeText:  'This certificate is given for whichever purpose it may serve',
+  },
+  'Nursery': {
+    completeText: 'Has completed the Nursery programme at',
+    purposeText:  'This certificate is given for whichever purpose it may serve',
+  },
+  'Graduation': {
+    completeText: 'Has successfully graduated from',
+    purposeText:  'This certificate is given for whichever purpose it may serve',
+  },
+};
+
+// ══════════════════════════════════════════════════════════════
+// MAIN CERTIFICATE GENERATOR
+// W × H = A4 Landscape (841.89 × 595.28 pt)
+//
+// Layout matches reference image exactly:
+//  ┌─────────────────────────────────────────────────────────┐
+//  │ [LOGO]     ┌──────────────────────────────┐    [PHOTO] │
+//  │            │     SCHOOL NAME              │            │
+//  │            └──────────────────────────────┘            │
+//  │         C E R T I F I C A T E  O F  C O M P L E T I O N│
+//  │              ─────────────────────────────              │
+//  │                  This is to certify that                │
+//  │              STUDENT NAME (large, colored)              │
+//  │    Has completed in [Class] at [School] in              │
+//  │          Academic year of [year]-[year+1]               │
+//  │                   [LOGO small]                          │
+//  │   This certificate is given for whichever purpose...    │
+//  │             Done at Kigali on [date]                    │
+//  │   [SIGNATURE]              [STAMP]                      │
+//  └─────────────────────────────────────────────────────────┘
+// ══════════════════════════════════════════════════════════════
+async function generateCertificatePDF(student, template, settings, style = STYLE_A) {
+  const doc = await PDFDocument.create();
+  const W = 841.89, H = 595.28;
+  const page = doc.addPage([W, H]);
+
+  const B  = await doc.embedFont(StandardFonts.HelveticaBold);
+  const R  = await doc.embedFont(StandardFonts.Helvetica);
+  const BI = await doc.embedFont(StandardFonts.HelveticaBoldOblique);
+  const I  = await doc.embedFont(StandardFonts.HelveticaOblique);
+
+  const copy = CLASS_COPY[template] || CLASS_COPY['Top Class'];
+  const schoolName = (settings.school_name || 'YOUR SCHOOL NAME').trim();
+  const year = student.year || new Date().getFullYear();
+  const academicYear = `${year}-${Number(year) + 1}`;
+  const today = fmtDate();
+  const city = settings.city || 'Kigali';
+
+  // ── Choose colors by style ─────────────────────────────────
+  let borderColor, titleColor, nameColor, accentColor, bgColor;
+
+  if (style === STYLE_A) {         // Clean white — blue/navy
+    borderColor = rgb(0.07, 0.20, 0.54);
+    titleColor  = rgb(0.07, 0.20, 0.54);
+    nameColor   = rgb(0.07, 0.55, 0.18);
+    accentColor = rgb(0.07, 0.20, 0.54);
+    bgColor     = rgb(1, 1, 1);
+  } else if (style === STYLE_B) {  // Classic — dark + gold
+    borderColor = rgb(0.40, 0.28, 0.02);
+    titleColor  = rgb(0.40, 0.28, 0.02);
+    nameColor   = rgb(0.07, 0.36, 0.75);
+    accentColor = rgb(0.78, 0.56, 0.02);
+    bgColor     = rgb(0.99, 0.98, 0.94);
+  } else {                         // Elegant — deep red + gold
+    borderColor = rgb(0.55, 0.05, 0.05);
+    titleColor  = rgb(0.55, 0.05, 0.05);
+    nameColor   = rgb(0.07, 0.36, 0.75);
+    accentColor = rgb(0.78, 0.56, 0.02);
+    bgColor     = rgb(0.99, 0.97, 0.97);
+  }
+
+  // ── Background ────────────────────────────────────────────
+  page.drawRectangle({ x:0, y:0, width:W, height:H, color:bgColor });
+  if (settings.background_url) {
+    try {
+      const buf = await fetchBuf(settings.background_url);
+      const img = await embedImg(doc, buf);
+      if (img) page.drawImage(img, { x:0, y:0, width:W, height:H, opacity:0.12 });
+    } catch {}
+  }
+
+  // ── Outer border (double) ─────────────────────────────────
+  page.drawRectangle({ x:10, y:10, width:W-20, height:H-20,
+    borderColor, borderWidth:2.5, color:rgb(1,1,1,0) });
+  page.drawRectangle({ x:15, y:15, width:W-30, height:H-30,
+    borderColor:accentColor, borderWidth:0.8, color:rgb(1,1,1,0) });
+
+  // ── PHOTO — top-right ─────────────────────────────────────
+  const pW = 130, pH = 155;
+  const pX = W - pW - 28;
+  const pY = H - pH - 24;
+
+  // Photo border
+  page.drawRectangle({ x:pX-3, y:pY-3, width:pW+6, height:pH+6,
+    borderColor, borderWidth:1.5, color:rgb(1,1,1,0) });
+
+  if (student.photo_url) {
+    try {
+      const buf = await fetchBuf(student.photo_url);
+      const img = await embedImg(doc, buf);
+      if (img) page.drawImage(img, { x:pX, y:pY, width:pW, height:pH });
+    } catch {}
+  } else {
+    page.drawRectangle({ x:pX, y:pY, width:pW, height:pH, color:rgb(0.93,0.93,0.93) });
+    const nw = R.widthOfTextAtSize('NO PHOTO', 9);
+    page.drawText('NO PHOTO', { x:pX+(pW-nw)/2, y:pY+pH/2-4, size:9, font:R, color:rgb(0.65,0.65,0.65) });
+  }
+
+  // ── LOGO — top-left ───────────────────────────────────────
+  const logoSize = 85;
+  const logoX = 28, logoY = H - logoSize - 22;
+
+  if (settings.logo_url) {
+    try {
+      const buf = await fetchBuf(settings.logo_url);
+      const img = await embedImg(doc, buf);
+      if (img) page.drawImage(img, { x:logoX, y:logoY, width:logoSize, height:logoSize });
+    } catch {}
+  } else {
+    // Placeholder circle with initial
+    page.drawRectangle({ x:logoX, y:logoY, width:logoSize, height:logoSize,
+      borderColor, borderWidth:1, color:rgb(0.95,0.95,0.98) });
+    const abbrev = schoolName.charAt(0);
+    const abbW = B.widthOfTextAtSize(abbrev, 32);
+    page.drawText(abbrev, { x:logoX+(logoSize-abbW)/2, y:logoY+logoSize/2-12, size:32, font:B, color:borderColor });
+  }
+
+  // ── SCHOOL NAME in box — top center ───────────────────────
+  const boxL = logoX + logoSize + 14;
+  const boxR = pX - 14;
+  const boxW = boxR - boxL;
+  const boxH = 38;
+  const boxY = H - boxH - 28;
+
+  page.drawRectangle({ x:boxL, y:boxY, width:boxW, height:boxH,
+    borderColor, borderWidth:2, color:rgb(1,1,1,0) });
+
+  let snSize = 19;
+  while (B.widthOfTextAtSize(schoolName, snSize) > boxW - 20 && snSize > 9) snSize--;
+  const snW = B.widthOfTextAtSize(schoolName, snSize);
+  page.drawText(schoolName, {
+    x: boxL + (boxW - snW) / 2,
+    y: boxY + (boxH - snSize) / 2 + 2,
+    size: snSize, font: B, color: borderColor,
+  });
+
+  // ── CERTIFICATE OF COMPLETION — spaced letters ────────────
+  const titleY = H - 148;
+  const titleRaw = 'CERTIFICATE OF COMPLETION';
+  // Spaced: add 2 spaces between each letter for the stretched look
+  const titleSpaced = titleRaw.split('').join(' ');
+  let tSize = 16;
+  while (I.widthOfTextAtSize(titleSpaced, tSize) > W - 100 && tSize > 9) tSize--;
+  const tW = I.widthOfTextAtSize(titleSpaced, tSize);
+  page.drawText(titleSpaced, {
+    x: (W - tW) / 2, y: titleY, size: tSize, font: BI, color: titleColor,
+  });
+
+  // Horizontal rule under title
+  page.drawLine({
+    start: { x: (W - tW) / 2 - 10, y: titleY - 5 },
+    end:   { x: (W - tW) / 2 + tW + 10, y: titleY - 5 },
+    thickness: 0.8, color: accentColor,
+  });
+
+  // ── "This is to certify that" ─────────────────────────────
+  const certifyY = titleY - 22;
+  const ctTxt = 'This is to certify that';
+  const ctW = I.widthOfTextAtSize(ctTxt, 11);
+  page.drawText(ctTxt, { x:(W-ctW)/2, y:certifyY, size:11, font:I, color:rgb(0.3,0.3,0.3) });
+
+  // ── STUDENT NAME — large colored ──────────────────────────
+  const fullName = `${student.first_name} ${student.last_name}`;
+  // Mixed case: FIRST LAST with small caps feel
+  const nameDisplay = fullName.toUpperCase();
+  let nameSize = 36;
+  while (B.widthOfTextAtSize(nameDisplay, nameSize) > W - 120 && nameSize > 18) nameSize--;
+  const nameY = certifyY - 46;
+  const nameW = B.widthOfTextAtSize(nameDisplay, nameSize);
+  page.drawText(nameDisplay, { x:(W-nameW)/2, y:nameY, size:nameSize, font:B, color:nameColor });
+
+  // ── Body text lines ───────────────────────────────────────
+  // Line 1: "Has completed in Top class at [School] in"
+  const line1 = `${copy.completeText} ${schoolName} in`;
+  let l1Size = 13;
+  while (R.widthOfTextAtSize(line1, l1Size) > W - 80 && l1Size > 9) l1Size--;
+  const l1W = R.widthOfTextAtSize(line1, l1Size);
+  const l1Y = nameY - 32;
+  page.drawText(line1, { x:(W-l1W)/2, y:l1Y, size:l1Size, font:R, color:rgb(0.15,0.15,0.15) });
+
+  // Line 2: "Academic year of 2025-2026"
+  const line2 = `Academic year of ${academicYear}`;
+  const l2Size = 13;
+  const l2W = R.widthOfTextAtSize(line2, l2Size);
+  const l2Y = l1Y - 20;
+  page.drawText(line2, { x:(W-l2W)/2, y:l2Y, size:l2Size, font:R, color:rgb(0.15,0.15,0.15) });
+
+  // ── Small logo in center (like reference image) ───────────
+  const cLogoY = l2Y - 50;
+  const cLogoSize = 36;
+  if (settings.logo_url) {
+    try {
+      const buf = await fetchBuf(settings.logo_url);
+      const img = await embedImg(doc, buf);
+      if (img) page.drawImage(img, {
+        x: (W - cLogoSize) / 2, y: cLogoY, width: cLogoSize, height: cLogoSize,
+      });
+    } catch {}
+  } else {
+    // Small decorative element
+    page.drawRectangle({ x:(W-24)/2, y:cLogoY+6, width:24, height:24,
+      rotate:degrees(45), borderColor:accentColor, borderWidth:1, color:rgb(1,1,1,0) });
+  }
+
+  // ── Purpose text — bold italic ────────────────────────────
+  const purposeY = cLogoY - 18;
+  const ptLines = wrap(copy.purposeText, BI, 11.5, W - 100);
+  ptLines.forEach((line, i) => {
+    const lw = BI.widthOfTextAtSize(line, 11.5);
+    page.drawText(line, { x:(W-lw)/2, y:purposeY-i*16, size:11.5, font:BI, color:rgb(0.1,0.1,0.1) });
+  });
+
+  // ── "Done at [City] on [date]" ────────────────────────────
+  const doneTxt = `Done at ${city} on ${today}`;
+  let doneSize = 11.5;
+  while (BI.widthOfTextAtSize(doneTxt, doneSize) > W - 100 && doneSize > 8) doneSize--;
+  const doneW = BI.widthOfTextAtSize(doneTxt, doneSize);
+  const doneY = purposeY - ptLines.length * 16 - 14;
+  page.drawText(doneTxt, { x:(W-doneW)/2, y:doneY, size:doneSize, font:BI, color:rgb(0.1,0.1,0.1) });
+
+  // ── Signature (left bottom) ───────────────────────────────
+  const sigY = 42;
+  const sigX = 80;
+  if (settings.signature_url) {
+    try {
+      const buf = await fetchBuf(settings.signature_url);
+      const img = await embedImg(doc, buf);
+      if (img) page.drawImage(img, { x:sigX, y:sigY+12, width:110, height:28, opacity:0.85 });
+    } catch {}
+  }
+  page.drawLine({ start:{x:sigX, y:sigY+8}, end:{x:sigX+120, y:sigY+8}, thickness:0.8, color:rgb(0.3,0.3,0.3) });
+  const sigName = settings.signatory_name || 'Head Teacher';
+  const sigNW = R.widthOfTextAtSize(sigName, 9);
+  page.drawText(sigName, { x:sigX+(120-sigNW)/2, y:sigY-4, size:9, font:R, color:rgb(0.3,0.3,0.3) });
+
+  // ── Stamp (right bottom) ──────────────────────────────────
+  const stX = W - 150;
+  const stY = 50;
+  if (settings.stamp_url) {
+    try {
+      const buf = await fetchBuf(settings.stamp_url);
+      const img = await embedImg(doc, buf);
+      if (img) page.drawImage(img, { x:stX-28, y:stY-28, width:60, height:60, opacity:0.8 });
+    } catch {}
+  } else {
+    page.drawCircle({ x:stX, y:stY, size:28, borderColor:accentColor, borderWidth:1.5, color:rgb(1,1,1,0) });
+    page.drawCircle({ x:stX, y:stY, size:22, borderColor:accentColor, borderWidth:0.7, color:rgb(1,1,1,0) });
+    const stTxt1 = 'OFFICIAL', stTxt2 = 'STAMP';
+    page.drawText(stTxt1, { x:stX-B.widthOfTextAtSize(stTxt1,6)/2, y:stY+4,  size:6, font:B, color:accentColor });
+    page.drawText(stTxt2, { x:stX-B.widthOfTextAtSize(stTxt2,6)/2, y:stY-4, size:6, font:B, color:accentColor });
+  }
+
+  return await doc.save();
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -353,25 +349,21 @@ function splitText(text, font, size, maxW) {
 exports.generateCertificate = async (req, res) => {
   try {
     const { studentId } = req.params;
-    const { template }  = req.query;
+    const { template, style = STYLE_A } = req.query;
 
-    const { data: student, error: sErr } = await supabase
+    const { data: student, error } = await supabase
       .from('students').select('*')
       .eq('school_id', req.schoolId)
       .or(`id.eq.${studentId},photo_number.eq.${studentId}`)
       .single();
-    if (sErr) throw new Error('Student not found');
+    if (error) throw new Error('Student not found');
 
-    const settings      = req.school;
-    const usedTemplate  = template || student.class || 'Top Class';
-    const pdfBytes      = await generateCertificatePDF(student, usedTemplate, settings);
+    const usedTemplate = template || student.class || 'Top Class';
+    const pdfBytes = await generateCertificatePDF(student, usedTemplate, req.school, style);
 
     await supabase.from('certificates').insert([{
-      student_id:   student.id,
-      school_id:    req.schoolId,
-      template:     usedTemplate,
-      generated_at: new Date().toISOString(),
-      printed_by:   req.user.id,
+      student_id: student.id, school_id: req.schoolId,
+      template: usedTemplate, generated_at: new Date().toISOString(), printed_by: req.user.id,
     }]);
 
     res.setHeader('Content-Type', 'application/pdf');
@@ -385,41 +377,34 @@ exports.generateCertificate = async (req, res) => {
 
 exports.generateBatch = async (req, res) => {
   try {
-    const { class: className, year, template } = req.query;
+    const { class: cls, year, template, style = STYLE_A } = req.query;
     let q = supabase.from('students').select('*')
       .eq('school_id', req.schoolId).eq('status', 'active');
-    if (className) q = q.eq('class', className);
-    if (year)      q = q.eq('year', year);
+    if (cls)  q = q.eq('class', cls);
+    if (year) q = q.eq('year', year);
 
     const { data: students, error } = await q.order('photo_number');
     if (error) throw error;
     if (!students.length) return res.status(404).json({ success: false, error: 'No students found' });
 
-    const settings   = req.school;
-    const mergedPdf  = await PDFDocument.create();
-
+    const merged = await PDFDocument.create();
     for (const student of students) {
-      const usedTemplate = template || student.class || 'Top Class';
-      const certBytes    = await generateCertificatePDF(student, usedTemplate, settings);
-      const certDoc      = await PDFDocument.load(certBytes);
-      const [certPage]   = await mergedPdf.copyPages(certDoc, [0]);
-      mergedPdf.addPage(certPage);
-
+      const t = template || student.class || 'Top Class';
+      const bytes = await generateCertificatePDF(student, t, req.school, style);
+      const certDoc = await PDFDocument.load(bytes);
+      const [p] = await merged.copyPages(certDoc, [0]);
+      merged.addPage(p);
       await supabase.from('certificates').insert([{
-        student_id:   student.id,
-        school_id:    req.schoolId,
-        template:     usedTemplate,
-        generated_at: new Date().toISOString(),
-        printed_by:   req.user.id,
+        student_id: student.id, school_id: req.schoolId,
+        template: t, generated_at: new Date().toISOString(), printed_by: req.user.id,
       }]);
     }
 
-    const mergedBytes = await mergedPdf.save();
-    const label       = className ? `${className}_` : 'all_';
+    const label = cls ? `${cls}_` : 'all_';
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition',
       `attachment; filename="${label}certificates_${year || new Date().getFullYear()}.pdf"`);
-    res.send(Buffer.from(mergedBytes));
+    res.send(Buffer.from(await merged.save()));
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -431,8 +416,7 @@ exports.getCertificates = async (req, res) => {
       .from('certificates')
       .select('*, students(first_name, last_name, photo_number, class)')
       .eq('school_id', req.schoolId)
-      .order('generated_at', { ascending: false })
-      .limit(100);
+      .order('generated_at', { ascending: false }).limit(100);
     if (error) throw error;
     res.json({ success: true, data });
   } catch (err) {

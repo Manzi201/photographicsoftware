@@ -62,7 +62,7 @@ function ImageField({ label, hint, preview, onChange, accept = 'image/*', square
 
 export default function Settings() {
   const { school, refreshSchool } = useAuth();
-  const [form, setForm] = useState({ school_name: '', signatory_name: '', active_year: '' });
+  const [form, setForm] = useState({ school_name: '', signatory_name: '', active_year: '', city: '' });
   const [files, setFiles]     = useState({ logo: null, stamp: null, signature: null, background: null });
   const [previews, setPreviews] = useState({ logo: null, stamp: null, signature: null, background: null });
   const [bgPreset, setBgPreset] = useState('none');
@@ -76,6 +76,7 @@ export default function Settings() {
         school_name:    school.school_name    || '',
         signatory_name: school.signatory_name || '',
         active_year:    school.active_year    || String(new Date().getFullYear()),
+        city:           school.city           || 'Kigali',
       });
       setPreviews({
         logo:       school.logo_url       || null,
@@ -138,6 +139,7 @@ export default function Settings() {
         school_name:    form.school_name.trim(),
         signatory_name: form.signatory_name.trim() || 'Head Teacher',
         active_year:    form.active_year || String(new Date().getFullYear()),
+        city:           form.city?.trim() || 'Kigali',
         bg_preset:      bgPreset,
         // Start with existing URLs so we don't lose them if no new file uploaded
         logo_url:       previews.logo       || null,
@@ -246,6 +248,16 @@ export default function Settings() {
                   value={form.active_year}
                   onChange={(e) => setForm({ ...form, active_year: e.target.value })}
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">🏙️ City (for certificate)</label>
+                <input
+                  className="input-field"
+                  placeholder="e.g. Kigali"
+                  value={form.city || ''}
+                  onChange={(e) => setForm({ ...form, city: e.target.value })}
+                />
+                <p className="text-xs text-gray-400 mt-1">Appears as "Done at [City] on [date]"</p>
               </div>
             </div>
           </div>

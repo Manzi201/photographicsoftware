@@ -22,8 +22,8 @@ export const updateStudentPhoto = (id, fd)   => api.patch(`/students/${id}/photo
 export const deleteStudent      = (id)       => api.delete(`/students/${id}`);
 
 // ── Certificates ──────────────────────────────────────────────
-export const generateCertificate = (studentId, template) =>
-  api.get(`/certificates/student/${studentId}`, { params: { template }, responseType: 'blob' });
+export const generateCertificate = (studentId, template, style = 'clean') =>
+  api.get(`/certificates/student/${studentId}`, { params: { template, style }, responseType: 'blob' });
 export const generateBatch   = (params) => api.get('/certificates/batch', { params, responseType: 'blob' });
 export const getCertificates = ()       => api.get('/certificates');
 

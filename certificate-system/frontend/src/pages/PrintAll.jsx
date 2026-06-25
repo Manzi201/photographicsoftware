@@ -1,14 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Printer, Download, Users, Filter } from 'lucide-react';
+import { Printer, Download, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getStudents, generateBatch, downloadBlob, printBlob } from '../api';
 
 const CLASSES = ['All', 'Top Class', 'P6', 'S3', 'S6', 'Nursery', 'Graduation'];
+const STYLES  = [
+  { id: 'clean',   label: 'Clean White' },
+  { id: 'classic', label: 'Classic Gold' },
+  { id: 'elegant', label: 'Elegant Red' },
+];
 
 export default function PrintAll() {
   const [classFilter, setClassFilter] = useState('All');
-  const [year, setYear] = useState(String(new Date().getFullYear()));
+  const [year, setYear]       = useState(String(new Date().getFullYear()));
   const [template, setTemplate] = useState('');
+  const [style, setStyle]     = useState('clean');
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -40,6 +46,7 @@ export default function PrintAll() {
       const params = { year };
       if (classFilter !== 'All') params.class = classFilter;
       if (template) params.template = template;
+      if (style)    params.style    = style;
       const res = await generateBatch(params);
       const blob = new Blob([res.data], { type: 'application/pdf' });
       const label = classFilter !== 'All' ? classFilter : 'all';
@@ -81,6 +88,19 @@ export default function PrintAll() {
               <option value="">Use student's class</option>
               {CLASSES.filter((c) => c !== 'All').map((c) => <option key={c}>{c}</option>)}
             </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Certificate Style</label>
+            <div className="flex gap-2">
+              {STYLES.map(s => (
+                <button key={s.id} type="button"
+                  onClick={() => setStyle(s.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all
+                    ${style === s.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'}`}>
+                  {s.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>

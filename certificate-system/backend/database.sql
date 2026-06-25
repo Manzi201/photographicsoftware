@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS schools (
   background_url TEXT,
   bg_preset      VARCHAR(50) DEFAULT 'none',
   active_year    VARCHAR(10) DEFAULT '2025',
+  city           VARCHAR(100) DEFAULT 'Kigali',
   created_at     TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at     TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -220,6 +221,17 @@ CREATE POLICY "certs_delete" ON certificates FOR DELETE USING (true);
 -- ══════════════════════════════════════════════════════════════
 
 CREATE INDEX IF NOT EXISTS idx_schools_user_id         ON schools(user_id);
+
+-- Add city column to existing databases if missing
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'schools' AND column_name = 'city'
+  ) THEN
+    ALTER TABLE schools ADD COLUMN city VARCHAR(100) DEFAULT 'Kigali';
+  END IF;
+END $$;
 CREATE INDEX IF NOT EXISTS idx_students_school_id      ON students(school_id);
 CREATE INDEX IF NOT EXISTS idx_students_class          ON students(class);
 CREATE INDEX IF NOT EXISTS idx_students_year           ON students(year);
