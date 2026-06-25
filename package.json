@@ -1,0 +1,14 @@
+{
+  "name": "photographicsoftware",
+  "version": "1.0.0",
+  "description": "Certificate System — root package (delegates to backend)",
+  "scripts": {
+    "start": "cd certificate-system/backend && node src/index.js",
+    "build": "cd certificate-system/backend && npm install",
+    "install:backend": "cd certificate-system/backend && npm install",
+    "install:frontend": "cd certificate-system/frontend && npm install"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
