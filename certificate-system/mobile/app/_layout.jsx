@@ -41,11 +41,12 @@ function RootLayoutNav() {
         headerTitleStyle: { fontWeight: 'bold' },
       }}
     >
-      <Stack.Screen name="login" options={{ headerShown: false }} />
-      <Stack.Screen name="index" options={{ title: 'Home', headerRight: () => <LogoutButton /> }} />
-      <Stack.Screen name="add-student" options={{ title: 'Add Student' }} />
-      <Stack.Screen name="students" options={{ title: 'All Students' }} />
-      <Stack.Screen name="search" options={{ title: 'Search Student' }} />
+      <Stack.Screen name="login"         options={{ headerShown: false }} />
+      <Stack.Screen name="index"         options={{ title: 'Home', headerRight: () => <LogoutButton /> }} />
+      <Stack.Screen name="add-student"   options={{ title: 'Add Student' }} />
+      <Stack.Screen name="batch-photos"  options={{ title: 'Batch Upload', headerBackTitle: 'Back' }} />
+      <Stack.Screen name="students"      options={{ title: 'All Students' }} />
+      <Stack.Screen name="search"        options={{ title: 'Search Student' }} />
     </Stack>
   );
 }

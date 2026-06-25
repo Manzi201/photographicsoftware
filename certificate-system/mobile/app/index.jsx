@@ -36,9 +36,10 @@ export default function HomeScreen() {
   };
 
   const quickActions = [
-    { label: 'Add Student', icon: 'person-add', color: '#2563eb', route: '/add-student' },
-    { label: 'All Students', icon: 'people', color: '#16a34a', route: '/students' },
-    { label: 'Search', icon: 'search', color: '#9333ea', route: '/search' },
+    { label: 'Add Student',   icon: 'person-add',  color: '#2563eb', route: '/add-student' },
+    { label: 'Batch Upload',  icon: 'images',      color: '#0891b2', route: '/batch-photos' },
+    { label: 'All Students',  icon: 'people',      color: '#16a34a', route: '/students' },
+    { label: 'Search',        icon: 'search',      color: '#9333ea', route: '/search' },
   ];
 
   return (
