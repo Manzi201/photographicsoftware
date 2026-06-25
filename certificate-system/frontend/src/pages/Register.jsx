@@ -93,7 +93,12 @@ export default function Register() {
       await register(form.email, form.password, form.school_name, form.active_year);
       setStep(2); // success step
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Registration failed. Try again.');
+      // Show the actual error from the server, not a generic message
+      const msg =
+        err.response?.data?.error ||   // server-side error
+        err.message ||                  // network / JS error
+        'Registration failed. Please try again.';
+      toast.error(msg, { duration: 5000 });
     } finally {
       setLoading(false);
     }
