@@ -1,8 +1,13 @@
 import axios from 'axios';
 
-const api = axios.create({ baseURL: '/api' });
+// In development: uses Vite proxy → /api → http://localhost:5000/api
+// In production (Netlify): VITE_API_URL must be set to your backend URL
+// e.g. https://your-backend.onrender.com/api
+const BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
-// Students
+const api = axios.create({ baseURL: BASE_URL });
+
+// ── Students ──────────────────────────────────────────────────
 export const getStudents = (params) => api.get('/students', { params });
 export const getStudent = (id) => api.get(`/students/${id}`);
 export const createStudent = (formData) => api.post('/students', formData, {
@@ -14,7 +19,7 @@ export const updateStudentPhoto = (id, formData) => api.patch(`/students/${id}/p
 });
 export const deleteStudent = (id) => api.delete(`/students/${id}`);
 
-// Certificates
+// ── Certificates ──────────────────────────────────────────────
 export const generateCertificate = (studentId, template) =>
   api.get(`/certificates/student/${studentId}`, {
     params: { template },
@@ -26,16 +31,16 @@ export const generateBatch = (params) =>
 
 export const getCertificates = () => api.get('/certificates');
 
-// Templates
+// ── Templates ─────────────────────────────────────────────────
 export const getTemplates = () => api.get('/templates');
 
-// Settings (now uses schools table)
+// ── Settings ──────────────────────────────────────────────────
 export const getSettings = () => api.get('/settings');
 export const updateSettings = (formData) => api.post('/settings', formData, {
   headers: { 'Content-Type': 'multipart/form-data' }
 });
 
-// Helper: download blob as file
+// ── Helpers ───────────────────────────────────────────────────
 export const downloadBlob = (blob, filename) => {
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -47,14 +52,11 @@ export const downloadBlob = (blob, filename) => {
   document.body.removeChild(a);
 };
 
-// Helper: open blob in new tab for printing
 export const printBlob = (blob) => {
   const url = window.URL.createObjectURL(blob);
   const win = window.open(url, '_blank');
   if (win) {
-    win.addEventListener('load', () => {
-      win.print();
-    });
+    win.addEventListener('load', () => win.print());
   }
 };
 

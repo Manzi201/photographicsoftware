@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect width="100" height="100" rx="18" fill="#1e3a8a"/>
+  <!-- Certificate -->
+  <rect x="18" y="28" width="64" height="50" rx="4" fill="white" opacity="0.95"/>
+  <rect x="18" y="28" width="64" height="13" rx="4" fill="#fbbf24"/>
+  <rect x="18" y="36" width="64" height="5" fill="#fbbf24"/>
+  <!-- Lines -->
+  <rect x="28" y="50" width="44" height="3" rx="1" fill="#94a3b8"/>
+  <rect x="24" y="57" width="52" height="4" rx="1" fill="#1e3a8a" opacity="0.6"/>
+  <rect x="28" y="65" width="44" height="2.5" rx="1" fill="#cbd5e1"/>
+  <!-- Graduation cap -->
+  <polygon points="50,16 72,26 50,36 28,26" fill="#fbbf24"/>
+  <polygon points="50,36 72,26 72,30 50,40" fill="#d97706" opacity="0.7"/>
+  <rect x="47" y="27" width="6" height="10" fill="#d97706"/>
+  <line x1="72" y1="26" x2="72" y2="38" stroke="#fbbf24" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="72" cy="38" r="2.5" fill="#fbbf24"/>
+</svg>
