@@ -3,14 +3,13 @@ const { PDFDocument, rgb, StandardFonts, degrees } = require('pdf-lib');
 const https = require('https');
 const http  = require('http');
 
-// ── Fetch image helper ────────────────────────────────────────
+// ── Image helpers ─────────────────────────────────────────────
 function fetchBuf(url) {
   return new Promise((resolve, reject) => {
     const mod = url.startsWith('https') ? https : http;
     mod.get(url, res => {
-      const ch = [];
-      res.on('data', c => ch.push(c));
-      res.on('end',  () => resolve(Buffer.concat(ch)));
+      const ch = []; res.on('data', c => ch.push(c));
+      res.on('end', () => resolve(Buffer.concat(ch)));
       res.on('error', reject);
     }).on('error', reject);
   });
@@ -21,7 +20,7 @@ async function embedImg(doc, buf) {
   return null;
 }
 
-// ── Split text into wrapped lines ─────────────────────────────
+// ── Text helpers ──────────────────────────────────────────────
 function wrap(text, font, size, maxW) {
   const words = text.split(' '), lines = [];
   let cur = '';
@@ -33,82 +32,97 @@ function wrap(text, font, size, maxW) {
   if (cur) lines.push(cur);
   return lines;
 }
-
-// ── Ordinal suffix: 1st, 2nd, 3rd... ─────────────────────────
 function ordinal(n) {
   const s = ['th','st','nd','rd'], v = n % 100;
   return n + (s[(v-20)%10] || s[v] || s[0]);
 }
-
-// ── Format date like "3rd July 2026" ─────────────────────────
 function fmtDate(d = new Date()) {
-  const months = ['January','February','March','April','May','June',
-    'July','August','September','October','November','December'];
-  return `${ordinal(d.getDate())} ${months[d.getMonth()]} ${d.getFullYear()}`;
+  const M = ['January','February','March','April','May','June',
+             'July','August','September','October','November','December'];
+  return `${ordinal(d.getDate())} ${M[d.getMonth()]} ${d.getFullYear()}`;
+}
+// Replace template vars: {class}, {year}, {school}, {city}, {date}
+function fillVars(text, vars) {
+  return text
+    .replace(/\{class\}/gi, vars.class || '')
+    .replace(/\{year\}/gi, vars.year || '')
+    .replace(/\{school\}/gi, vars.school || '')
+    .replace(/\{city\}/gi, vars.city || 'Kigali')
+    .replace(/\{date\}/gi, vars.date || fmtDate());
 }
 
-// ══════════════════════════════════════════════════════════════
-// TEMPLATES — 3 visual styles
-// ══════════════════════════════════════════════════════════════
-// Each template defines: border colors, layout style, fonts
-// Style A = Clean white (like the reference image)
-// Style B = Dark header band
-// Style C = Elegant bordered
-
-const STYLE_A = 'clean';    // white background, thin blue border, school name in box
-const STYLE_B = 'classic';  // colored header band, ribbon decoration
-const STYLE_C = 'elegant';  // double border, gold accents
-
-// ── Per-class copy ─────────────────────────────────────────────
-const CLASS_COPY = {
-  'Top Class': {
-    completeText: 'Has completed in Top Class at',
-    purposeText:  'This certificate is given for whichever purpose it may serve',
+// ═════════════════════════════════════════════════════════════
+// DESIGN THEMES — 5 beautiful certificate designs
+// ═════════════════════════════════════════════════════════════
+const DESIGNS = {
+  // ── Design 1: Classic White (nk'ifoto ya reference) ────────
+  classic: {
+    name:        'Classic White',
+    bg:          rgb(1, 1, 1),
+    border1:     rgb(0.07, 0.20, 0.54),   // navy blue
+    border2:     rgb(0.07, 0.20, 0.54),
+    titleColor:  rgb(0.07, 0.20, 0.54),
+    nameColor:   rgb(0.07, 0.55, 0.18),   // green
+    bodyColor:   rgb(0.12, 0.12, 0.12),
+    accentColor: rgb(0.07, 0.20, 0.54),
+    boldPurpose: true,
   },
-  'P6': {
-    completeText: 'Has completed Primary Six (P6) at',
-    purposeText:  'This certificate is given for whichever purpose it may serve',
+  // ── Design 2: Royal Gold ────────────────────────────────────
+  royal: {
+    name:        'Royal Gold',
+    bg:          rgb(0.99, 0.98, 0.93),   // cream
+    border1:     rgb(0.55, 0.40, 0.02),   // dark gold
+    border2:     rgb(0.85, 0.65, 0.10),   // bright gold
+    titleColor:  rgb(0.40, 0.28, 0.01),
+    nameColor:   rgb(0.07, 0.36, 0.68),   // blue
+    bodyColor:   rgb(0.15, 0.12, 0.05),
+    accentColor: rgb(0.78, 0.56, 0.02),
+    boldPurpose: true,
   },
-  'S3': {
-    completeText: 'Has completed Senior Three (S3) at',
-    purposeText:  'This certificate is given for whichever purpose it may serve',
+  // ── Design 3: Emerald Prestige ──────────────────────────────
+  emerald: {
+    name:        'Emerald Prestige',
+    bg:          rgb(0.97, 1.00, 0.97),   // pale green
+    border1:     rgb(0.02, 0.45, 0.18),   // deep green
+    border2:     rgb(0.13, 0.72, 0.30),   // bright green
+    titleColor:  rgb(0.02, 0.40, 0.16),
+    nameColor:   rgb(0.02, 0.40, 0.16),
+    bodyColor:   rgb(0.10, 0.15, 0.10),
+    accentColor: rgb(0.13, 0.65, 0.28),
+    boldPurpose: true,
   },
-  'S6': {
-    completeText: 'Has completed Senior Six (S6) at',
-    purposeText:  'This certificate is given for whichever purpose it may serve',
+  // ── Design 4: Burgundy Elegance ─────────────────────────────
+  burgundy: {
+    name:        'Burgundy Elegance',
+    bg:          rgb(0.99, 0.97, 0.97),   // pale pink
+    border1:     rgb(0.50, 0.04, 0.10),   // deep burgundy
+    border2:     rgb(0.78, 0.15, 0.22),   // bright red
+    titleColor:  rgb(0.45, 0.03, 0.08),
+    nameColor:   rgb(0.10, 0.20, 0.60),   // navy
+    bodyColor:   rgb(0.12, 0.10, 0.10),
+    accentColor: rgb(0.72, 0.12, 0.18),
+    boldPurpose: true,
   },
-  'Nursery': {
-    completeText: 'Has completed the Nursery programme at',
-    purposeText:  'This certificate is given for whichever purpose it may serve',
-  },
-  'Graduation': {
-    completeText: 'Has successfully graduated from',
-    purposeText:  'This certificate is given for whichever purpose it may serve',
+  // ── Design 5: Sapphire Modern ───────────────────────────────
+  sapphire: {
+    name:        'Sapphire Modern',
+    bg:          rgb(0.97, 0.98, 1.00),   // pale blue
+    border1:     rgb(0.06, 0.25, 0.65),   // dark sapphire
+    border2:     rgb(0.23, 0.56, 0.94),   // bright blue
+    titleColor:  rgb(0.06, 0.22, 0.58),
+    nameColor:   rgb(0.06, 0.22, 0.58),
+    bodyColor:   rgb(0.10, 0.10, 0.18),
+    accentColor: rgb(0.20, 0.52, 0.90),
+    boldPurpose: true,
   },
 };
 
-// ══════════════════════════════════════════════════════════════
+
+// ═════════════════════════════════════════════════════════════
 // MAIN CERTIFICATE GENERATOR
-// W × H = A4 Landscape (841.89 × 595.28 pt)
-//
-// Layout matches reference image exactly:
-//  ┌─────────────────────────────────────────────────────────┐
-//  │ [LOGO]     ┌──────────────────────────────┐    [PHOTO] │
-//  │            │     SCHOOL NAME              │            │
-//  │            └──────────────────────────────┘            │
-//  │         C E R T I F I C A T E  O F  C O M P L E T I O N│
-//  │              ─────────────────────────────              │
-//  │                  This is to certify that                │
-//  │              STUDENT NAME (large, colored)              │
-//  │    Has completed in [Class] at [School] in              │
-//  │          Academic year of [year]-[year+1]               │
-//  │                   [LOGO small]                          │
-//  │   This certificate is given for whichever purpose...    │
-//  │             Done at Kigali on [date]                    │
-//  │   [SIGNATURE]              [STAMP]                      │
-//  └─────────────────────────────────────────────────────────┘
-// ══════════════════════════════════════════════════════════════
-async function generateCertificatePDF(student, template, settings, style = STYLE_A) {
+// A4 Landscape: 841.89 × 595.28 pt
+// ═════════════════════════════════════════════════════════════
+async function generateCertificatePDF(student, template, settings, designKey = 'classic') {
   const doc = await PDFDocument.create();
   const W = 841.89, H = 595.28;
   const page = doc.addPage([W, H]);
@@ -118,38 +132,27 @@ async function generateCertificatePDF(student, template, settings, style = STYLE
   const BI = await doc.embedFont(StandardFonts.HelveticaBoldOblique);
   const I  = await doc.embedFont(StandardFonts.HelveticaOblique);
 
-  const copy = CLASS_COPY[template] || CLASS_COPY['Top Class'];
+  const D = DESIGNS[designKey] || DESIGNS.classic;
+
+  // ── Build variable values ────────────────────────────────
   const schoolName = (settings.school_name || 'YOUR SCHOOL NAME').trim();
-  const year = student.year || new Date().getFullYear();
-  const academicYear = `${year}-${Number(year) + 1}`;
-  const today = fmtDate();
-  const city = settings.city || 'Kigali';
+  const year       = student.year || new Date().getFullYear();
+  const city       = settings.city || 'Kigali';
+  const today      = fmtDate();
+  const vars       = { class: template, year, school: schoolName, city, date: today };
 
-  // ── Choose colors by style ─────────────────────────────────
-  let borderColor, titleColor, nameColor, accentColor, bgColor;
+  // ── Custom text (from settings, with fallbacks) ───────────
+  const line1Tpl    = settings.cert_line1    || 'Has completed in {class} at';
+  const line2Tpl    = settings.cert_line2    || 'in Academic year of {year}';
+  const purposeTpl  = settings.cert_purpose  || 'This certificate is given for whichever purpose it may serve';
+  const doneTpl     = settings.cert_done_text|| 'Done at {city} on {date}';
+  const line1Text   = fillVars(line1Tpl,   vars);
+  const line2Text   = fillVars(line2Tpl,   vars);
+  const purposeText = fillVars(purposeTpl, vars);
+  const doneText    = fillVars(doneTpl,    vars);
 
-  if (style === STYLE_A) {         // Clean white — blue/navy
-    borderColor = rgb(0.07, 0.20, 0.54);
-    titleColor  = rgb(0.07, 0.20, 0.54);
-    nameColor   = rgb(0.07, 0.55, 0.18);
-    accentColor = rgb(0.07, 0.20, 0.54);
-    bgColor     = rgb(1, 1, 1);
-  } else if (style === STYLE_B) {  // Classic — dark + gold
-    borderColor = rgb(0.40, 0.28, 0.02);
-    titleColor  = rgb(0.40, 0.28, 0.02);
-    nameColor   = rgb(0.07, 0.36, 0.75);
-    accentColor = rgb(0.78, 0.56, 0.02);
-    bgColor     = rgb(0.99, 0.98, 0.94);
-  } else {                         // Elegant — deep red + gold
-    borderColor = rgb(0.55, 0.05, 0.05);
-    titleColor  = rgb(0.55, 0.05, 0.05);
-    nameColor   = rgb(0.07, 0.36, 0.75);
-    accentColor = rgb(0.78, 0.56, 0.02);
-    bgColor     = rgb(0.99, 0.97, 0.97);
-  }
-
-  // ── Background ────────────────────────────────────────────
-  page.drawRectangle({ x:0, y:0, width:W, height:H, color:bgColor });
+  // ── Background ───────────────────────────────────────────
+  page.drawRectangle({ x:0, y:0, width:W, height:H, color:D.bg });
   if (settings.background_url) {
     try {
       const buf = await fetchBuf(settings.background_url);
@@ -158,20 +161,31 @@ async function generateCertificatePDF(student, template, settings, style = STYLE
     } catch {}
   }
 
-  // ── Outer border (double) ─────────────────────────────────
-  page.drawRectangle({ x:10, y:10, width:W-20, height:H-20,
-    borderColor, borderWidth:2.5, color:rgb(1,1,1,0) });
-  page.drawRectangle({ x:15, y:15, width:W-30, height:H-30,
-    borderColor:accentColor, borderWidth:0.8, color:rgb(1,1,1,0) });
+  // ── Outer triple border ───────────────────────────────────
+  page.drawRectangle({ x:8,  y:8,  width:W-16, height:H-16, borderColor:D.border1, borderWidth:3,   color:rgb(1,1,1,0) });
+  page.drawRectangle({ x:13, y:13, width:W-26, height:H-26, borderColor:D.border2, borderWidth:1,   color:rgb(1,1,1,0) });
+  page.drawRectangle({ x:17, y:17, width:W-34, height:H-34, borderColor:D.border1, borderWidth:0.5, color:rgb(1,1,1,0) });
+
+  // ── Corner decorations ────────────────────────────────────
+  const drawCornerBox = (x, y, size) => {
+    page.drawRectangle({ x, y, width:size, height:size,
+      borderColor:D.accentColor, borderWidth:1.5, color:rgb(1,1,1,0) });
+    page.drawRectangle({ x:x+3, y:y+3, width:size-6, height:size-6,
+      borderColor:D.accentColor, borderWidth:0.5, color:rgb(1,1,1,0) });
+  };
+  const cs = 18;
+  drawCornerBox(22, H-22-cs, cs); drawCornerBox(W-22-cs, H-22-cs, cs);
+  drawCornerBox(22, 22, cs);      drawCornerBox(W-22-cs, 22, cs);
 
   // ── PHOTO — top-right ─────────────────────────────────────
-  const pW = 130, pH = 155;
+  const pW = 128, pH = 158;
   const pX = W - pW - 28;
-  const pY = H - pH - 24;
+  const pY = H - pH - 26;
 
-  // Photo border
-  page.drawRectangle({ x:pX-3, y:pY-3, width:pW+6, height:pH+6,
-    borderColor, borderWidth:1.5, color:rgb(1,1,1,0) });
+  page.drawRectangle({ x:pX-4, y:pY-4, width:pW+8, height:pH+8,
+    borderColor:D.border1, borderWidth:1.5, color:rgb(1,1,1,0) });
+  page.drawRectangle({ x:pX-1, y:pY-1, width:pW+2, height:pH+2,
+    borderColor:D.accentColor, borderWidth:0.5, color:rgb(1,1,1,0) });
 
   if (student.photo_url) {
     try {
@@ -180,176 +194,160 @@ async function generateCertificatePDF(student, template, settings, style = STYLE
       if (img) page.drawImage(img, { x:pX, y:pY, width:pW, height:pH });
     } catch {}
   } else {
-    page.drawRectangle({ x:pX, y:pY, width:pW, height:pH, color:rgb(0.93,0.93,0.93) });
+    page.drawRectangle({ x:pX, y:pY, width:pW, height:pH, color:rgb(0.94,0.94,0.94) });
     const nw = R.widthOfTextAtSize('NO PHOTO', 9);
     page.drawText('NO PHOTO', { x:pX+(pW-nw)/2, y:pY+pH/2-4, size:9, font:R, color:rgb(0.65,0.65,0.65) });
   }
 
   // ── LOGO — top-left ───────────────────────────────────────
-  const logoSize = 85;
-  const logoX = 28, logoY = H - logoSize - 22;
-
+  const lSz = 80, lX = 28, lY = H - lSz - 24;
   if (settings.logo_url) {
     try {
       const buf = await fetchBuf(settings.logo_url);
       const img = await embedImg(doc, buf);
-      if (img) page.drawImage(img, { x:logoX, y:logoY, width:logoSize, height:logoSize });
+      if (img) page.drawImage(img, { x:lX, y:lY, width:lSz, height:lSz });
     } catch {}
   } else {
-    // Placeholder circle with initial
-    page.drawRectangle({ x:logoX, y:logoY, width:logoSize, height:logoSize,
-      borderColor, borderWidth:1, color:rgb(0.95,0.95,0.98) });
-    const abbrev = schoolName.charAt(0);
-    const abbW = B.widthOfTextAtSize(abbrev, 32);
-    page.drawText(abbrev, { x:logoX+(logoSize-abbW)/2, y:logoY+logoSize/2-12, size:32, font:B, color:borderColor });
+    page.drawRectangle({ x:lX, y:lY, width:lSz, height:lSz,
+      borderColor:D.border1, borderWidth:1, color:rgb(0.95,0.95,0.98) });
+    const ab = schoolName.charAt(0);
+    const abW = B.widthOfTextAtSize(ab, 28);
+    page.drawText(ab, { x:lX+(lSz-abW)/2, y:lY+lSz/2-10, size:28, font:B, color:D.border1 });
   }
 
-  // ── SCHOOL NAME in box — top center ───────────────────────
-  const boxL = logoX + logoSize + 14;
-  const boxR = pX - 14;
-  const boxW = boxR - boxL;
-  const boxH = 38;
-  const boxY = H - boxH - 28;
+  // ── SCHOOL NAME in bordered box ───────────────────────────
+  const bxL = lX + lSz + 12, bxR = pX - 12;
+  const bxW = bxR - bxL, bxH = 36, bxY = H - bxH - 28;
 
-  page.drawRectangle({ x:boxL, y:boxY, width:boxW, height:boxH,
-    borderColor, borderWidth:2, color:rgb(1,1,1,0) });
+  page.drawRectangle({ x:bxL, y:bxY, width:bxW, height:bxH,
+    borderColor:D.border1, borderWidth:2, color:rgb(1,1,1,0) });
+  page.drawRectangle({ x:bxL+3, y:bxY+3, width:bxW-6, height:bxH-6,
+    borderColor:D.accentColor, borderWidth:0.5, color:rgb(1,1,1,0) });
 
-  let snSize = 19;
-  while (B.widthOfTextAtSize(schoolName, snSize) > boxW - 20 && snSize > 9) snSize--;
-  const snW = B.widthOfTextAtSize(schoolName, snSize);
+  let snSz = 18;
+  while (B.widthOfTextAtSize(schoolName, snSz) > bxW-20 && snSz > 9) snSz--;
+  const snW = B.widthOfTextAtSize(schoolName, snSz);
   page.drawText(schoolName, {
-    x: boxL + (boxW - snW) / 2,
-    y: boxY + (boxH - snSize) / 2 + 2,
-    size: snSize, font: B, color: borderColor,
+    x: bxL + (bxW-snW)/2, y: bxY + (bxH-snSz)/2 + 2, size:snSz, font:B, color:D.titleColor,
   });
 
-  // ── CERTIFICATE OF COMPLETION — spaced letters ────────────
+  // ── CERTIFICATE OF COMPLETION (spaced letters) ────────────
   const titleY = H - 148;
   const titleRaw = 'CERTIFICATE OF COMPLETION';
-  // Spaced: add 2 spaces between each letter for the stretched look
   const titleSpaced = titleRaw.split('').join(' ');
-  let tSize = 16;
-  while (I.widthOfTextAtSize(titleSpaced, tSize) > W - 100 && tSize > 9) tSize--;
-  const tW = I.widthOfTextAtSize(titleSpaced, tSize);
-  page.drawText(titleSpaced, {
-    x: (W - tW) / 2, y: titleY, size: tSize, font: BI, color: titleColor,
-  });
+  let tSz = 15;
+  while (BI.widthOfTextAtSize(titleSpaced, tSz) > W-100 && tSz > 8) tSz--;
+  const tW = BI.widthOfTextAtSize(titleSpaced, tSz);
+  page.drawText(titleSpaced, { x:(W-tW)/2, y:titleY, size:tSz, font:BI, color:D.titleColor });
 
-  // Horizontal rule under title
-  page.drawLine({
-    start: { x: (W - tW) / 2 - 10, y: titleY - 5 },
-    end:   { x: (W - tW) / 2 + tW + 10, y: titleY - 5 },
-    thickness: 0.8, color: accentColor,
-  });
+  // Decorative line under title
+  const lineY = titleY - 7;
+  const lineW = tW + 40;
+  page.drawLine({ start:{x:(W-lineW)/2, y:lineY}, end:{x:(W+lineW)/2, y:lineY}, thickness:0.8, color:D.accentColor });
+  page.drawLine({ start:{x:(W-lineW/2)/2+20, y:lineY-3}, end:{x:(W+lineW/2)/2-20, y:lineY-3}, thickness:0.3, color:D.accentColor });
 
   // ── "This is to certify that" ─────────────────────────────
-  const certifyY = titleY - 22;
-  const ctTxt = 'This is to certify that';
-  const ctW = I.widthOfTextAtSize(ctTxt, 11);
-  page.drawText(ctTxt, { x:(W-ctW)/2, y:certifyY, size:11, font:I, color:rgb(0.3,0.3,0.3) });
+  const certifyY = lineY - 18;
+  const ctT = 'This is to certify that';
+  const ctW = I.widthOfTextAtSize(ctT, 11);
+  page.drawText(ctT, { x:(W-ctW)/2, y:certifyY, size:11, font:I, color:rgb(0.30,0.30,0.30) });
 
-  // ── STUDENT NAME — large colored ──────────────────────────
-  const fullName = `${student.first_name} ${student.last_name}`;
-  // Mixed case: FIRST LAST with small caps feel
-  const nameDisplay = fullName.toUpperCase();
-  let nameSize = 36;
-  while (B.widthOfTextAtSize(nameDisplay, nameSize) > W - 120 && nameSize > 18) nameSize--;
-  const nameY = certifyY - 46;
-  const nameW = B.widthOfTextAtSize(nameDisplay, nameSize);
-  page.drawText(nameDisplay, { x:(W-nameW)/2, y:nameY, size:nameSize, font:B, color:nameColor });
+  // ── STUDENT NAME ──────────────────────────────────────────
+  const fullName = `${student.first_name} ${student.last_name}`.toUpperCase();
+  let nSz = 34;
+  while (B.widthOfTextAtSize(fullName, nSz) > W-110 && nSz > 16) nSz--;
+  const nameY = certifyY - 44;
+  const nameW = B.widthOfTextAtSize(fullName, nSz);
+  page.drawText(fullName, { x:(W-nameW)/2, y:nameY, size:nSz, font:B, color:D.nameColor });
 
-  // ── Body text lines ───────────────────────────────────────
-  // Line 1: "Has completed in Top class at [School] in"
-  const line1 = `${copy.completeText} ${schoolName} in`;
-  let l1Size = 13;
-  while (R.widthOfTextAtSize(line1, l1Size) > W - 80 && l1Size > 9) l1Size--;
-  const l1W = R.widthOfTextAtSize(line1, l1Size);
-  const l1Y = nameY - 32;
-  page.drawText(line1, { x:(W-l1W)/2, y:l1Y, size:l1Size, font:R, color:rgb(0.15,0.15,0.15) });
+  // ── Body lines ────────────────────────────────────────────
+  // Line 1: custom
+  const l1Lines = wrap(line1Text + ' ' + schoolName, R, 13, W-100);
+  l1Lines.forEach((line, i) => {
+    const lw = R.widthOfTextAtSize(line, 13);
+    page.drawText(line, { x:(W-lw)/2, y:nameY-30-(i*17), size:13, font:R, color:D.bodyColor });
+  });
 
-  // Line 2: "Academic year of 2025-2026"
-  const line2 = `Academic year of ${academicYear}`;
-  const l2Size = 13;
-  const l2W = R.widthOfTextAtSize(line2, l2Size);
-  const l2Y = l1Y - 20;
-  page.drawText(line2, { x:(W-l2W)/2, y:l2Y, size:l2Size, font:R, color:rgb(0.15,0.15,0.15) });
+  // Line 2: custom (academic year)
+  const l2Y = nameY - 30 - l1Lines.length*17 - 2;
+  const l2Lines = wrap(line2Text, R, 13, W-100);
+  l2Lines.forEach((line, i) => {
+    const lw = R.widthOfTextAtSize(line, 13);
+    page.drawText(line, { x:(W-lw)/2, y:l2Y-i*17, size:13, font:R, color:D.bodyColor });
+  });
 
-  // ── Small logo in center (like reference image) ───────────
-  const cLogoY = l2Y - 50;
-  const cLogoSize = 36;
-  if (settings.logo_url) {
+  // ── Mini logo centered ────────────────────────────────────
+  const mLogoY = l2Y - l2Lines.length*17 - 10;
+  const mLogoSz = 32;
+  if (settings.logo_url && mLogoY > 100) {
     try {
       const buf = await fetchBuf(settings.logo_url);
       const img = await embedImg(doc, buf);
-      if (img) page.drawImage(img, {
-        x: (W - cLogoSize) / 2, y: cLogoY, width: cLogoSize, height: cLogoSize,
-      });
+      if (img) page.drawImage(img, { x:(W-mLogoSz)/2, y:mLogoY, width:mLogoSz, height:mLogoSz });
     } catch {}
-  } else {
-    // Small decorative element
-    page.drawRectangle({ x:(W-24)/2, y:cLogoY+6, width:24, height:24,
-      rotate:degrees(45), borderColor:accentColor, borderWidth:1, color:rgb(1,1,1,0) });
   }
 
-  // ── Purpose text — bold italic ────────────────────────────
-  const purposeY = cLogoY - 18;
-  const ptLines = wrap(copy.purposeText, BI, 11.5, W - 100);
-  ptLines.forEach((line, i) => {
-    const lw = BI.widthOfTextAtSize(line, 11.5);
-    page.drawText(line, { x:(W-lw)/2, y:purposeY-i*16, size:11.5, font:BI, color:rgb(0.1,0.1,0.1) });
+  // ── Purpose text (bold italic, centered) ─────────────────
+  const purpY = mLogoY > 100 ? mLogoY - 16 : l2Y - l2Lines.length*17 - 16;
+  const purpLines = wrap(purposeText, BI, 11, W - 80);
+  purpLines.forEach((line, i) => {
+    const lw = BI.widthOfTextAtSize(line, 11);
+    page.drawText(line, { x:(W-lw)/2, y:purpY-i*15, size:11, font:BI, color:D.bodyColor });
   });
 
-  // ── "Done at [City] on [date]" ────────────────────────────
-  const doneTxt = `Done at ${city} on ${today}`;
-  let doneSize = 11.5;
-  while (BI.widthOfTextAtSize(doneTxt, doneSize) > W - 100 && doneSize > 8) doneSize--;
-  const doneW = BI.widthOfTextAtSize(doneTxt, doneSize);
-  const doneY = purposeY - ptLines.length * 16 - 14;
-  page.drawText(doneTxt, { x:(W-doneW)/2, y:doneY, size:doneSize, font:BI, color:rgb(0.1,0.1,0.1) });
+  // ── "Done at..." text ─────────────────────────────────────
+  const doneY = purpY - purpLines.length*15 - 10;
+  const doneSz = 11;
+  const doneLines = wrap(doneText, BI, doneSz, W-80);
+  doneLines.forEach((line, i) => {
+    const lw = BI.widthOfTextAtSize(line, doneSz);
+    page.drawText(line, { x:(W-lw)/2, y:doneY-i*14, size:doneSz, font:BI, color:D.bodyColor });
+  });
 
-  // ── Signature (left bottom) ───────────────────────────────
+  // ── Signature ─────────────────────────────────────────────
   const sigY = 42;
-  const sigX = 80;
+  const sigX = 75;
   if (settings.signature_url) {
     try {
       const buf = await fetchBuf(settings.signature_url);
       const img = await embedImg(doc, buf);
-      if (img) page.drawImage(img, { x:sigX, y:sigY+12, width:110, height:28, opacity:0.85 });
+      if (img) page.drawImage(img, { x:sigX, y:sigY+10, width:110, height:28, opacity:0.85 });
     } catch {}
   }
-  page.drawLine({ start:{x:sigX, y:sigY+8}, end:{x:sigX+120, y:sigY+8}, thickness:0.8, color:rgb(0.3,0.3,0.3) });
+  page.drawLine({ start:{x:sigX, y:sigY+6}, end:{x:sigX+120, y:sigY+6}, thickness:0.8, color:rgb(0.3,0.3,0.3) });
   const sigName = settings.signatory_name || 'Head Teacher';
-  const sigNW = R.widthOfTextAtSize(sigName, 9);
-  page.drawText(sigName, { x:sigX+(120-sigNW)/2, y:sigY-4, size:9, font:R, color:rgb(0.3,0.3,0.3) });
+  const snW2 = R.widthOfTextAtSize(sigName, 9);
+  page.drawText(sigName, { x:sigX+(120-snW2)/2, y:sigY-5, size:9, font:R, color:rgb(0.3,0.3,0.3) });
 
-  // ── Stamp (right bottom) ──────────────────────────────────
-  const stX = W - 150;
-  const stY = 50;
+  // ── Stamp ─────────────────────────────────────────────────
+  const stX = W - 130, stY = 58;
   if (settings.stamp_url) {
     try {
       const buf = await fetchBuf(settings.stamp_url);
       const img = await embedImg(doc, buf);
-      if (img) page.drawImage(img, { x:stX-28, y:stY-28, width:60, height:60, opacity:0.8 });
+      if (img) page.drawImage(img, { x:stX-28, y:stY-28, width:58, height:58, opacity:0.80 });
     } catch {}
   } else {
-    page.drawCircle({ x:stX, y:stY, size:28, borderColor:accentColor, borderWidth:1.5, color:rgb(1,1,1,0) });
-    page.drawCircle({ x:stX, y:stY, size:22, borderColor:accentColor, borderWidth:0.7, color:rgb(1,1,1,0) });
-    const stTxt1 = 'OFFICIAL', stTxt2 = 'STAMP';
-    page.drawText(stTxt1, { x:stX-B.widthOfTextAtSize(stTxt1,6)/2, y:stY+4,  size:6, font:B, color:accentColor });
-    page.drawText(stTxt2, { x:stX-B.widthOfTextAtSize(stTxt2,6)/2, y:stY-4, size:6, font:B, color:accentColor });
+    page.drawCircle({ x:stX, y:stY, size:26, borderColor:D.accentColor, borderWidth:1.5, color:rgb(1,1,1,0) });
+    page.drawCircle({ x:stX, y:stY, size:20, borderColor:D.accentColor, borderWidth:0.7, color:rgb(1,1,1,0) });
+    ['OFFICIAL','STAMP'].forEach((t,i) => {
+      const tw = B.widthOfTextAtSize(t, 6);
+      page.drawText(t, { x:stX-tw/2, y:stY+(i===0?4:-4), size:6, font:B, color:D.accentColor });
+    });
   }
 
   return await doc.save();
 }
 
-// ══════════════════════════════════════════════════════════════
+
+// ═════════════════════════════════════════════════════════════
 // CONTROLLERS
-// ══════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════
 
 exports.generateCertificate = async (req, res) => {
   try {
     const { studentId } = req.params;
-    const { template, style = STYLE_A } = req.query;
+    const { template, style = 'classic' } = req.query;
 
     const { data: student, error } = await supabase
       .from('students').select('*')
@@ -368,7 +366,7 @@ exports.generateCertificate = async (req, res) => {
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition',
-      `attachment; filename="${student.photo_number}_${student.last_name}_certificate.pdf"`);
+      `attachment; filename="${student.photo_number}_${student.last_name}_cert.pdf"`);
     res.send(Buffer.from(pdfBytes));
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -377,7 +375,7 @@ exports.generateCertificate = async (req, res) => {
 
 exports.generateBatch = async (req, res) => {
   try {
-    const { class: cls, year, template, style = STYLE_A } = req.query;
+    const { class: cls, year, template, style = 'classic' } = req.query;
     let q = supabase.from('students').select('*')
       .eq('school_id', req.schoolId).eq('status', 'active');
     if (cls)  q = q.eq('class', cls);
@@ -388,14 +386,14 @@ exports.generateBatch = async (req, res) => {
     if (!students.length) return res.status(404).json({ success: false, error: 'No students found' });
 
     const merged = await PDFDocument.create();
-    for (const student of students) {
-      const t = template || student.class || 'Top Class';
-      const bytes = await generateCertificatePDF(student, t, req.school, style);
+    for (const s of students) {
+      const t = template || s.class || 'Top Class';
+      const bytes = await generateCertificatePDF(s, t, req.school, style);
       const certDoc = await PDFDocument.load(bytes);
       const [p] = await merged.copyPages(certDoc, [0]);
       merged.addPage(p);
       await supabase.from('certificates').insert([{
-        student_id: student.id, school_id: req.schoolId,
+        student_id: s.id, school_id: req.schoolId,
         template: t, generated_at: new Date().toISOString(), printed_by: req.user.id,
       }]);
     }

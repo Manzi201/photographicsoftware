@@ -25,6 +25,11 @@ CREATE TABLE IF NOT EXISTS schools (
   bg_preset      VARCHAR(50) DEFAULT 'none',
   active_year    VARCHAR(10) DEFAULT '2025',
   city           VARCHAR(100) DEFAULT 'Kigali',
+  -- Customizable certificate text fields
+  cert_line1     TEXT DEFAULT 'Has completed in {class} at',
+  cert_line2     TEXT DEFAULT 'in Academic year of {year}',
+  cert_purpose   TEXT DEFAULT 'This certificate is given for whichever purpose it may serve',
+  cert_done_text TEXT DEFAULT 'Done at {city} on {date}',
   created_at     TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at     TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -225,11 +230,14 @@ CREATE INDEX IF NOT EXISTS idx_schools_user_id         ON schools(user_id);
 -- Add city column to existing databases if missing
 DO $$
 BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'schools' AND column_name = 'city'
-  ) THEN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='schools' AND column_name='city') THEN
     ALTER TABLE schools ADD COLUMN city VARCHAR(100) DEFAULT 'Kigali';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='schools' AND column_name='cert_line1') THEN
+    ALTER TABLE schools ADD COLUMN cert_line1 TEXT DEFAULT 'Has completed in {class} at';
+    ALTER TABLE schools ADD COLUMN cert_line2 TEXT DEFAULT 'in Academic year of {year}';
+    ALTER TABLE schools ADD COLUMN cert_purpose TEXT DEFAULT 'This certificate is given for whichever purpose it may serve';
+    ALTER TABLE schools ADD COLUMN cert_done_text TEXT DEFAULT 'Done at {city} on {date}';
   END IF;
 END $$;
 CREATE INDEX IF NOT EXISTS idx_students_school_id      ON students(school_id);

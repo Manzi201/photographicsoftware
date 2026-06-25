@@ -62,7 +62,8 @@ function ImageField({ label, hint, preview, onChange, accept = 'image/*', square
 
 export default function Settings() {
   const { school, refreshSchool } = useAuth();
-  const [form, setForm] = useState({ school_name: '', signatory_name: '', active_year: '', city: '' });
+  const [form, setForm] = useState({ school_name: '', signatory_name: '', active_year: '', city: '',
+    cert_line1: '', cert_line2: '', cert_purpose: '', cert_done_text: '' });
   const [files, setFiles]     = useState({ logo: null, stamp: null, signature: null, background: null });
   const [previews, setPreviews] = useState({ logo: null, stamp: null, signature: null, background: null });
   const [bgPreset, setBgPreset] = useState('none');
@@ -77,6 +78,10 @@ export default function Settings() {
         signatory_name: school.signatory_name || '',
         active_year:    school.active_year    || String(new Date().getFullYear()),
         city:           school.city           || 'Kigali',
+        cert_line1:     school.cert_line1     || 'Has completed in {class} at',
+        cert_line2:     school.cert_line2     || 'in Academic year of {year}',
+        cert_purpose:   school.cert_purpose   || 'This certificate is given for whichever purpose it may serve',
+        cert_done_text: school.cert_done_text || 'Done at {city} on {date}',
       });
       setPreviews({
         logo:       school.logo_url       || null,
@@ -140,6 +145,10 @@ export default function Settings() {
         signatory_name: form.signatory_name.trim() || 'Head Teacher',
         active_year:    form.active_year || String(new Date().getFullYear()),
         city:           form.city?.trim() || 'Kigali',
+        cert_line1:     form.cert_line1?.trim()     || 'Has completed in {class} at',
+        cert_line2:     form.cert_line2?.trim()     || 'in Academic year of {year}',
+        cert_purpose:   form.cert_purpose?.trim()   || 'This certificate is given for whichever purpose it may serve',
+        cert_done_text: form.cert_done_text?.trim() || 'Done at {city} on {date}',
         bg_preset:      bgPreset,
         // Start with existing URLs so we don't lose them if no new file uploaded
         logo_url:       previews.logo       || null,
@@ -281,9 +290,35 @@ export default function Settings() {
           </div>
         </Section>
 
+        {/* ── Certificate Text ──────────────────────── */}
+        <Section title="Certificate Text (Customizable)" icon={Pen}>
+          <div className="space-y-3">
+            <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-xs text-blue-700">
+              <p className="font-semibold mb-1">Available variables:</p>
+              <p><code className="bg-blue-100 px-1 rounded">{'{class}'}</code> → Top Class, P6, S3...  &nbsp;
+                 <code className="bg-blue-100 px-1 rounded">{'{year}'}</code> → 2025  &nbsp;
+                 <code className="bg-blue-100 px-1 rounded">{'{school}'}</code> → School name  &nbsp;
+                 <code className="bg-blue-100 px-1 rounded">{'{city}'}</code> → Kigali  &nbsp;
+                 <code className="bg-blue-100 px-1 rounded">{'{date}'}</code> → 3rd July 2026</p>
+            </div>
+            {[
+              { key: 'cert_line1',     label: 'Line 1 (completion text)',  placeholder: 'Has completed in {class} at' },
+              { key: 'cert_line2',     label: 'Line 2 (academic year)',     placeholder: 'in Academic year of {year}' },
+              { key: 'cert_purpose',   label: 'Purpose text',               placeholder: 'This certificate is given for whichever purpose it may serve' },
+              { key: 'cert_done_text', label: '"Done at..." text',           placeholder: 'Done at {city} on {date}' },
+            ].map(({ key, label, placeholder }) => (
+              <div key={key}>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+                <input className="input-field text-sm" placeholder={placeholder}
+                  value={form[key] || ''}
+                  onChange={e => setForm({ ...form, [key]: e.target.value })} />
+              </div>
+            ))}
+          </div>
+        </Section>
+
         {/* ── Certificate Background ────────────────── */}
-        <Section title="Certificate Background" icon={ImageIcon}>
-          <p className="text-sm text-gray-500 mb-4">
+        <Section title="Certificate Background" icon={ImageIcon}>          <p className="text-sm text-gray-500 mb-4">
             Hitamo background — izagira effect kuri <strong>certificates zose</strong> (18% opacity).
           </p>
 
