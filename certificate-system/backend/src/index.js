@@ -47,6 +47,23 @@ app.use(fileUpload({
 // ── PUBLIC ROUTES ─────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
 
+// Root — show API info instead of 404
+app.get('/', (req, res) => {
+  res.json({
+    name: 'Certificate System API',
+    version: '1.0.0',
+    status: 'running',
+    endpoints: {
+      health:    'GET /api/health',
+      auth:      'POST /api/auth/register | /api/auth/login | /api/auth/me',
+      students:  'GET|POST /api/students',
+      certs:     'GET /api/certificates/batch | /api/certificates/student/:id',
+      templates: 'GET /api/templates',
+      settings:  'GET|POST /api/settings',
+    }
+  });
+});
+
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });

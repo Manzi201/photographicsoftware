@@ -1,45 +1,24 @@
 import axios from 'axios';
 
-// ── Backend URL resolution ─────────────────────────────────────
-// Priority:
-//   1. VITE_API_URL env variable (set in Netlify dashboard)
-//   2. Auto-detect: if running on Netlify → use Render backend
-//   3. Fallback to local proxy (dev only)
-function getBaseURL() {
-  // Explicitly set via Netlify environment variable (recommended)
-  if (import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL;
-  }
-
-  // Running in production (not localhost) → use Render backend
-  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
-    return 'https://certificate-backend.onrender.com/api';
-  }
-
-  // Local development → Vite proxy handles /api → localhost:5000
-  return '/api';
-}
-
-const BASE_URL = getBaseURL();
-
-// Log the URL being used (visible in browser console for debugging)
-if (typeof window !== 'undefined') {
-  console.log('[CertSystem] API Base URL:', BASE_URL);
-}
+// ── Backend URL ────────────────────────────────────────────────
+// Set VITE_API_URL in Netlify environment variables to override.
+// Format: https://YOUR-SERVICE-NAME.onrender.com/api
+const BASE_URL = import.meta.env.VITE_API_URL
+  || (typeof window !== 'undefined' && window.location.hostname !== 'localhost'
+      ? import.meta.env.VITE_API_URL || '/api'   // fallback handled below
+      : '/api');
 
 const api = axios.create({
-  baseURL: BASE_URL,
-  timeout: 30000, // 30s timeout (Render free tier can be slow on cold start)
+  baseURL: import.meta.env.VITE_API_URL || '/api',
+  timeout: 30000,
 });
 
-// ── Interceptor: add auth token to every request ──────────────
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('cert_token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+// Log in console so you can see what URL is being used
+if (typeof window !== 'undefined') {
+  console.log('[CertSystem] API URL:', api.defaults.baseURL);
+  console.log('[CertSystem] To fix 404: set VITE_API_URL in Netlify → Site config → Env variables');
+  console.log('[CertSystem] Value: https://YOUR-RENDER-SERVICE.onrender.com/api');
+}
 
 // ── Students ──────────────────────────────────────────────────
 export const getStudents = (params) => api.get('/students', { params });
@@ -55,10 +34,7 @@ export const deleteStudent = (id) => api.delete(`/students/${id}`);
 
 // ── Certificates ──────────────────────────────────────────────
 export const generateCertificate = (studentId, template) =>
-  api.get(`/certificates/student/${studentId}`, {
-    params: { template },
-    responseType: 'blob'
-  });
+  api.get(`/certificates/student/${studentId}`, { params: { template }, responseType: 'blob' });
 export const generateBatch = (params) =>
   api.get('/certificates/batch', { params, responseType: 'blob' });
 export const getCertificates = () => api.get('/certificates');
@@ -67,7 +43,7 @@ export const getCertificates = () => api.get('/certificates');
 export const getTemplates = () => api.get('/templates');
 
 // ── Settings ──────────────────────────────────────────────────
-export const getSettings  = () => api.get('/settings');
+export const getSettings = () => api.get('/settings');
 export const updateSettings = (formData) => api.post('/settings', formData, {
   headers: { 'Content-Type': 'multipart/form-data' }
 });
