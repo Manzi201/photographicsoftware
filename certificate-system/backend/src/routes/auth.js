@@ -99,4 +99,15 @@ router.post('/logout', requireAuth, async (req, res) => {
   res.json({ success: true, message: 'Logged out' });
 });
 
+// ── CHANGE PASSWORD ───────────────────────────────────────────
+router.post('/change-password', requireAuth, async (req, res) => {
+  const { new_password } = req.body;
+  if (!new_password || new_password.length < 6) {
+    return res.status(400).json({ success: false, error: 'Password must be at least 6 characters' });
+  }
+  const { error } = await supabase.auth.admin.updateUserById(req.user.id, { password: new_password });
+  if (error) return res.status(400).json({ success: false, error: error.message });
+  res.json({ success: true, message: 'Password updated' });
+});
+
 module.exports = router;
