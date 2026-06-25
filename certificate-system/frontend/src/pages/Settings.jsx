@@ -97,12 +97,35 @@ export default function Settings() {
 
   // Upload a single file to Supabase Storage and return public URL
   async function uploadAsset(file, name) {
+    // Get current session token to ensure authenticated upload
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw new Error('Not authenticated. Please sign in again.');
+
+    const filePath = `${school.id}/${name}`;
+
+    // Remove existing file first (ignore error if not exists)
+    await supabase.storage.from('assets').remove([filePath]).catch(() => {});
+
     const { error } = await supabase.storage
       .from('assets')
-      .upload(`${school.id}/${name}`, file, { contentType: file.type, upsert: true });
-    if (error) throw new Error(`Upload failed: ${error.message}`);
-    const { data } = supabase.storage.from('assets').getPublicUrl(`${school.id}/${name}`);
-    return data.publicUrl;
+      .upload(filePath, file, {
+        contentType: file.type || 'image/png',
+        upsert: true,
+        cacheControl: '3600',
+      });
+
+    if (error) {
+      // If RLS policy error, guide user
+      if (error.message?.includes('row-level security') || error.message?.includes('policy')) {
+        throw new Error(
+          'Storage permission denied. Please run storage-policies.sql in your Supabase SQL Editor to fix this.'
+        );
+      }
+      throw new Error(`Upload failed: ${error.message}`);
+    }
+
+    const { data } = supabase.storage.from('assets').getPublicUrl(filePath);
+    return `${data.publicUrl}?t=${Date.now()}`; // cache-bust
   }
 
   const handleSubmit = async (e) => {
@@ -142,12 +165,20 @@ export default function Settings() {
       if (bgPreset === 'none') update.background_url = null;
 
       // Save to schools table via Supabase
-      const { error } = await supabase
+      const { error: saveErr } = await supabase
         .from('schools')
         .update({ ...update, updated_at: new Date().toISOString() })
         .eq('id', school.id);
 
-      if (error) throw new Error(error.message);
+      if (saveErr) {
+        // Fallback: try via backend API
+        console.warn('Supabase direct update failed, trying backend API:', saveErr.message);
+        await updateSettings((() => {
+          const fd = new FormData();
+          Object.entries(update).forEach(([k, v]) => { if (v !== null && v !== undefined) fd.append(k, v); });
+          return fd;
+        })());
+      }
 
       await refreshSchool();
       setFiles({ logo: null, stamp: null, signature: null, background: null });
