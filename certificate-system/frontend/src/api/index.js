@@ -1,11 +1,40 @@
 import axios from 'axios';
 
-// In development: uses Vite proxy → /api → http://localhost:5000/api
-// In production (Netlify): VITE_API_URL must be set to your backend URL
-// e.g. https://your-backend.onrender.com/api
-const BASE_URL = import.meta.env.VITE_API_URL || '/api';
+// ── Backend URL resolution ─────────────────────────────────────
+// Priority:
+//   1. VITE_API_URL env variable (set in Netlify dashboard)
+//   2. Auto-detect: if running on Netlify → use Render backend
+//   3. Fallback to local proxy (dev only)
+function getBaseURL() {
+  // Explicitly set via Netlify environment variable (recommended)
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
 
-const api = axios.create({ baseURL: BASE_URL });
+  // Running in production (not localhost) → use Render backend
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+    return 'https://certificate-backend.onrender.com/api';
+  }
+
+  // Local development → Vite proxy handles /api → localhost:5000
+  return '/api';
+}
+
+const BASE_URL = getBaseURL();
+
+const api = axios.create({
+  baseURL: BASE_URL,
+  timeout: 30000, // 30s timeout (Render free tier can be slow on cold start)
+});
+
+// ── Interceptor: add auth token to every request ──────────────
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('cert_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
 
 // ── Students ──────────────────────────────────────────────────
 export const getStudents = (params) => api.get('/students', { params });
@@ -25,17 +54,15 @@ export const generateCertificate = (studentId, template) =>
     params: { template },
     responseType: 'blob'
   });
-
 export const generateBatch = (params) =>
   api.get('/certificates/batch', { params, responseType: 'blob' });
-
 export const getCertificates = () => api.get('/certificates');
 
 // ── Templates ─────────────────────────────────────────────────
 export const getTemplates = () => api.get('/templates');
 
 // ── Settings ──────────────────────────────────────────────────
-export const getSettings = () => api.get('/settings');
+export const getSettings  = () => api.get('/settings');
 export const updateSettings = (formData) => api.post('/settings', formData, {
   headers: { 'Content-Type': 'multipart/form-data' }
 });
@@ -44,10 +71,8 @@ export const updateSettings = (formData) => api.post('/settings', formData, {
 export const downloadBlob = (blob, filename) => {
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
   window.URL.revokeObjectURL(url);
   document.body.removeChild(a);
 };
@@ -55,9 +80,7 @@ export const downloadBlob = (blob, filename) => {
 export const printBlob = (blob) => {
   const url = window.URL.createObjectURL(blob);
   const win = window.open(url, '_blank');
-  if (win) {
-    win.addEventListener('load', () => win.print());
-  }
+  if (win) win.addEventListener('load', () => win.print());
 };
 
 export default api;
