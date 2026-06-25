@@ -2,10 +2,8 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 
-// ⚠️ Change this to your backend URL
-// In development: your computer's local IP (not localhost!)
-// e.g. 'http://192.168.1.100:5000/api'
-export const API_URL = 'http://192.168.1.100:5000/api';
+const SUPABASE_URL = 'https://axeqcokrynwefeovucti.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF4ZXFjb2tyeW53ZWZlb3Z1Y3RpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzNzgwNzAsImV4cCI6MjA5Nzk1NDA3MH0.cwECvjRpFkqkwqGBZK6J7u3J2E5IkHP-dxJKf8XMx5g';
 
 const api = axios.create({ baseURL: API_URL });
 
