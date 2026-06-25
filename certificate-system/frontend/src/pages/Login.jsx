@@ -27,7 +27,7 @@ export default function Login() {
       toast.success('Welcome back!');
       navigate('/');
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Invalid email or password');
+      toast.error(err.message || 'Invalid email or password');
     } finally {
       setLoading(false);
     }

@@ -91,13 +91,17 @@ export default function Register() {
     setLoading(true);
     try {
       await register(form.email, form.password, form.school_name, form.active_year);
-      setStep(2); // success step
+      setStep(2); // success
     } catch (err) {
-      // Show the actual error from the server, not a generic message
+      if (err.message === 'CHECK_EMAIL') {
+        // Supabase email confirmation required — treat as success
+        setStep(2);
+        return;
+      }
       const msg =
-        err.response?.data?.error ||   // server-side error
-        err.message ||                  // network / JS error
-        'Registration failed. Please try again.';
+        err.message?.includes('already registered') || err.message?.includes('already been registered')
+          ? 'An account with this email already exists. Please sign in instead.'
+          : err.message || 'Registration failed. Please try again.';
       toast.error(msg, { duration: 5000 });
     } finally {
       setLoading(false);
