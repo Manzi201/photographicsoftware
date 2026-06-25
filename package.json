@@ -1,14 +1,14 @@
 {
   "name": "photographicsoftware",
   "version": "1.0.0",
-  "description": "Certificate System — root package (delegates to backend)",
+  "description": "Certificate System monorepo root",
+  "license": "MIT",
   "scripts": {
-    "start": "cd certificate-system/backend && node src/index.js",
-    "build": "cd certificate-system/backend && npm install",
-    "install:backend": "cd certificate-system/backend && npm install",
-    "install:frontend": "cd certificate-system/frontend && npm install"
+    "build": "cd certificate-system/backend && npm install --production=false",
+    "start": "cd certificate-system/backend && node src/index.js"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
   }
 }

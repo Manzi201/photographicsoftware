@@ -3,11 +3,13 @@ services:
     name: certificate-backend
     runtime: node
     rootDir: certificate-system/backend
-    buildCommand: npm install
+    buildCommand: npm install --production=false
     startCommand: node src/index.js
     envVars:
       - key: PORT
         value: 10000
+      - key: NODE_ENV
+        value: production
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_ANON_KEY
