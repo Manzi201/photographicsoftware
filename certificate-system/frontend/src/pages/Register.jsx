@@ -49,7 +49,8 @@ function Field({ label, hint, required, children }) {
 export default function Register() {
   const { register } = useAuth();
   const navigate = useNavigate();
-  const [step, setStep] = useState(0); // 0 = school info, 1 = account, 2 = done
+  const [step, setStep] = useState(0);
+  const [emailSent, setEmailSent] = useState(false); // email confirmation needed
   const [form, setForm] = useState({
     school_name: '',
     active_year: String(new Date().getFullYear()),
@@ -91,11 +92,11 @@ export default function Register() {
     setLoading(true);
     try {
       await register(form.email, form.password, form.school_name, form.active_year);
-      setStep(2); // success
+      setStep(2); // success — logged in directly
     } catch (err) {
       if (err.message === 'CHECK_EMAIL') {
-        // Supabase email confirmation required — treat as success
-        setStep(2);
+        // Supabase requires email confirmation
+        setEmailSent(true);
         return;
       }
       const msg =
@@ -185,7 +186,33 @@ export default function Register() {
 
         <div className="w-full max-w-sm">
 
-          {step < 2 && (
+          {/* ── EMAIL CONFIRMATION SCREEN ──────────────────── */}
+          {emailSent && (
+            <div className="text-center py-4">
+              <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                <Mail className="w-10 h-10 text-blue-600" />
+              </div>
+              <h2 className="text-2xl font-extrabold text-gray-900 mb-2">Check your email</h2>
+              <p className="text-gray-500 text-sm mb-1">We sent a confirmation link to:</p>
+              <p className="font-bold text-gray-800 mb-6">{form.email}</p>
+              <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-6 text-left space-y-2">
+                <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Next steps</p>
+                <p className="text-sm text-blue-800">1. Open your email inbox</p>
+                <p className="text-sm text-blue-800">2. Click the confirmation link</p>
+                <p className="text-sm text-blue-800">3. Come back and sign in</p>
+              </div>
+              <Link to="/login"
+                className="w-full flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 text-white font-semibold py-3 rounded-xl transition-colors shadow-sm text-sm">
+                Go to Sign In →
+              </Link>
+              <p className="text-xs text-gray-400 mt-4">
+                Didn't receive it? Check spam folder or{' '}
+                <button onClick={() => setEmailSent(false)} className="text-blue-600 hover:underline">try again</button>
+              </p>
+            </div>
+          )}
+
+          {!emailSent && step < 2 && (
             <>
               {/* Step bar */}
               <StepBar current={step} total={3} />

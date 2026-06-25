@@ -17,10 +17,11 @@ const PORT = process.env.PORT || 5000;
 const ALLOWED_ORIGINS = [
   'http://localhost:3000',
   'http://localhost:5173',
-  'https://certficatesystem.netlify.app',  // your Netlify domain
+  'https://certficatesystem.netlify.app',
   'https://certificate-system.netlify.app',
-  /\.netlify\.app$/,   // any Netlify preview deploy
-  /\.onrender\.com$/,  // Render itself
+  'https://photographicsoftware-1.onrender.com',
+  /\.netlify\.app$/,
+  /\.onrender\.com$/,
 ];
 
 app.use(cors({

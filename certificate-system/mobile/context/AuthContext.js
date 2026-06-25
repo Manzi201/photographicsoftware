@@ -5,6 +5,9 @@ import axios from 'axios';
 const SUPABASE_URL = 'https://axeqcokrynwefeovucti.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF4ZXFjb2tyeW53ZWZlb3Z1Y3RpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzNzgwNzAsImV4cCI6MjA5Nzk1NDA3MH0.cwECvjRpFkqkwqGBZK6J7u3J2E5IkHP-dxJKf8XMx5g';
 
+// Backend REST API (used for students/certificates — auth uses Supabase directly)
+export const API_URL = 'https://photographicsoftware-1.onrender.com/api';
+
 const api = axios.create({ baseURL: API_URL });
 
 const AuthContext = createContext(null);
