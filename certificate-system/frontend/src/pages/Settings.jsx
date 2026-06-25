@@ -131,20 +131,22 @@ export default function Settings() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.school_name.trim()) { toast.error('School name is required'); return; }
+    if (!school?.id) { toast.error('Session expired. Please sign in again.'); return; }
     setLoading(true);
     try {
       const update = {
         school_name:    form.school_name.trim(),
-        signatory_name: form.signatory_name.trim(),
-        active_year:    form.active_year,
+        signatory_name: form.signatory_name.trim() || 'Head Teacher',
+        active_year:    form.active_year || String(new Date().getFullYear()),
         bg_preset:      bgPreset,
-        logo_url:       school?.logo_url       || null,
-        stamp_url:      school?.stamp_url      || null,
-        signature_url:  school?.signature_url  || null,
-        background_url: school?.background_url || null,
+        // Start with existing URLs so we don't lose them if no new file uploaded
+        logo_url:       previews.logo       || null,
+        stamp_url:      previews.stamp      || null,
+        signature_url:  previews.signature  || null,
+        background_url: previews.background || null,
       };
 
-      // Upload each changed file directly to Supabase Storage
+      // Upload each changed file
       if (files.logo) {
         setUploading('Uploading logo...');
         update.logo_url = await uploadAsset(files.logo, 'logo.png');
@@ -164,30 +166,31 @@ export default function Settings() {
       }
       if (bgPreset === 'none') update.background_url = null;
 
-      // Save to schools table via Supabase
+      setUploading('Saving settings...');
+
+      // Save to schools table
       const { error: saveErr } = await supabase
         .from('schools')
         .update({ ...update, updated_at: new Date().toISOString() })
         .eq('id', school.id);
 
       if (saveErr) {
-        // Fallback: try via backend API
-        console.warn('Supabase direct update failed, trying backend API:', saveErr.message);
-        await updateSettings((() => {
-          const fd = new FormData();
-          Object.entries(update).forEach(([k, v]) => { if (v !== null && v !== undefined) fd.append(k, v); });
-          return fd;
-        })());
+        console.warn('Supabase update failed, trying backend:', saveErr.message);
+        const fd = new FormData();
+        Object.entries(update).forEach(([k, v]) => {
+          if (v !== null && v !== undefined) fd.append(k, String(v));
+        });
+        await updateSettings(fd);
       }
 
       await refreshSchool();
       setFiles({ logo: null, stamp: null, signature: null, background: null });
       setSaved(true);
-      toast.success('Settings saved!');
-      setTimeout(() => setSaved(false), 3000);
+      toast.success('✅ Settings saved!');
+      setTimeout(() => setSaved(false), 4000);
     } catch (err) {
-      console.error(err);
-      toast.error(err.message || 'Failed to save settings');
+      console.error('Settings error:', err);
+      toast.error(err.message || 'Failed to save settings', { duration: 6000 });
     } finally {
       setLoading(false);
       setUploading('');

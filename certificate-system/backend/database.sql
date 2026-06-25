@@ -253,16 +253,81 @@ CREATE TRIGGER on_auth_user_created
 
 
 -- ══════════════════════════════════════════════════════════════
--- PART 5: STORAGE BUCKETS
+-- PART 5: STORAGE BUCKETS + POLICIES
 -- ══════════════════════════════════════════════════════════════
 
+-- Create buckets (public = files readable without auth)
 INSERT INTO storage.buckets (id, name, public)
   VALUES ('student-photos', 'student-photos', true)
-  ON CONFLICT (id) DO NOTHING;
+  ON CONFLICT (id) DO UPDATE SET public = true;
 
 INSERT INTO storage.buckets (id, name, public)
   VALUES ('assets', 'assets', true)
-  ON CONFLICT (id) DO NOTHING;
+  ON CONFLICT (id) DO UPDATE SET public = true;
+
+-- Drop old storage policies if they exist
+DO $$
+DECLARE pol TEXT;
+BEGIN
+  FOR pol IN
+    SELECT policyname FROM pg_policies
+    WHERE schemaname = 'storage' AND tablename = 'objects'
+  LOOP
+    EXECUTE format('DROP POLICY IF EXISTS %I ON storage.objects', pol);
+  END LOOP;
+END $$;
+
+-- ── student-photos policies ───────────────────────────────────
+-- Anyone can read (public bucket)
+CREATE POLICY "sp_read" ON storage.objects
+  FOR SELECT USING (bucket_id = 'student-photos');
+
+-- Authenticated users can upload
+CREATE POLICY "sp_upload" ON storage.objects
+  FOR INSERT WITH CHECK (
+    bucket_id = 'student-photos'
+    AND auth.role() = 'authenticated'
+  );
+
+-- Authenticated users can update/overwrite
+CREATE POLICY "sp_update" ON storage.objects
+  FOR UPDATE USING (
+    bucket_id = 'student-photos'
+    AND auth.role() = 'authenticated'
+  );
+
+-- Authenticated users can delete
+CREATE POLICY "sp_delete" ON storage.objects
+  FOR DELETE USING (
+    bucket_id = 'student-photos'
+    AND auth.role() = 'authenticated'
+  );
+
+-- ── assets policies (logos, signatures, stamps, backgrounds) ──
+-- Anyone can read (public bucket)
+CREATE POLICY "assets_read" ON storage.objects
+  FOR SELECT USING (bucket_id = 'assets');
+
+-- Authenticated users can upload to their own folder
+CREATE POLICY "assets_upload" ON storage.objects
+  FOR INSERT WITH CHECK (
+    bucket_id = 'assets'
+    AND auth.role() = 'authenticated'
+  );
+
+-- Authenticated users can update
+CREATE POLICY "assets_update" ON storage.objects
+  FOR UPDATE USING (
+    bucket_id = 'assets'
+    AND auth.role() = 'authenticated'
+  );
+
+-- Authenticated users can delete
+CREATE POLICY "assets_delete" ON storage.objects
+  FOR DELETE USING (
+    bucket_id = 'assets'
+    AND auth.role() = 'authenticated'
+  );
 
 
 -- ══════════════════════════════════════════════════════════════
