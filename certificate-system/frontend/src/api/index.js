@@ -22,6 +22,11 @@ function getBaseURL() {
 
 const BASE_URL = getBaseURL();
 
+// Log the URL being used (visible in browser console for debugging)
+if (typeof window !== 'undefined') {
+  console.log('[CertSystem] API Base URL:', BASE_URL);
+}
+
 const api = axios.create({
   baseURL: BASE_URL,
   timeout: 30000, // 30s timeout (Render free tier can be slow on cold start)
