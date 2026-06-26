@@ -5,9 +5,14 @@ import { getStudents, generateBatch, downloadBlob, printBlob } from '../api';
 
 const CLASSES = ['All', 'Top Class', 'P6', 'S3', 'S6', 'Nursery', 'Graduation'];
 const STYLES  = [
-  { id: 'clean',   label: 'Clean White' },
-  { id: 'classic', label: 'Classic Gold' },
-  { id: 'elegant', label: 'Elegant Red' },
+  { id:'1', label:'Presidential' },
+  { id:'2', label:'Emerald' },
+  { id:'3', label:'Sapphire' },
+  { id:'4', label:'Burgundy' },
+  { id:'5', label:'Midnight' },
+  { id:'6', label:'Geometric' },
+  { id:'7', label:'Blue Stripe' },
+  { id:'8', label:'Navy Portrait' },
 ];
 
 export default function PrintAll() {

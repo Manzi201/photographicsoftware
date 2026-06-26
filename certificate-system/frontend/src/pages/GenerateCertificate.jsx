@@ -6,11 +6,14 @@ import { getStudents, generateCertificate, downloadBlob, printBlob } from '../ap
 const CLASSES = ['Top Class','P6','S3','S6','Nursery','Graduation'];
 
 const DESIGNS = [
-  { id:'1', name:'Presidential',      desc:'White · Navy & Gold borders',     colors:['#0e2d80','#c09000','#fff'] },
-  { id:'2', name:'Emerald Ribbon',    desc:'Cream · Deep green side ribbons', colors:['#065922','#c69400','#faf8ee'] },
-  { id:'3', name:'Sapphire Modern',   desc:'Blue left panel · White right',   colors:['#0e38a0','#c09000','#fff'] },
-  { id:'4', name:'Burgundy Prestige', desc:'Cream · Rich burgundy bands',     colors:['#7a0614','#d19e04','#faf7ee'] },
-  { id:'5', name:'Midnight Gold',     desc:'Deep navy bg · Gold text',        colors:['#070d38','#e0ad14','#e8edff'] },
+  { id:'1', name:'Presidential',       desc:'Landscape · Navy & Gold',          colors:['#0e2d80','#c09000','#fff'] },
+  { id:'2', name:'Emerald Ribbon',     desc:'Landscape · Green ribbons',        colors:['#065922','#c69400','#faf8ee'] },
+  { id:'3', name:'Sapphire Modern',    desc:'Landscape · Blue panel',           colors:['#0e38a0','#c09000','#fff'] },
+  { id:'4', name:'Burgundy Prestige',  desc:'Landscape · Burgundy bands',       colors:['#7a0614','#d19e04','#faf7ee'] },
+  { id:'5', name:'Midnight Gold',      desc:'Landscape · Full navy + gold',     colors:['#070d38','#e0ad14','#e8edff'] },
+  { id:'6', name:'Geometric Red',      desc:'Landscape · Diagonal + medal',     colors:['#6b0310','#d1a205','#fff'] },
+  { id:'7', name:'Blue Stripe',        desc:'Landscape · Blue+gold stripes',    colors:['#0e3882','#d4a305','#fff'] },
+  { id:'8', name:'Navy Gold Portrait', desc:'PORTRAIT · Dark navy · Medal',     colors:['#06183c','#d9a604','#06183c'], portrait:true },
 ];
 
 function DesignCard({ d, selected, onSelect }) {
@@ -19,44 +22,35 @@ function DesignCard({ d, selected, onSelect }) {
     <button onClick={onSelect}
       className={`rounded-2xl border-2 overflow-hidden text-left transition-all hover:shadow-lg w-full
         ${selected ? 'border-blue-500 shadow-md ring-2 ring-blue-100' : 'border-gray-200 hover:border-gray-300'}`}>
-
-      {/* Mini certificate preview */}
-      <div className="h-28 relative p-0 overflow-hidden" style={{ backgroundColor: c3 }}>
-        {/* top band */}
-        <div className="absolute top-0 left-0 right-0 h-7" style={{ backgroundColor: c1 }} />
-        {/* side stripes for designs 2,3,4 */}
+      <div className="h-28 relative overflow-hidden" style={{ backgroundColor: c3 }}>
+        {d.portrait
+          ? <div className="absolute inset-0" style={{ backgroundColor: c1 }} />
+          : <div className="absolute top-0 left-0 right-0 h-7" style={{ backgroundColor: c1 }} />}
         {(d.id==='2'||d.id==='3') && <div className="absolute top-0 left-0 bottom-0 w-5" style={{ backgroundColor: c1 }} />}
         {d.id==='3' && <div className="absolute top-0 left-5 bottom-0 w-1.5" style={{ backgroundColor: c2 }} />}
-        {/* bottom band */}
-        {d.id!=='5' && <div className="absolute bottom-0 left-0 right-0 h-5" style={{ backgroundColor: c1 }} />}
-
-        {/* Gold borders for design 1,5 */}
-        {(d.id==='1'||d.id==='5') && (
-          <div className="absolute inset-1 border-2 rounded" style={{ borderColor: c2 }} />
-        )}
-
-        {/* Content lines */}
+        {!d.portrait && d.id!=='5' && <div className="absolute bottom-0 left-0 right-0 h-5" style={{ backgroundColor: c1 }} />}
+        {(d.id==='1'||d.id==='5'||d.id==='8') && <div className="absolute inset-1.5 border-2 rounded" style={{ borderColor: c2 }} />}
         <div className={`absolute flex flex-col items-center gap-1 ${d.id==='3'?'left-20 right-2':'left-2 right-2'} top-9`}>
-          <div className="h-1.5 w-32 rounded" style={{ backgroundColor: c1, opacity:.5 }} />
-          <div className="h-3 w-28 rounded" style={{ backgroundColor: c1, opacity:.8 }} />
-          <div className="h-1 w-24 rounded" style={{ backgroundColor: c2 }} />
-          <div className="h-1 w-20 rounded" style={{ backgroundColor: c1, opacity:.35 }} />
-          <div className="h-1 w-18 rounded" style={{ backgroundColor: c1, opacity:.25 }} />
+          {d.portrait ? <>
+            <div className="h-3 w-24 rounded" style={{ backgroundColor: c2, opacity:.9 }} />
+            <div className="h-4 w-20 rounded mt-1" style={{ backgroundColor: c2, opacity:.7 }} />
+            <div className="h-1 w-16 rounded" style={{ backgroundColor: c2, opacity:.4 }} />
+          </> : <>
+            <div className="h-1.5 w-28 rounded" style={{ backgroundColor: c1, opacity:.5 }} />
+            <div className="h-3 w-24 rounded" style={{ backgroundColor: c1, opacity:.8 }} />
+            <div className="h-1 w-20 rounded" style={{ backgroundColor: c2 }} />
+            <div className="h-1 w-16 rounded" style={{ backgroundColor: c1, opacity:.3 }} />
+          </>}
         </div>
-
-        {/* Mini photo placeholder */}
-        <div className="absolute top-1 right-2 w-9 h-12 rounded border-2"
-          style={{ borderColor: c2, backgroundColor: c1+'33' }} />
-
-        {/* Selected tick */}
+        {d.portrait && (
+          <div className="absolute top-1.5 left-1.5 bg-amber-500 text-white text-xs font-bold px-1.5 py-0.5 rounded">Portrait</div>
+        )}
         {selected && (
-          <div className="absolute top-1.5 left-2 w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center shadow">
+          <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center shadow">
             <span className="text-white text-xs font-bold">✓</span>
           </div>
         )}
       </div>
-
-      {/* Label */}
       <div className={`px-3 py-2 ${selected ? 'bg-blue-600' : 'bg-white'}`}>
         <p className={`text-xs font-bold ${selected ? 'text-white' : 'text-gray-800'}`}>{d.name}</p>
         <p className={`text-xs ${selected ? 'text-blue-100' : 'text-gray-400'}`}>{d.desc}</p>
@@ -66,13 +60,13 @@ function DesignCard({ d, selected, onSelect }) {
 }
 
 export default function GenerateCertificate() {
-  const [query,     setQuery]     = useState('');
-  const [student,   setStudent]   = useState(null);
-  const [results,   setResults]   = useState([]);
-  const [template,  setTemplate]  = useState('');
-  const [design,    setDesign]    = useState('1');
-  const [loading,   setLoading]   = useState(false);
-  const [generating,setGenerating]= useState('');
+  const [query,      setQuery]     = useState('');
+  const [student,    setStudent]   = useState(null);
+  const [results,    setResults]   = useState([]);
+  const [template,   setTemplate]  = useState('');
+  const [design,     setDesign]    = useState('1');
+  const [loading,    setLoading]   = useState(false);
+  const [generating, setGenerating]= useState('');
 
   const handleSearch = async e => {
     e?.preventDefault();
@@ -97,7 +91,7 @@ export default function GenerateCertificate() {
       if (action==='print') printBlob(blob);
       else downloadBlob(blob, name);
       toast.success(action==='print' ? 'Opening print dialog...' : '✅ Certificate downloaded!');
-    } catch { toast.error('Failed to generate'); }
+    } catch { toast.error('Failed to generate certificate'); }
     finally { setGenerating(''); }
   };
 
@@ -105,25 +99,20 @@ export default function GenerateCertificate() {
     <div className="p-6 max-w-5xl mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Generate Certificate</h1>
-        <p className="text-gray-500 mt-1">Search student → choose design → download</p>
+        <p className="text-gray-500 mt-1">Search student → choose design → download PDF</p>
       </div>
 
-      {/* Search */}
       <div className="card mb-5">
         <form onSubmit={handleSearch} className="flex gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <input className="input-field pl-9"
-              placeholder="Photo number (001) or student name"
+            <input className="input-field pl-9" placeholder="Photo number (001) or student name"
               value={query} onChange={e=>setQuery(e.target.value)} autoFocus />
           </div>
-          <button type="submit" className="btn-primary">
-            <Search className="w-4 h-4" /> Search
-          </button>
+          <button type="submit" className="btn-primary"><Search className="w-4 h-4"/> Search</button>
         </form>
       </div>
 
-      {/* Multiple results */}
       {results.length>1 && !student && (
         <div className="card mb-5">
           <p className="text-sm text-gray-500 mb-3">Select student:</p>
@@ -148,7 +137,6 @@ export default function GenerateCertificate() {
 
       {student && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          {/* Student info */}
           <div className="space-y-4">
             <div className="card flex gap-4">
               <div className="w-20 h-28 rounded-xl overflow-hidden bg-gray-100 border shrink-0">
@@ -171,17 +159,13 @@ export default function GenerateCertificate() {
                 </div>
               </div>
             </div>
-
-            {/* Action buttons */}
             <div className="flex gap-3">
-              <button onClick={()=>handleGenerate('download')} disabled={!!generating}
-                className="btn-primary flex-1 justify-center py-3">
+              <button onClick={()=>handleGenerate('download')} disabled={!!generating} className="btn-primary flex-1 justify-center py-3">
                 {generating==='download'
                   ? <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/> Generating...</>
                   : <><Download className="w-4 h-4"/> Download PDF</>}
               </button>
-              <button onClick={()=>handleGenerate('print')} disabled={!!generating}
-                className="btn-secondary flex-1 justify-center py-3">
+              <button onClick={()=>handleGenerate('print')} disabled={!!generating} className="btn-secondary flex-1 justify-center py-3">
                 {generating==='print'
                   ? <><span className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"/> Opening...</>
                   : <><Printer className="w-4 h-4"/> Print</>}
@@ -189,10 +173,9 @@ export default function GenerateCertificate() {
             </div>
           </div>
 
-          {/* Design selector */}
           <div>
             <p className="font-bold text-gray-800 mb-3 flex items-center gap-2">
-              <Award className="w-4 h-4 text-blue-600"/> Choose Certificate Design
+              <Award className="w-4 h-4 text-blue-600"/> Certificate Design ({DESIGNS.length} styles)
             </p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {DESIGNS.map(d=>(

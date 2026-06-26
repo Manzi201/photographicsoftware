@@ -535,22 +535,478 @@ async function drawFooterOnDark(doc, page, settings, W, H, gold, B, R) {
   }
 }
 
+// ════════════════════════════════════════════════════════════════
+// DESIGN 6 — "Geometric Burgundy" — exactly like image 1
+// Diagonal burgundy shapes top-left & bottom-right, gold lines,
+// medal/ribbon top-right, white center, large script-like name
+// ════════════════════════════════════════════════════════════════
+async function design6(doc, page, student, template, settings, W, H, fonts) {
+  const { B, R, BI, I } = fonts;
+  const burg   = rgb(0.42, 0.02, 0.07);
+  const dBurg  = rgb(0.28, 0.01, 0.04);
+  const gold   = rgb(0.82, 0.65, 0.05);
+  const ltGray = rgb(0.93, 0.91, 0.92);
+  const black  = rgb(0.08, 0.06, 0.06);
+  const vars = buildVars(student, template, settings);
+
+  // White background
+  page.drawRectangle({ x:0, y:0, width:W, height:H, color:rgb(1,1,1) });
+
+  // ── TOP-LEFT diagonal burgundy shapes ──────────────────────
+  // Large background polygon (big dark triangle top-left)
+  page.drawRectangle({ x:0, y:H-200, width:220, height:200, color:burg });
+  // Diagonal cut: white triangle over it to create diagonal
+  page.drawRectangle({ x:0, y:H-220, width:260, height:20, color:rgb(1,1,1) });
+  // Lighter overlapping shape
+  page.drawRectangle({ x:0, y:H-130, width:100, height:130, color:dBurg });
+
+  // Gold diagonal lines (top-left)
+  [[30, H-20, 180, H-90], [40, H-10, 200, H-100],
+   [0, H-170, 90, H-220], [0, H-160, 80, H-210]].forEach(([x1,y1,x2,y2]) =>
+    page.drawLine({ start:{x:x1,y:y1}, end:{x:x2,y:y2}, thickness:2.5, color:gold })
+  );
+
+  // Light gray diagonal shape (mid-left)
+  page.drawRectangle({ x:0, y:100, width:140, height:200, color:ltGray });
+  page.drawRectangle({ x:0, y:80, width:100, height:30, color:ltGray });
+
+  // ── BOTTOM-RIGHT diagonal burgundy shapes ──────────────────
+  page.drawRectangle({ x:W-220, y:0, width:220, height:190, color:burg });
+  page.drawRectangle({ x:W-100, y:0, width:100, height:220, color:dBurg });
+  // Gold diagonal lines (bottom-right)
+  [[W-180, 20, W-30, 90], [W-190, 10, W-40, 80],
+   [W-90, 170, W-20, 220], [W-80, 160, W-10, 210]].forEach(([x1,y1,x2,y2]) =>
+    page.drawLine({ start:{x:x1,y:y1}, end:{x:x2,y:y2}, thickness:2.5, color:gold })
+  );
+  // Light shape bottom-right
+  page.drawRectangle({ x:W-140, y:H-100, width:140, height:100, color:ltGray });
+
+  // ── School logo top-left ────────────────────────────────────
+  await drawLogo(doc, page, settings, 22, H-75, 55, 55);
+
+  // ── School name centered top ────────────────────────────────
+  const sn = (settings.school_name||'SCHOOL NAME').toUpperCase();
+  let snSz=18; while(B.widthOfTextAtSize(sn,snSz)>W-350&&snSz>9) snSz--;
+  ctr(page, sn, H-42, snSz, B, black, W);
+  page.drawLine({ start:{x:W/2-80,y:H-48}, end:{x:W/2+80,y:H-48}, thickness:0.8, color:gold });
+
+  // ── CERTIFICATE header ──────────────────────────────────────
+  const certY = H-85;
+  ctr(page, 'CERTIFICATE', certY, 36, B, black, W);
+  ctr(page, 'OF ACHIEVEMENT', certY-28, 16, I, black, W);
+
+  // ── MEDAL / SEAL (top-right) ────────────────────────────────
+  const mx = W-95, my = H-100;
+  // Red ribbon stripes below medal
+  page.drawRectangle({ x:mx-18, y:my-60, width:14, height:70, rotate:degrees(-8), color:burg });
+  page.drawRectangle({ x:mx+4,  y:my-60, width:14, height:70, rotate:degrees(8),  color:burg });
+  // Gold medal circle
+  page.drawCircle({ x:mx, y:my, size:34, color:gold });
+  page.drawCircle({ x:mx, y:my, size:28, color:rgb(0.88,0.70,0.08) });
+  page.drawCircle({ x:mx, y:my, size:22, color:rgb(0.92,0.75,0.10) });
+  // Medal text
+  page.drawText('★', { x:mx-5, y:my-5, size:14, font:B, color:rgb(0.60,0.42,0.01) });
+  // Serrated edge (small circles around medal)
+  for (let a=0; a<360; a+=20) {
+    const rad=Math.PI*a/180, r=35;
+    page.drawCircle({ x:mx+Math.cos(rad)*r, y:my+Math.sin(rad)*r, size:3, color:gold });
+  }
+
+  // ── Photo student (left side center) ───────────────────────
+  const pW=115, pH=150, pX=65, pY=H-pH-250;
+  page.drawRectangle({ x:pX-3, y:pY-3, width:pW+6, height:pH+6, borderColor:gold, borderWidth:1.5, color:rgb(1,1,1,0) });
+  if (student.photo_url) {
+    try {
+      const buf = await fetchBuf(student.photo_url);
+      const img = await embedImg(doc, buf);
+      if (img) page.drawImage(img, { x:pX, y:pY, width:pW, height:pH });
+    } catch {}
+  }
+
+  // ── "This certificate is presented to" ─────────────────────
+  const presY = certY-62;
+  ctr(page, 'This certificate is presented to', presY, 12, I, rgb(0.35,0.35,0.35), W);
+
+  // ── Student name — large ────────────────────────────────────
+  const nm = `${student.first_name} ${student.last_name}`;
+  let nSz=38; while(BI.widthOfTextAtSize(nm,nSz)>W-250&&nSz>18) nSz--;
+  ctr(page, nm, presY-52, nSz, BI, black, W);
+  page.drawLine({ start:{x:W/2-180,y:presY-58}, end:{x:W/2+180,y:presY-58}, thickness:0.8, color:rgb(0.5,0.5,0.5) });
+
+  // ── Body text ───────────────────────────────────────────────
+  const l1 = fillVars(settings.cert_line1||'Has completed in {class} at',vars)+' '+(settings.school_name||'');
+  const l2 = fillVars(settings.cert_line2||'in Academic year of {year}',vars);
+  const by = presY-58-nSz+10;
+  const l1l = wrap(l1+' '+l2, R, 11.5, W-300);
+  l1l.forEach((ln,i)=>ctr(page,ln,by-i*15,11.5,R,black,W));
+
+  const purp = fillVars(settings.cert_purpose||'This certificate is given for whichever purpose it may serve',vars);
+  const py2 = by-l1l.length*15-12;
+  wrap(purp,R,11,W-280).forEach((ln,i)=>ctr(page,ln,py2-i*14,11,R,black,W));
+
+  // ── Signature ───────────────────────────────────────────────
+  const sigY = 80;
+  const sigX = W/2-80;
+  if (settings.signature_url) {
+    try {
+      const buf = await fetchBuf(settings.signature_url);
+      const img = await embedImg(doc, buf);
+      if (img) page.drawImage(img, { x:sigX-10, y:sigY+10, width:120, height:30, opacity:0.85 });
+    } catch {}
+  } else {
+    // Script-style name placeholder
+    const sigName = settings.signatory_name||'Head Teacher';
+    let sigSz=16; while(BI.widthOfTextAtSize(sigName,sigSz)>160&&sigSz>10) sigSz--;
+    const sigNW = BI.widthOfTextAtSize(sigName,sigSz);
+    page.drawText(sigName, { x:sigX+(160-sigNW)/2, y:sigY+18, size:sigSz, font:BI, color:black });
+  }
+  page.drawLine({ start:{x:sigX,y:sigY+8}, end:{x:sigX+160,y:sigY+8}, thickness:0.8, color:rgb(0.4,0.4,0.4) });
+  const slbl = settings.signatory_name||'Head Teacher';
+  const slblW = R.widthOfTextAtSize(slbl,9);
+  page.drawText(slbl, { x:sigX+(160-slblW)/2, y:sigY-3, size:9, font:R, color:rgb(0.4,0.4,0.4) });
+
+  // ── Date ────────────────────────────────────────────────────
+  const dateStr = fmtDate();
+  const dateSz  = 12;
+  const dateW   = B.widthOfTextAtSize(dateStr, dateSz);
+  ctr(page, dateStr, 62, dateSz, B, black, W);
+  ctr(page, 'Date', 50, 9, R, rgb(0.45,0.45,0.45), W);
+}
+
+// ════════════════════════════════════════════════════════════════
+// DESIGN 7 — "Blue Stripe Modern" — exactly like image 2
+// Blue+gold diagonal stripes on sides, white center, ribbon badge
+// ════════════════════════════════════════════════════════════════
+async function design7(doc, page, student, template, settings, W, H, fonts) {
+  const { B, R, BI, I } = fonts;
+  const dBlue  = rgb(0.08, 0.22, 0.52);
+  const mBlue  = rgb(0.12, 0.35, 0.72);
+  const gold   = rgb(0.85, 0.65, 0.05);
+  const ltGray = rgb(0.90, 0.92, 0.96);
+  const black  = rgb(0.06, 0.06, 0.10);
+  const vars = buildVars(student, template, settings);
+
+  // White bg
+  page.drawRectangle({ x:0, y:0, width:W, height:H, color:rgb(1,1,1) });
+
+  // Outer dark blue border
+  page.drawRectangle({ x:0, y:0, width:W, height:H, borderColor:dBlue, borderWidth:14, color:rgb(1,1,1,0) });
+  // White gap
+  page.drawRectangle({ x:14, y:14, width:W-28, height:H-28, borderColor:rgb(1,1,1), borderWidth:4, color:rgb(1,1,1,0) });
+  // Inner thin blue border
+  page.drawRectangle({ x:18, y:18, width:W-36, height:H-36, borderColor:dBlue, borderWidth:1.2, color:rgb(1,1,1,0) });
+
+  // ── LEFT diagonal stripe group ──────────────────────────────
+  // Gray background strip
+  page.drawRectangle({ x:14, y:H/2-80, width:120, height:260, rotate:degrees(-12), color:ltGray });
+  // Blue diagonal stripes
+  [[22, H-20, 22, 20], [36, H-20, 36, 20]].forEach(([x1,y1,x2,y2]) => {
+    // Thick blue diagonal
+    page.drawRectangle({ x:x1, y:H*0.1, width:28, height:H*0.8, rotate:degrees(-8), color:dBlue });
+  });
+  page.drawRectangle({ x:18, y:H*0.05, width:18, height:H*0.9, rotate:degrees(-8), color:mBlue });
+  // Gold diagonal stripe
+  page.drawRectangle({ x:62, y:H*0.08, width:22, height:H*0.84, rotate:degrees(-8), color:gold });
+  page.drawRectangle({ x:82, y:H*0.1, width:10, height:H*0.8, rotate:degrees(-8), color:gold });
+
+  // ── RIGHT diagonal stripe group ─────────────────────────────
+  page.drawRectangle({ x:W-46, y:H*0.1, width:28, height:H*0.8, rotate:degrees(-8), color:dBlue });
+  page.drawRectangle({ x:W-28, y:H*0.05, width:18, height:H*0.9, rotate:degrees(-8), color:mBlue });
+  // Right gray background
+  page.drawRectangle({ x:W-120, y:H/2-80, width:120, height:260, rotate:degrees(-12), color:ltGray });
+  // Right gold
+  page.drawRectangle({ x:W-84, y:H*0.08, width:22, height:H*0.84, rotate:degrees(-8), color:gold });
+  page.drawRectangle({ x:W-104, y:H*0.1, width:10, height:H*0.8, rotate:degrees(-8), color:gold });
+
+  // Re-draw white inner area to clean up overlapping shapes
+  page.drawRectangle({ x:115, y:22, width:W-242, height:H-44, color:rgb(1,1,1) });
+
+  // ── CERTIFICATE title ───────────────────────────────────────
+  const titleY = H-68;
+  ctr(page, 'C E R T I F I C A T E', titleY, 28, B, black, W);
+  ctr(page, 'OF ACHIEVEMENT', titleY-24, 13, I, black, W);
+
+  // Diamond decorators
+  const dy = titleY-36;
+  [W/2-16, W/2-4, W/2+8].forEach(x => {
+    page.drawRectangle({ x, y:dy, width:8, height:8, rotate:degrees(45), color:gold });
+  });
+
+  // ── School logo + name ──────────────────────────────────────
+  await drawLogo(doc, page, settings, 130, H-72, 48, 48);
+  const sn = (settings.school_name||'SCHOOL').toUpperCase();
+  let snSz=12; while(B.widthOfTextAtSize(sn,snSz)>100&&snSz>7) snSz--;
+  page.drawText(sn, { x:130, y:H-82, size:snSz, font:B, color:dBlue });
+
+  // ── Photo top-right inside ──────────────────────────────────
+  const pW=118, pH=152, pX=W-pW-128, pY=H-pH-28;
+  page.drawRectangle({ x:pX-3, y:pY-3, width:pW+6, height:pH+6, borderColor:dBlue, borderWidth:1.5, color:rgb(1,1,1,0) });
+  if (student.photo_url) {
+    try {
+      const buf = await fetchBuf(student.photo_url);
+      const img = await embedImg(doc, buf);
+      if (img) page.drawImage(img, { x:pX, y:pY, width:pW, height:pH });
+    } catch {}
+  }
+
+  // ── "This certificate is proudly presented to" ───────────────
+  const presY = H-112;
+  ctr(page, 'This certificate is proudly presented to', presY, 11, I, rgb(0.35,0.35,0.35), W);
+
+  // ── Student name ─────────────────────────────────────────────
+  const nm = `${student.first_name} ${student.last_name}`;
+  let nSz=36; while(BI.widthOfTextAtSize(nm,nSz)>W-240&&nSz>16) nSz--;
+  ctr(page, nm, presY-50, nSz, BI, black, W);
+  page.drawLine({ start:{x:W/2-200,y:presY-56}, end:{x:W/2+200,y:presY-56}, thickness:0.8, color:rgb(0.6,0.6,0.6) });
+
+  // ── Body ────────────────────────────────────────────────────
+  const l1 = fillVars(settings.cert_line1||'Has completed in {class} at',vars)+' '+(settings.school_name||'');
+  const l2 = fillVars(settings.cert_line2||'in Academic year of {year}',vars);
+  const by = presY-56-nSz;
+  const bLines = wrap(l1+' '+l2, R, 11.5, W-260);
+  bLines.forEach((ln,i)=>ctr(page,ln,by-i*15,11.5,R,black,W));
+
+  const purp = fillVars(settings.cert_purpose||'This certificate is given for whichever purpose it may serve',vars);
+  const py2 = by-bLines.length*15-14;
+  wrap(purp,R,11,W-260).forEach((ln,i)=>ctr(page,ln,py2-i*14,11,R,black,W));
+
+  // ── BADGE / RIBBON (center bottom) ──────────────────────────
+  const bx = W/2, by2 = 90;
+  // Ribbon stripes
+  page.drawRectangle({ x:bx-18, y:by2-45, width:14, height:55, rotate:degrees(-6), color:gold });
+  page.drawRectangle({ x:bx+4,  y:by2-45, width:14, height:55, rotate:degrees(6),  color:gold });
+  // Badge outer circle
+  page.drawCircle({ x:bx, y:by2, size:32, color:dBlue });
+  page.drawCircle({ x:bx, y:by2, size:26, color:mBlue });
+  // Serrated
+  for (let a=0; a<360; a+=18) {
+    const rad=Math.PI*a/180, r=33;
+    page.drawCircle({ x:bx+Math.cos(rad)*r, y:by2+Math.sin(rad)*r, size:3.5, color:gold });
+  }
+  page.drawCircle({ x:bx, y:by2, size:22, color:rgb(0.90,0.72,0.06) });
+  // Star
+  page.drawText('★', { x:bx-6, y:by2-5, size:14, font:B, color:dBlue });
+
+  // ── Dual signatures ─────────────────────────────────────────
+  const sigY = 42;
+  // Left signature
+  page.drawLine({ start:{x:140,y:sigY+8}, end:{x:290,y:sigY+8}, thickness:0.8, color:rgb(0.5,0.5,0.5) });
+  const sName = settings.signatory_name||'Head Teacher';
+  const sNameW = R.widthOfTextAtSize(sName, 9);
+  page.drawText(sName, { x:140+(150-sNameW)/2, y:sigY-3, size:9, font:R, color:rgb(0.45,0.45,0.45) });
+  if (settings.signature_url) {
+    try {
+      const buf = await fetchBuf(settings.signature_url);
+      const img = await embedImg(doc, buf);
+      if (img) page.drawImage(img, { x:145, y:sigY+9, width:130, height:28, opacity:0.85 });
+    } catch {}
+  }
+
+  // Right signature (school name line)
+  page.drawLine({ start:{x:W-290,y:sigY+8}, end:{x:W-140,y:sigY+8}, thickness:0.8, color:rgb(0.5,0.5,0.5) });
+  const rSig = (settings.school_name||'Director').substring(0,18);
+  const rSigW = R.widthOfTextAtSize(rSig, 9);
+  page.drawText(rSig, { x:W-290+(150-rSigW)/2, y:sigY-3, size:9, font:R, color:rgb(0.45,0.45,0.45) });
+}
+
+// ════════════════════════════════════════════════════════════════
+// DESIGN 8 — "Navy Gold Portrait" — exactly like uploaded image
+// Portrait A4, deep navy bg, gold borders, diagonal gold curves,
+// large CERTIFICATE title, gold medal bottom center
+// ════════════════════════════════════════════════════════════════
+async function design8(doc, page, student, template, settings, W, H, fonts) {
+  // Note: W=595.28, H=841.89 (portrait)
+  const { B, R, BI, I } = fonts;
+  const navy   = rgb(0.04, 0.10, 0.30);
+  const dNavy  = rgb(0.02, 0.06, 0.20);
+  const gold   = rgb(0.85, 0.65, 0.05);
+  const ltGold = rgb(0.95, 0.80, 0.35);
+  const white  = rgb(1, 1, 1);
+  const vars   = buildVars(student, template, settings);
+
+  // ── Deep navy background ─────────────────────────────────
+  page.drawRectangle({ x:0, y:0, width:W, height:H, color:navy });
+
+  // ── Background texture dots (bottom corners) ────────────
+  for (let r=0; r<6; r++) for (let c=0; c<6; c++) {
+    if (Math.sqrt(r*r+c*c) < 7) {
+      page.drawCircle({ x:30+c*14, y:30+r*14, size:2, color:rgb(0.15,0.28,0.55), borderWidth:0 });
+      page.drawCircle({ x:W-30-c*14, y:30+r*14, size:2, color:rgb(0.15,0.28,0.55), borderWidth:0 });
+    }
+  }
+
+  // ── Outer gold border rect ───────────────────────────────
+  page.drawRectangle({ x:18, y:18, width:W-36, height:H-36,
+    borderColor:gold, borderWidth:2.5, color:rgb(1,1,1,0) });
+  // Inner thin gold border
+  page.drawRectangle({ x:24, y:24, width:W-48, height:H-48,
+    borderColor:rgb(0.75,0.55,0.02), borderWidth:0.7, color:rgb(1,1,1,0) });
+
+  // ── TOP-LEFT diagonal gold curve ─────────────────────────
+  // Simulate curved diagonal with a series of overlapping rectangles
+  const drawDiagCurve = (startX, startY, endX, endY, thick, color) => {
+    const steps = 20;
+    for (let i=0; i<=steps; i++) {
+      const t = i/steps;
+      const x = startX + (endX-startX)*t;
+      const y = startY + (endY-startY)*t;
+      page.drawRectangle({ x:x-thick/2, y:y-thick/2, width:thick, height:thick, color, borderWidth:0 });
+    }
+  };
+
+  // Top-left diagonal gold swoosh
+  page.drawLine({ start:{x:0,y:H-80}, end:{x:130,y:H}, thickness:40, color:gold, opacity:0.9 });
+  page.drawLine({ start:{x:0,y:H-120}, end:{x:160,y:H}, thickness:18, color:ltGold, opacity:0.8 });
+  page.drawLine({ start:{x:0,y:H-60}, end:{x:100,y:H}, thickness:10, color:rgb(0.60,0.42,0.02) });
+
+  // Top-right diagonal
+  page.drawLine({ start:{x:W,y:H-80}, end:{x:W-130,y:H}, thickness:40, color:gold, opacity:0.9 });
+  page.drawLine({ start:{x:W,y:H-120}, end:{x:W-160,y:H}, thickness:18, color:ltGold, opacity:0.8 });
+  page.drawLine({ start:{x:W,y:H-60}, end:{x:W-100,y:H}, thickness:10, color:rgb(0.60,0.42,0.02) });
+
+  // Bottom gold V-shape (the distinctive swoosh at bottom)
+  // Left leg of V
+  page.drawLine({ start:{x:0,y:220}, end:{x:W/2,y:90}, thickness:45, color:gold });
+  page.drawLine({ start:{x:0,y:220}, end:{x:W/2,y:90}, thickness:25, color:ltGold });
+  page.drawLine({ start:{x:0,y:205}, end:{x:W/2,y:78}, thickness:8, color:rgb(0.60,0.42,0.02) });
+  // Right leg of V
+  page.drawLine({ start:{x:W,y:220}, end:{x:W/2,y:90}, thickness:45, color:gold });
+  page.drawLine({ start:{x:W,y:220}, end:{x:W/2,y:90}, thickness:25, color:ltGold });
+  page.drawLine({ start:{x:W,y:205}, end:{x:W/2,y:78}, thickness:8, color:rgb(0.60,0.42,0.02) });
+
+  // Re-draw navy inner rectangle to clean up
+  page.drawRectangle({ x:28, y:200, width:W-56, height:H-310, color:navy });
+  // Also clean top area
+  page.drawRectangle({ x:28, y:H-200, width:W-56, height:160, color:navy });
+
+  // Redraw borders on top
+  page.drawRectangle({ x:18, y:18, width:W-36, height:H-36,
+    borderColor:gold, borderWidth:2.5, color:rgb(1,1,1,0) });
+  page.drawRectangle({ x:24, y:24, width:W-48, height:H-48,
+    borderColor:rgb(0.75,0.55,0.02), borderWidth:0.7, color:rgb(1,1,1,0) });
+
+  // ── LOGO + school name (top) ──────────────────────────────
+  await drawLogo(doc, page, settings, (W-55)/2, H-100, 55, 55);
+  const sn = (settings.school_name||'SCHOOL NAME').toUpperCase();
+  let snSz=13; while(B.widthOfTextAtSize(sn,snSz)>W-80&&snSz>8) snSz--;
+  ctr(page, sn, H-112, snSz, B, gold, W);
+
+  // ── CERTIFICATE title ────────────────────────────────────
+  const certY = H-168;
+  ctr(page, 'CERTIFICATE', certY, 46, B, gold, W);
+  ctr(page, 'OF ACHIEVEMENT', certY-36, 16, B, gold, W);
+
+  // ── Inner gold box ────────────────────────────────────────
+  const boxX=40, boxY=215, boxW=W-80, boxH=H-boxY-220;
+  page.drawRectangle({ x:boxX, y:boxY, width:boxW, height:boxH,
+    borderColor:gold, borderWidth:1.2, color:rgb(1,1,1,0) });
+  page.drawRectangle({ x:boxX+4, y:boxY+4, width:boxW-8, height:boxH-8,
+    borderColor:rgb(0.65,0.48,0.02), borderWidth:0.4, color:rgb(1,1,1,0) });
+
+  // ── Student photo (top-right inside box) ─────────────────
+  const pW=110, pH=140;
+  const pX=boxX+boxW-pW-18, pY=boxY+boxH-pH-18;
+  page.drawRectangle({ x:pX-3, y:pY-3, width:pW+6, height:pH+6,
+    borderColor:gold, borderWidth:1.5, color:rgb(1,1,1,0) });
+  if (student.photo_url) {
+    try {
+      const buf = await fetchBuf(student.photo_url);
+      const img = await embedImg(doc, buf);
+      if (img) page.drawImage(img, { x:pX, y:pY, width:pW, height:pH });
+    } catch {}
+  }
+
+  // ── "This Certificate is Proudly Presented To" ──────────
+  const presY = boxY + boxH - 35;
+  const presT = 'This Certificate Is Proudly Presented To';
+  let presSz=11; while(I.widthOfTextAtSize(presT,presSz)>boxW-pW-50&&presSz>8) presSz--;
+  page.drawText(presT, { x:boxX+20, y:presY, size:presSz, font:I, color:ltGold });
+
+  // ── Student name (large, gold) ────────────────────────────
+  const nm = `${student.first_name} ${student.last_name}`;
+  let nSz=30; while(BI.widthOfTextAtSize(nm,nSz)>boxW-pW-50&&nSz>14) nSz--;
+  page.drawText(nm, { x:boxX+20, y:presY-nSz-10, size:nSz, font:BI, color:gold });
+  page.drawLine({ start:{x:boxX+20,y:presY-nSz-14}, end:{x:boxX+boxW-pW-30,y:presY-nSz-14},
+    thickness:0.8, color:rgb(0.6,0.5,0.2) });
+
+  // ── Body text ─────────────────────────────────────────────
+  const l1 = fillVars(settings.cert_line1||'Has completed in {class} at',vars)+' '+(settings.school_name||'');
+  const l2 = fillVars(settings.cert_line2||'in Academic year of {year}',vars);
+  const purp = fillVars(settings.cert_purpose||'This certificate is given for whichever purpose it may serve',vars);
+  const done = fillVars(settings.cert_done_text||'Done at {city} on {date}',vars);
+  const textMaxW = boxW - 40;
+  let ty = presY - nSz - 32;
+  const allText = wrap(l1+' '+l2+'. '+purp, I, 11, textMaxW);
+  allText.forEach((ln,i) => {
+    const lw = I.widthOfTextAtSize(ln,11);
+    page.drawText(ln, { x:boxX+20, y:ty-i*15, size:11, font:I, color:ltGold });
+  });
+  ty = ty - allText.length*15 - 10;
+  page.drawText(done, { x:boxX+20, y:ty, size:10.5, font:BI, color:gold });
+
+  // ── Dual signature lines ──────────────────────────────────
+  const sigY = boxY + 50;
+  const sigName = settings.signatory_name||'Head Teacher';
+
+  // Left signature
+  page.drawLine({ start:{x:boxX+20,y:sigY+12}, end:{x:boxX+150,y:sigY+12}, thickness:0.8, color:gold });
+  if (settings.signature_url) {
+    try {
+      const buf = await fetchBuf(settings.signature_url);
+      const img = await embedImg(doc, buf);
+      if (img) page.drawImage(img, { x:boxX+20, y:sigY+14, width:120, height:28, opacity:0.85 });
+    } catch {}
+  }
+  const sW = I.widthOfTextAtSize(sigName, 10);
+  page.drawText(sigName, { x:boxX+20, y:sigY-2, size:10, font:I, color:ltGold });
+
+  // Right signature
+  page.drawLine({ start:{x:boxX+boxW-155,y:sigY+12}, end:{x:boxX+boxW-25,y:sigY+12}, thickness:0.8, color:gold });
+  const dirName = (settings.school_name||'Director').substring(0,16);
+  page.drawText(dirName, { x:boxX+boxW-155, y:sigY-2, size:10, font:I, color:ltGold });
+
+  // ── GOLD MEDAL (bottom center) ────────────────────────────
+  const mx=W/2, my=115;
+  // Serrated outer ring
+  for (let a=0; a<360; a+=15) {
+    const rad=Math.PI*a/180, r=38;
+    page.drawCircle({ x:mx+Math.cos(rad)*r, y:my+Math.sin(rad)*r, size:5, color:gold });
+  }
+  // Medal circles
+  page.drawCircle({ x:mx, y:my, size:36, color:gold });
+  page.drawCircle({ x:mx, y:my, size:30, color:rgb(0.72,0.52,0.04) });
+  page.drawCircle({ x:mx, y:my, size:24, color:rgb(0.85,0.65,0.06) });
+  // Stars in medal
+  ['★','★','★'].forEach((s,i) => {
+    page.drawText(s, { x:mx-22+i*14, y:my-5, size:10, font:B, color:navy });
+  });
+}
+
 // ── Main dispatcher ───────────────────────────────────────────
 async function generateCertificatePDF(student, template, settings, designKey='classic') {
   const doc = await PDFDocument.create();
-  const W=841.89, H=595.28;
-  const page = doc.addPage([W,H]);
+  // Design 8 is PORTRAIT (595×842), all others are LANDSCAPE (842×595)
+  const isPortrait = (designKey==='8'||designKey==='navy_gold');
+  const W = isPortrait ? 595.28 : 841.89;
+  const H = isPortrait ? 841.89 : 595.28;
+  const page = doc.addPage([W, H]);
   const fonts = {
     B:  await doc.embedFont(StandardFonts.HelveticaBold),
     R:  await doc.embedFont(StandardFonts.Helvetica),
     BI: await doc.embedFont(StandardFonts.HelveticaBoldOblique),
     I:  await doc.embedFont(StandardFonts.HelveticaOblique),
   };
-  const map = { 1:design1, 2:design2, classic:design1,
-    3:design3, sapphire:design3,
-    4:design4, burgundy:design4,
-    5:design5, midnight:design5,
-    royal:design2, emerald:design2 };
+  const map = {
+    '1':design1, classic:design1, presidential:design1,
+    '2':design2, emerald:design2,
+    '3':design3, sapphire:design3,
+    '4':design4, burgundy:design4,
+    '5':design5, midnight:design5,
+    '6':design6, geometric:design6,
+    '7':design7, blue_stripe:design7,
+    '8':design8, navy_gold:design8,
+    royal:design2,
+  };
   const fn = map[designKey] || design1;
   await fn(doc, page, student, template, settings, W, H, fonts);
   return await doc.save();
