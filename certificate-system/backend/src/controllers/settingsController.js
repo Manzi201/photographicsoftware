@@ -1,9 +1,13 @@
 const { supabase } = require('../supabase');
 
-async function uploadAsset(file, path) {
-  await supabase.storage.from('assets')
-    .upload(path, file.data, { contentType: file.mimetype, upsert: true });
-  const { data } = supabase.storage.from('assets').getPublicUrl(path);
+// ── Upload asset to Supabase (handles image + PDF) ────────────
+async function uploadAsset(file, name) {
+  // For PDF files, store as-is and flag as pdf type
+  const { error } = await supabase.storage
+    .from('assets')
+    .upload(name, file.data, { contentType: file.mimetype, upsert: true });
+  if (error) throw error;
+  const { data } = supabase.storage.from('assets').getPublicUrl(name);
   return data.publicUrl;
 }
 
@@ -42,6 +46,14 @@ exports.updateSettings = async (req, res) => {
     if (files.background) {
       update.background_url = await uploadAsset(files.background, `${sid}/background.jpg`);
       update.bg_preset = 'custom';
+    }
+    if (files.cert_template) {
+      // Accept PNG, JPG, or PDF — store with appropriate extension
+      const isImg = files.cert_template.mimetype.startsWith('image/');
+      const ext = isImg ? 'png' : 'pdf';
+      update.cert_template_url = await uploadAsset(files.cert_template, `${sid}/cert_template.${ext}`);
+      // Store file type so certificate generator knows how to handle it
+      update.cert_template_mode = req.body.cert_template_mode || 'landscape';
     }
     if (bg_preset === 'none') update.background_url = null;
 

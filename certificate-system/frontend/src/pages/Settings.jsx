@@ -283,43 +283,108 @@ export default function Settings() {
         </Section>
 
         {/* ── Publisher Template ───────────────────── */}
-        <Section title="📄 Publisher Certificate Template" icon={ImageIcon}>
+        <Section title="📄 Certificate Template (Publisher / PDF)" icon={ImageIcon}>
           <div className="space-y-4">
             {/* Info box */}
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-              <p className="font-semibold text-amber-900 text-sm mb-2">How to use your Publisher template:</p>
-              <ol className="text-xs text-amber-800 space-y-1 list-decimal list-inside">
-                <li>Design your certificate in <strong>Microsoft Publisher</strong></li>
-                <li>Leave space for: <strong>student photo</strong> (top-right), <strong>student name</strong> (center), <strong>date</strong></li>
-                <li><strong>Export/Save as PNG or JPG</strong> (File → Save As → PNG)</li>
-                <li>Upload that image here</li>
-                <li>The system will automatically place the photo, name, and date on top</li>
-              </ol>
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+              <p className="font-semibold text-blue-900 text-sm mb-2">Uko wishyiraho template yawe:</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+                {/* Option 1 */}
+                <div className="bg-white rounded-xl p-3 border border-blue-100">
+                  <p className="font-bold text-blue-800 text-xs mb-1.5">📄 Ukoresheje Publisher:</p>
+                  <ol className="text-xs text-blue-700 space-y-1 list-decimal list-inside">
+                    <li>Kora certificate kuri Publisher</li>
+                    <li>File → <strong>Export → PDF</strong></li>
+                    <li>Upload PDF hano</li>
+                  </ol>
+                </div>
+                {/* Option 2 */}
+                <div className="bg-white rounded-xl p-3 border border-green-100">
+                  <p className="font-bold text-green-800 text-xs mb-1.5">🖼️ Ukoresheje PNG/JPG:</p>
+                  <ol className="text-xs text-green-700 space-y-1 list-decimal list-inside">
+                    <li>Kora certificate kuri Publisher/Canva</li>
+                    <li>File → <strong>Save as PNG</strong> (300 DPI)</li>
+                    <li>Upload PNG hano</li>
+                  </ol>
+                </div>
+              </div>
+              <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-2.5">
+                <p className="text-xs text-amber-800 font-medium">
+                  ⚠️ Shyira ubwatsi muri template yawe aho:</p>
+                <p className="text-xs text-amber-700 mt-0.5">
+                  • <strong>Top-right:</strong> aho ifoto izajya (nk: 4cm × 5cm)<br/>
+                  • <strong>Center:</strong> aho izina ry'umunyeshuri rizajya<br/>
+                  • <strong>Bottom-left:</strong> aho signature izajya
+                </p>
+              </div>
             </div>
 
-            {/* Upload field */}
-            <ImageField
-              label="Certificate Template (PNG/JPG export from Publisher)"
-              hint="Export your Publisher design as PNG then upload here"
-              preview={previews.cert_template}
-              onChange={(e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-                setFiles(f => ({ ...f, cert_template: file }));
-                setPreviews(p => ({ ...p, cert_template: URL.createObjectURL(file) }));
-              }}
-            />
+            {/* Upload field — accepts PNG, JPG, PDF */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Upload Template (PNG, JPG, or PDF)
+              </label>
+              <div className="flex items-center gap-4">
+                <div
+                  onClick={() => document.getElementById('template-upload').click()}
+                  className="w-48 h-32 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center overflow-hidden cursor-pointer hover:border-blue-400 transition-colors">
+                  {previews.cert_template
+                    ? <img src={previews.cert_template} alt="Template" className="w-full h-full object-contain p-1" />
+                    : <>
+                        <ImageIcon className="w-8 h-8 text-gray-300 mb-1" />
+                        <span className="text-xs text-gray-400 text-center px-2">PNG · JPG · PDF</span>
+                      </>}
+                </div>
+                <input
+                  id="template-upload"
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg,application/pdf,.pub"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    setFiles(f => ({ ...f, cert_template: file }));
+                    // Preview: show image preview or PDF icon
+                    if (file.type.startsWith('image/')) {
+                      setPreviews(p => ({ ...p, cert_template: URL.createObjectURL(file) }));
+                    } else {
+                      setPreviews(p => ({ ...p, cert_template: '/pdf-icon.png' }));
+                    }
+                  }}
+                />
+                <div>
+                  <button type="button"
+                    onClick={() => document.getElementById('template-upload').click()}
+                    className="btn-secondary text-sm py-1.5">
+                    <Upload className="w-3 h-3" /> {previews.cert_template ? 'Change' : 'Upload'}
+                  </button>
+                  <p className="text-xs text-gray-400 mt-1">Max 10MB · PNG/JPG/PDF</p>
+                  {previews.cert_template && (
+                    <button type="button"
+                      onClick={() => {
+                        setPreviews(p => ({ ...p, cert_template: null }));
+                        setFiles(f => ({ ...f, cert_template: null }));
+                      }}
+                      className="text-xs text-red-500 hover:text-red-700 mt-1 block">
+                      ✕ Remove template
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
 
-            {/* Orientation */}
+            {/* Orientation selector */}
             {previews.cert_template && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Template Orientation</label>
                 <div className="flex gap-3">
-                  {[['landscape','Landscape (A4 Wide)'],['portrait','Portrait (A4 Tall)']].map(([v,l])=>(
+                  {[['landscape','📄 Landscape (A4 Wide)'],['portrait','📋 Portrait (A4 Tall)']].map(([v,l]) => (
                     <button key={v} type="button"
                       onClick={() => setForm(f => ({ ...f, cert_template_mode: v }))}
                       className={`px-4 py-2 rounded-xl text-sm font-semibold border transition-all
-                        ${form.cert_template_mode===v ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'}`}>
+                        ${form.cert_template_mode===v
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'}`}>
                       {l}
                     </button>
                   ))}
@@ -327,30 +392,18 @@ export default function Settings() {
               </div>
             )}
 
-            {/* Remove template */}
-            {previews.cert_template && (
-              <button type="button"
-                onClick={() => {
-                  setPreviews(p => ({ ...p, cert_template: null }));
-                  setFiles(f => ({ ...f, cert_template: null }));
-                }}
-                className="text-sm text-red-500 hover:text-red-700 font-medium flex items-center gap-1">
-                ✕ Remove template (use built-in designs instead)
-              </button>
-            )}
-
-            {/* Status indicator */}
+            {/* Status */}
             {previews.cert_template ? (
               <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl p-3">
                 <CheckCircle className="w-5 h-5 text-green-600 shrink-0" />
-                <p className="text-sm text-green-800 font-medium">
-                  Custom template is active — all certificates will use this design
+                <p className="text-sm text-green-800 font-semibold">
+                  Custom template active — certificates will use your design
                 </p>
               </div>
             ) : (
-              <div className="flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-xl p-3">
-                <Info className="w-4 h-4 text-blue-600 shrink-0" />
-                <p className="text-xs text-blue-700">
+              <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl p-3">
+                <Info className="w-4 h-4 text-gray-400 shrink-0" />
+                <p className="text-xs text-gray-500">
                   No template uploaded — built-in designs (A/B/C/D) will be used
                 </p>
               </div>

@@ -510,17 +510,34 @@ async function generateFromTemplate(doc, page, student, template, settings, W, H
   const white = rgb(1, 1, 1);
   const navy  = rgb(0.04, 0.10, 0.30);
 
-  // 1. Draw Publisher template as FULL background (100% size)
-  try {
-    const buf = await fetchBuf(settings.cert_template_url);
-    const img = await embedImg(doc, buf);
-    if (img) {
-      page.drawImage(img, { x: 0, y: 0, width: W, height: H });
+  // 1. Draw template as FULL page background — supports PNG/JPG and PDF
+  const templateUrl = settings.cert_template_url || '';
+  const isPdfTpl = templateUrl.toLowerCase().includes('.pdf');
+
+  if (isPdfTpl) {
+    try {
+      const buf = await fetchBuf(templateUrl);
+      // Embed first page of PDF template as background
+      const embeds = await doc.embedPdf(buf, [0]);
+      const tplPage = embeds[0];
+      page.drawPage(tplPage, { x:0, y:0, width:W, height:H });
+    } catch (e) {
+      console.error('PDF template error:', e.message);
+      page.drawRectangle({ x:0, y:0, width:W, height:H, color:rgb(0.97,0.97,0.97) });
+      ctrW(page, 'PDF template could not be rendered', H/2, 13, F.bold, rgb(0.7,0,0), W);
     }
-  } catch (e) {
-    // If template fails to load, show error message in PDF
-    page.drawRectangle({ x:0, y:0, width:W, height:H, color:rgb(0.95,0.95,0.95) });
-    ctrW(page, 'Template image could not be loaded', H/2, 14, F.bold, rgb(0.8,0,0), W);
+  } else {
+    // PNG / JPG image template
+    try {
+      const buf = await fetchBuf(templateUrl);
+      const img = await embedImg(doc, buf);
+      if (img) {
+        page.drawImage(img, { x:0, y:0, width:W, height:H });
+      }
+    } catch (e) {
+      page.drawRectangle({ x:0, y:0, width:W, height:H, color:rgb(0.95,0.95,0.95) });
+      ctrW(page, 'Template image could not be loaded', H/2, 14, F.bold, rgb(0.8,0,0), W);
+    }
   }
 
   // 2. Detect portrait vs landscape from page dimensions
