@@ -63,9 +63,10 @@ function ImageField({ label, hint, preview, onChange, accept = 'image/*', square
 export default function Settings() {
   const { school, refreshSchool } = useAuth();
   const [form, setForm] = useState({ school_name: '', signatory_name: '', active_year: '', city: '',
-    cert_line1: '', cert_line2: '', cert_purpose: '', cert_done_text: '' });
-  const [files, setFiles]     = useState({ logo: null, stamp: null, signature: null, background: null });
-  const [previews, setPreviews] = useState({ logo: null, stamp: null, signature: null, background: null });
+    cert_line1: '', cert_line2: '', cert_purpose: '', cert_done_text: '',
+    cert_template_mode: 'landscape' });
+  const [files, setFiles] = useState({ logo: null, stamp: null, signature: null, background: null, cert_template: null });
+  const [previews, setPreviews] = useState({ logo: null, stamp: null, signature: null, background: null, cert_template: null });
   const [bgPreset, setBgPreset] = useState('none');
   const [loading, setLoading]  = useState(false);
   const [saved, setSaved]      = useState(false);
@@ -74,20 +75,22 @@ export default function Settings() {
   useEffect(() => {
     if (school) {
       setForm({
-        school_name:    school.school_name    || '',
-        signatory_name: school.signatory_name || '',
-        active_year:    school.active_year    || String(new Date().getFullYear()),
-        city:           school.city           || 'Kigali',
-        cert_line1:     school.cert_line1     || 'Has completed in {class} at',
-        cert_line2:     school.cert_line2     || 'in Academic year of {year}',
-        cert_purpose:   school.cert_purpose   || 'This certificate is given for whichever purpose it may serve',
-        cert_done_text: school.cert_done_text || 'Done at {city} on {date}',
+        school_name:         school.school_name    || '',
+        signatory_name:      school.signatory_name || '',
+        active_year:         school.active_year    || String(new Date().getFullYear()),
+        city:                school.city           || 'Kigali',
+        cert_line1:          school.cert_line1     || 'Has completed in {class} at',
+        cert_line2:          school.cert_line2     || 'in Academic year of {year}',
+        cert_purpose:        school.cert_purpose   || 'This certificate is given for whichever purpose it may serve',
+        cert_done_text:      school.cert_done_text || 'Done at {city} on {date}',
+        cert_template_mode:  school.cert_template_mode || 'landscape',
       });
       setPreviews({
-        logo:       school.logo_url       || null,
-        stamp:      school.stamp_url      || null,
-        signature:  school.signature_url  || null,
-        background: school.background_url || null,
+        logo:           school.logo_url          || null,
+        stamp:          school.stamp_url         || null,
+        signature:      school.signature_url     || null,
+        background:     school.background_url    || null,
+        cert_template:  school.cert_template_url || null,
       });
       setBgPreset(school.bg_preset || 'none');
     }
@@ -141,40 +144,29 @@ export default function Settings() {
     setLoading(true);
     try {
       const update = {
-        school_name:    form.school_name.trim(),
-        signatory_name: form.signatory_name.trim() || 'Head Teacher',
-        active_year:    form.active_year || String(new Date().getFullYear()),
-        city:           form.city?.trim() || 'Kigali',
-        cert_line1:     form.cert_line1?.trim()     || 'Has completed in {class} at',
-        cert_line2:     form.cert_line2?.trim()     || 'in Academic year of {year}',
-        cert_purpose:   form.cert_purpose?.trim()   || 'This certificate is given for whichever purpose it may serve',
-        cert_done_text: form.cert_done_text?.trim() || 'Done at {city} on {date}',
-        bg_preset:      bgPreset,
-        // Start with existing URLs so we don't lose them if no new file uploaded
-        logo_url:       previews.logo       || null,
-        stamp_url:      previews.stamp      || null,
-        signature_url:  previews.signature  || null,
-        background_url: previews.background || null,
+        school_name:         form.school_name.trim(),
+        signatory_name:      form.signatory_name.trim() || 'Head Teacher',
+        active_year:         form.active_year || String(new Date().getFullYear()),
+        city:                form.city?.trim() || 'Kigali',
+        cert_line1:          form.cert_line1?.trim()     || 'Has completed in {class} at',
+        cert_line2:          form.cert_line2?.trim()     || 'in Academic year of {year}',
+        cert_purpose:        form.cert_purpose?.trim()   || 'This certificate is given for whichever purpose it may serve',
+        cert_done_text:      form.cert_done_text?.trim() || 'Done at {city} on {date}',
+        cert_template_mode:  form.cert_template_mode || 'landscape',
+        bg_preset:           bgPreset,
+        logo_url:            previews.logo          || null,
+        stamp_url:           previews.stamp         || null,
+        signature_url:       previews.signature     || null,
+        background_url:      previews.background    || null,
+        cert_template_url:   previews.cert_template || null,
       };
 
       // Upload each changed file
-      if (files.logo) {
-        setUploading('Uploading logo...');
-        update.logo_url = await uploadAsset(files.logo, 'logo.png');
-      }
-      if (files.stamp) {
-        setUploading('Uploading stamp...');
-        update.stamp_url = await uploadAsset(files.stamp, 'stamp.png');
-      }
-      if (files.signature) {
-        setUploading('Uploading signature...');
-        update.signature_url = await uploadAsset(files.signature, 'signature.png');
-      }
-      if (files.background) {
-        setUploading('Uploading background...');
-        update.background_url = await uploadAsset(files.background, 'background.jpg');
-        update.bg_preset = 'custom';
-      }
+      if (files.logo)       { setUploading('Uploading logo...');       update.logo_url       = await uploadAsset(files.logo,       'logo.png'); }
+      if (files.stamp)      { setUploading('Uploading stamp...');      update.stamp_url      = await uploadAsset(files.stamp,      'stamp.png'); }
+      if (files.signature)  { setUploading('Uploading signature...');  update.signature_url  = await uploadAsset(files.signature,  'signature.png'); }
+      if (files.background) { setUploading('Uploading background...'); update.background_url = await uploadAsset(files.background, 'background.jpg'); update.bg_preset = 'custom'; }
+      if (files.cert_template) { setUploading('Uploading certificate template...'); update.cert_template_url = await uploadAsset(files.cert_template, 'cert_template.png'); }
       if (bgPreset === 'none') update.background_url = null;
 
       setUploading('Saving settings...');
@@ -287,6 +279,82 @@ export default function Settings() {
               preview={previews.stamp}
               onChange={handleFile('stamp')}
             />
+          </div>
+        </Section>
+
+        {/* ── Publisher Template ───────────────────── */}
+        <Section title="📄 Publisher Certificate Template" icon={ImageIcon}>
+          <div className="space-y-4">
+            {/* Info box */}
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+              <p className="font-semibold text-amber-900 text-sm mb-2">How to use your Publisher template:</p>
+              <ol className="text-xs text-amber-800 space-y-1 list-decimal list-inside">
+                <li>Design your certificate in <strong>Microsoft Publisher</strong></li>
+                <li>Leave space for: <strong>student photo</strong> (top-right), <strong>student name</strong> (center), <strong>date</strong></li>
+                <li><strong>Export/Save as PNG or JPG</strong> (File → Save As → PNG)</li>
+                <li>Upload that image here</li>
+                <li>The system will automatically place the photo, name, and date on top</li>
+              </ol>
+            </div>
+
+            {/* Upload field */}
+            <ImageField
+              label="Certificate Template (PNG/JPG export from Publisher)"
+              hint="Export your Publisher design as PNG then upload here"
+              preview={previews.cert_template}
+              onChange={(e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                setFiles(f => ({ ...f, cert_template: file }));
+                setPreviews(p => ({ ...p, cert_template: URL.createObjectURL(file) }));
+              }}
+            />
+
+            {/* Orientation */}
+            {previews.cert_template && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Template Orientation</label>
+                <div className="flex gap-3">
+                  {[['landscape','Landscape (A4 Wide)'],['portrait','Portrait (A4 Tall)']].map(([v,l])=>(
+                    <button key={v} type="button"
+                      onClick={() => setForm(f => ({ ...f, cert_template_mode: v }))}
+                      className={`px-4 py-2 rounded-xl text-sm font-semibold border transition-all
+                        ${form.cert_template_mode===v ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'}`}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Remove template */}
+            {previews.cert_template && (
+              <button type="button"
+                onClick={() => {
+                  setPreviews(p => ({ ...p, cert_template: null }));
+                  setFiles(f => ({ ...f, cert_template: null }));
+                }}
+                className="text-sm text-red-500 hover:text-red-700 font-medium flex items-center gap-1">
+                ✕ Remove template (use built-in designs instead)
+              </button>
+            )}
+
+            {/* Status indicator */}
+            {previews.cert_template ? (
+              <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl p-3">
+                <CheckCircle className="w-5 h-5 text-green-600 shrink-0" />
+                <p className="text-sm text-green-800 font-medium">
+                  Custom template is active — all certificates will use this design
+                </p>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-xl p-3">
+                <Info className="w-4 h-4 text-blue-600 shrink-0" />
+                <p className="text-xs text-blue-700">
+                  No template uploaded — built-in designs (A/B/C/D) will be used
+                </p>
+              </div>
+            )}
           </div>
         </Section>
 

@@ -499,24 +499,121 @@ async function designD(doc, page, student, template, settings, W, H, F) {
 }
 
 // ════════════════════════════════════════════════════════════════
-// DISPATCHER + CONTROLLERS
+// TEMPLATE OVERLAY MODE
+// Uses user's uploaded Publisher template as full background image
+// Then overlays: student photo, name, photo number, date
 // ════════════════════════════════════════════════════════════════
+async function generateFromTemplate(doc, page, student, template, settings, W, H, F) {
+  const vars = buildVars(student, template, settings);
+  const gold  = rgb(0.85, 0.65, 0.05);
+  const black = rgb(0.06, 0.06, 0.06);
+  const white = rgb(1, 1, 1);
+  const navy  = rgb(0.04, 0.10, 0.30);
+
+  // 1. Draw Publisher template as FULL background (100% size)
+  try {
+    const buf = await fetchBuf(settings.cert_template_url);
+    const img = await embedImg(doc, buf);
+    if (img) {
+      page.drawImage(img, { x: 0, y: 0, width: W, height: H });
+    }
+  } catch (e) {
+    // If template fails to load, show error message in PDF
+    page.drawRectangle({ x:0, y:0, width:W, height:H, color:rgb(0.95,0.95,0.95) });
+    ctrW(page, 'Template image could not be loaded', H/2, 14, F.bold, rgb(0.8,0,0), W);
+  }
+
+  // 2. Detect portrait vs landscape from page dimensions
+  const isP = H > W;
+
+  // 3. Student photo — place top-right (user can adjust via template design)
+  const pW = isP ? 120 : 140, pH = isP ? 155 : 180;
+  const pX = W - pW - (isP ? 30 : 32);
+  const pY = H - pH - (isP ? 30 : 28);
+
+  // White frame behind photo
+  page.drawRectangle({ x:pX-4, y:pY-4, width:pW+8, height:pH+8, color:white });
+  page.drawRectangle({ x:pX-4, y:pY-4, width:pW+8, height:pH+8,
+    borderColor:rgb(0.7,0.7,0.7), borderWidth:1, color:rgb(1,1,1,0) });
+  await tryPhoto(doc, page, student, pX, pY, pW, pH);
+
+  // Photo number label
+  const pnTxt = student.photo_number || '';
+  if (pnTxt) {
+    const pnSz = 8, pnW = F.bold.widthOfTextAtSize(pnTxt, pnSz);
+    page.drawRectangle({ x:pX, y:pY-18, width:pW, height:18, color:rgb(0.04,0.10,0.30) });
+    page.drawText(pnTxt, { x:pX+(pW-pnW)/2, y:pY-13, size:pnSz, font:F.bold, color:white });
+  }
+
+  // 4. Student name — placed in center of certificate
+  const nm = `${student.first_name} ${student.last_name}`;
+  const nameY = isP ? H*0.42 : H*0.40;
+  let nSz = isP ? 44 : 40;
+  while (F.script.widthOfTextAtSize(nm, nSz) > W - (isP ? 80 : 180) && nSz > 18) nSz--;
+  const nW = F.script.widthOfTextAtSize(nm, nSz);
+
+  // Semi-transparent white strip behind name for readability
+  page.drawRectangle({
+    x: (W - nW) / 2 - 15, y: nameY - 8,
+    width: nW + 30, height: nSz + 14,
+    color: rgb(1, 1, 1, 0.0), // transparent — name sits on template
+  });
+
+  ctrW(page, nm, nameY, nSz, F.script, black, W);
+
+  // 5. Body lines (completion text) — below name
+  const l1 = fillVars(settings.cert_line1 || 'Has completed in {class} at', vars) + ' ' + (settings.school_name || '');
+  const l2 = fillVars(settings.cert_line2 || 'in Academic year of {year}', vars);
+  const l1L = wrap(l1, F.regular, 12, W - (isP ? 80 : 200));
+  const l2L = wrap(l2, F.regular, 12, W - (isP ? 80 : 200));
+  let ty = nameY - nSz - 16;
+  l1L.forEach((ln,i) => ctrW(page, ln, ty-i*16, 12, F.regular, black, W));
+  ty -= l1L.length * 16 + 4;
+  l2L.forEach((ln,i) => ctrW(page, ln, ty-i*16, 12, F.regular, black, W));
+
+  // 6. Purpose + done text
+  const purp = fillVars(settings.cert_purpose || 'This certificate is given for whichever purpose it may serve', vars);
+  ty -= l2L.length * 16 + 14;
+  wrap(purp, F.boldItalic, 10.5, W - (isP ? 80 : 200)).forEach((ln,i) =>
+    ctrW(page, ln, ty-i*14, 10.5, F.boldItalic, black, W));
+  ty -= wrap(purp, F.boldItalic, 10.5, W-(isP?80:200)).length * 14 + 8;
+  const done = fillVars(settings.cert_done_text || 'Done at {city} on {date}', vars);
+  ctrW(page, done, ty, 10.5, F.boldItalic, black, W);
+
+  // 7. Signature image (if uploaded) — bottom left area
+  if (settings.signature_url) {
+    const sY = isP ? 140 : 60;
+    const sX = isP ? W/2 - 75 : 80;
+    await trySig(doc, page, settings, sX, sY, 140, 35);
+  }
+}
+
 async function generateCertificatePDF(student, template, settings, designKey) {
   const doc = await PDFDocument.create();
-  const isPortrait = (designKey === 'A' || designKey === 'a' || designKey === '1');
+
+  // If school has uploaded a custom Publisher template → use it
+  const useCustom = !!settings.cert_template_url;
+  const isPortrait = useCustom
+    ? (settings.cert_template_mode === 'portrait')
+    : (designKey === 'A' || designKey === 'a' || designKey === '1');
+
   const W = isPortrait ? 595.28 : 841.89;
   const H = isPortrait ? 841.89 : 595.28;
   const page = doc.addPage([W, H]);
   const F = await loadFonts(doc);
 
-  const map = {
-    'A': designA, 'a': designA, '1': designA,
-    'B': designB, 'b': designB, '2': designB,
-    'C': designC, 'c': designC, '3': designC,
-    'D': designD, 'd': designD, '4': designD,
-  };
-  const fn = map[designKey] || designA;
-  await fn(doc, page, student, template, settings, W, H, F);
+  if (useCustom) {
+    await generateFromTemplate(doc, page, student, template, settings, W, H, F);
+  } else {
+    const map = {
+      'A': designA, 'a': designA, '1': designA,
+      'B': designB, 'b': designB, '2': designB,
+      'C': designC, 'c': designC, '3': designC,
+      'D': designD, 'd': designD, '4': designD,
+    };
+    const fn = map[designKey] || designA;
+    await fn(doc, page, student, template, settings, W, H, F);
+  }
   return await doc.save();
 }
 
