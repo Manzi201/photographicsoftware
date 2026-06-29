@@ -230,7 +230,7 @@ CREATE POLICY "certs_delete" ON certificates FOR DELETE USING (true);
 
 CREATE INDEX IF NOT EXISTS idx_schools_user_id         ON schools(user_id);
 
--- Add city column to existing databases if missing
+-- Add missing columns to existing databases (safe migration)
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='schools' AND column_name='city') THEN
@@ -238,8 +238,9 @@ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='schools' AND column_name='cert_template_url') THEN
     ALTER TABLE schools ADD COLUMN cert_template_url TEXT;
-    ALTER TABLE schools ADD COLUMN cert_template_mode VARCHAR(20) DEFAULT 'overlay';
+    ALTER TABLE schools ADD COLUMN cert_template_mode VARCHAR(20) DEFAULT 'landscape';
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='schools' AND column_name='cert_line1') THEN
     ALTER TABLE schools ADD COLUMN cert_line1 TEXT DEFAULT 'Has completed in {class} at';
     ALTER TABLE schools ADD COLUMN cert_line2 TEXT DEFAULT 'in Academic year of {year}';
     ALTER TABLE schools ADD COLUMN cert_purpose TEXT DEFAULT 'This certificate is given for whichever purpose it may serve';
