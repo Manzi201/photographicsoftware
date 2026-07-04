@@ -56,7 +56,7 @@ export default function Login() {
           <div className="w-10 h-10 bg-yellow-400 rounded-xl flex items-center justify-center shadow-lg">
             <Award className="w-6 h-6 text-blue-900" />
           </div>
-          <span className="text-white font-bold text-lg tracking-tight">CertSystem</span>
+          <span className="text-white font-bold text-lg tracking-tight">SchoolMS</span>
         </div>
 
         {/* Center content */}
@@ -65,10 +65,10 @@ export default function Login() {
             <GraduationCap className="w-9 h-9 text-blue-900" />
           </div>
           <h1 className="text-4xl font-extrabold text-white leading-tight mb-4">
-            School Certificate<br />Management System
+            School Management<br />System
           </h1>
           <p className="text-blue-200 text-lg mb-10 leading-relaxed">
-            Create, manage and print professional certificates for your students — all in one place.
+            Manage students, grades, bulletins, fees, certificates and more — all in one place.
           </p>
 
           {/* Feature list */}
@@ -98,7 +98,7 @@ export default function Login() {
           <div className="w-9 h-9 bg-blue-700 rounded-xl flex items-center justify-center">
             <Award className="w-5 h-5 text-yellow-400" />
           </div>
-          <span className="text-gray-900 font-bold text-lg">CertSystem</span>
+          <span className="text-gray-900 font-bold text-lg">SchoolMS</span>
         </div>
 
         <div className="w-full max-w-sm">
@@ -174,7 +174,7 @@ export default function Login() {
 
         {/* Footer */}
         <p className="mt-12 text-xs text-gray-400 text-center">
-          © {new Date().getFullYear()} CertSystem · All data is private per school
+          © {new Date().getFullYear()} SchoolMS · All data is private per school
         </p>
       </div>
     </div>

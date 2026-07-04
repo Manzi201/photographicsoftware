@@ -20,6 +20,9 @@ import SmsMarks         from './pages/sms/Marks';
 import SmsBulletins     from './pages/sms/Bulletins';
 import SmsFinance       from './pages/sms/Finance';
 import SmsNotifications from './pages/sms/Notifications';
+import AdminStaff       from './pages/sms/AdminStaff';
+import Promotion        from './pages/sms/Promotion';
+import StaffLogin       from './pages/StaffLogin';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -50,8 +53,9 @@ function AppRoutes() {
         style: { borderRadius: '12px', fontSize: '14px' },
       }} />
       <Routes>
-        <Route path="/login"    element={<PublicRoute><Login /></PublicRoute>} />
-        <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
+        <Route path="/login"       element={<PublicRoute><Login /></PublicRoute>} />
+        <Route path="/register"    element={<PublicRoute><Register /></PublicRoute>} />
+        <Route path="/staff-login" element={<StaffLogin />} />
 
         <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route index                         element={<Dashboard />} />
@@ -64,11 +68,13 @@ function AppRoutes() {
           <Route path="settings"               element={<Settings />} />
           <Route path="profile"                element={<Profile />} />
           {/* School Management System */}
-          <Route path="sms/students"           element={<SmsStudents />} />
-          <Route path="sms/marks"              element={<SmsMarks />} />
-          <Route path="sms/bulletins"          element={<SmsBulletins />} />
-          <Route path="sms/finance"            element={<SmsFinance />} />
-          <Route path="sms/notifications"      element={<SmsNotifications />} />
+          <Route path="sms/admin"         element={<AdminStaff />} />
+          <Route path="sms/students"      element={<SmsStudents />} />
+          <Route path="sms/marks"         element={<SmsMarks />} />
+          <Route path="sms/bulletins"     element={<SmsBulletins />} />
+          <Route path="sms/finance"       element={<SmsFinance />} />
+          <Route path="sms/notifications" element={<SmsNotifications />} />
+          <Route path="sms/promotion"     element={<Promotion />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

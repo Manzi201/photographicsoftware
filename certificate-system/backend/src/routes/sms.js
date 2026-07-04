@@ -1,16 +1,20 @@
 const express = require('express');
 const router  = express.Router();
-const requireAuth = require('../middleware/auth');
+const requireStaffAuth = require('../middleware/staffAuth');
+const { requireRole } = require('../middleware/staffAuth');
 
-const students  = require('../controllers/studentProfilesController');
-const academic  = require('../controllers/academicController');
-const marks     = require('../controllers/marksController');
-const bulletins = require('../controllers/bulletinsController');
-const finance   = require('../controllers/financeController');
-const notif     = require('../controllers/notificationsController');
+const students   = require('../controllers/studentProfilesController');
+const academic   = require('../controllers/academicController');
+const marks      = require('../controllers/marksController');
+const bulletins  = require('../controllers/bulletinsController');
+const finance    = require('../controllers/financeController');
+const notif      = require('../controllers/notificationsController');
+const staffMgmt  = require('../controllers/staffMgmtController');
+const promotion  = require('../controllers/promotionController');
+const excel      = require('../controllers/excelController');
 
-// All SMS routes require auth
-router.use(requireAuth);
+// All routes use staff auth (supports both Supabase JWT + staff session token)
+router.use(requireStaffAuth);
 
 // ── Students ──────────────────────────────────────────────────
 router.get   ('/students',        students.getStudents);
@@ -60,5 +64,23 @@ router.get ('/notifications',              notif.getNotifications);
 router.post('/notifications/fee-reminder', notif.sendFeeReminder);
 router.post('/notifications/bulletin',     notif.notifyBulletinReady);
 router.post('/notifications/custom',       notif.sendCustom);
+
+// ── Admin: Staff Management (admin only) ──────────────────────
+router.get   ('/admin/staff',               requireRole('admin'), staffMgmt.getStaff);
+router.get   ('/admin/roles',               staffMgmt.getRoles);
+router.post  ('/admin/staff',               requireRole('admin'), staffMgmt.createStaff);
+router.put   ('/admin/staff/:id',           requireRole('admin'), staffMgmt.updateStaff);
+router.delete('/admin/staff/:id',           requireRole('admin'), staffMgmt.deactivateStaff);
+router.post  ('/admin/staff/:id/reset-password', requireRole('admin'), staffMgmt.resetPassword);
+
+// ── Promotion (DoS + admin) ───────────────────────────────────
+router.get ('/promotion/report',    requireRole('admin','dos'), promotion.getPromotionReport);
+router.post('/promotion/apply',     requireRole('admin','dos'), promotion.applyPromotion);
+router.get ('/promotion/history',   requireRole('admin','dos'), promotion.getHistory);
+
+// ── Excel Export ──────────────────────────────────────────────
+router.get('/excel/students', requireRole('admin','secretary','finance'), excel.exportStudents);
+router.get('/excel/marks',    requireRole('admin','dos','secretary'),     excel.exportMarks);
+router.get('/excel/finance',  requireRole('admin','finance'),             excel.exportFinance);
 
 module.exports = router;

@@ -596,3 +596,84 @@ CREATE INDEX IF NOT EXISTS idx_classes_school  ON classes(school_id);
 CREATE INDEX IF NOT EXISTS idx_terms_year      ON terms(academic_year_id);
 CREATE INDEX IF NOT EXISTS idx_bulletins_stud  ON bulletins(student_id);
 CREATE INDEX IF NOT EXISTS idx_bulletins_term  ON bulletins(term_id);
+
+-- ══════════════════════════════════════════════════════════════
+-- ROLE-BASED ACCESS SYSTEM
+-- Staff login with username/password (managed by school admin)
+-- ══════════════════════════════════════════════════════════════
+
+-- Add login credentials to staff table
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='staff' AND column_name='username') THEN
+    ALTER TABLE staff ADD COLUMN username     VARCHAR(50) UNIQUE;
+    ALTER TABLE staff ADD COLUMN password_hash TEXT;
+    ALTER TABLE staff ADD COLUMN last_login   TIMESTAMP WITH TIME ZONE;
+    ALTER TABLE staff ADD COLUMN permissions  JSONB DEFAULT '{}';
+    -- Permissions example: {"can_edit_marks": true, "can_print_bulletins": true}
+  END IF;
+END $$;
+
+-- Add promotion tracking to students
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='student_profiles' AND column_name='previous_class_id') THEN
+    ALTER TABLE student_profiles ADD COLUMN previous_class_id UUID REFERENCES classes(id);
+    ALTER TABLE student_profiles ADD COLUMN promotion_status  VARCHAR(20) DEFAULT 'active'; -- active|promoted|repeated|graduated
+    ALTER TABLE student_profiles ADD COLUMN previous_marks    JSONB;  -- marks from previous school
+  END IF;
+END $$;
+
+-- Add level column to classes (for promotion logic)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='classes' AND column_name='level_order') THEN
+    ALTER TABLE classes ADD COLUMN level_order INT DEFAULT 1; -- 1=Nursery,2=P1,...,8=P6,9=S1,...
+    ALTER TABLE classes ADD COLUMN capacity    INT DEFAULT 40;
+    ALTER TABLE classes ADD COLUMN section     VARCHAR(5) DEFAULT 'A'; -- A, B, C
+  END IF;
+END $$;
+
+-- Staff login sessions
+CREATE TABLE IF NOT EXISTS staff_sessions (
+  id          UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  staff_id    UUID REFERENCES staff(id) ON DELETE CASCADE,
+  school_id   UUID REFERENCES schools(id) ON DELETE CASCADE,
+  token       TEXT UNIQUE NOT NULL,
+  expires_at  TIMESTAMP WITH TIME ZONE NOT NULL,
+  created_at  TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+DO $$
+BEGIN
+  EXECUTE 'ALTER TABLE staff_sessions ENABLE ROW LEVEL SECURITY';
+  BEGIN
+    EXECUTE 'CREATE POLICY "open_staff_sessions" ON staff_sessions FOR ALL USING (true) WITH CHECK (true)';
+  EXCEPTION WHEN duplicate_object THEN NULL;
+  END;
+END $$;
+CREATE INDEX IF NOT EXISTS idx_sessions_token ON staff_sessions(token);
+CREATE INDEX IF NOT EXISTS idx_sessions_staff ON staff_sessions(staff_id);
+
+-- Student promotion history
+CREATE TABLE IF NOT EXISTS promotion_history (
+  id                UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  school_id         UUID REFERENCES schools(id),
+  student_id        UUID REFERENCES student_profiles(id) ON DELETE CASCADE,
+  from_class_id     UUID REFERENCES classes(id),
+  to_class_id       UUID REFERENCES classes(id),
+  academic_year_id  UUID REFERENCES academic_years(id),
+  action            VARCHAR(20) NOT NULL, -- promoted|repeated|graduated|transferred
+  final_percentage  DECIMAL(5,2),
+  rank_in_class     INT,
+  done_by           UUID REFERENCES staff(id),
+  notes             TEXT,
+  created_at        TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+DO $$
+BEGIN
+  EXECUTE 'ALTER TABLE promotion_history ENABLE ROW LEVEL SECURITY';
+  BEGIN
+    EXECUTE 'CREATE POLICY "open_promo" ON promotion_history FOR ALL USING (true) WITH CHECK (true)';
+  EXCEPTION WHEN duplicate_object THEN NULL;
+  END;
+END $$;

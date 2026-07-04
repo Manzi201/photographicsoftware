@@ -133,7 +133,7 @@ export default function Register() {
           <div className="w-10 h-10 bg-yellow-400 rounded-xl flex items-center justify-center shadow-lg">
             <Award className="w-6 h-6 text-blue-900" />
           </div>
-          <span className="text-white font-bold text-lg tracking-tight">CertSystem</span>
+          <span className="text-white font-bold text-lg tracking-tight">SchoolMS</span>
         </div>
 
         {/* Center */}
@@ -145,7 +145,7 @@ export default function Register() {
             Set up your<br />school in minutes
           </h1>
           <p className="text-blue-200 text-base leading-relaxed mb-10">
-            Join schools already using CertSystem to generate beautiful, professional certificates for every student.
+            Join schools already using SchoolMS to manage students, grades, fees and certificates.
           </p>
 
           {/* Step preview */}
@@ -181,7 +181,7 @@ export default function Register() {
           <div className="w-9 h-9 bg-blue-700 rounded-xl flex items-center justify-center">
             <Award className="w-5 h-5 text-yellow-400" />
           </div>
-          <span className="text-gray-900 font-bold text-lg">CertSystem</span>
+          <span className="text-gray-900 font-bold text-lg">SchoolMS</span>
         </div>
 
         <div className="w-full max-w-sm">
@@ -390,7 +390,7 @@ export default function Register() {
               </div>
               <h2 className="text-2xl font-extrabold text-gray-900 mb-2">Account Created!</h2>
               <p className="text-gray-500 text-sm mb-1">
-                Welcome to CertSystem
+                Welcome to SchoolMS
               </p>
               <p className="font-bold text-gray-800 text-lg mb-6">{form.school_name}</p>
 

@@ -8,7 +8,8 @@ const studentRoutes     = require('./routes/students');
 const certificateRoutes = require('./routes/certificates');
 const templateRoutes    = require('./routes/templates');
 const settingsRoutes    = require('./routes/settings');
-const smsRoutes         = require('./routes/sms');         // School Management
+const smsRoutes         = require('./routes/sms');
+const staffAuthRoutes   = require('./routes/staffAuth');
 const requireAuth       = require('./middleware/auth');
 
 const app  = express();
@@ -47,7 +48,8 @@ app.use(fileUpload({
 }));
 
 // ── PUBLIC ROUTES ─────────────────────────────────────────────
-app.use('/api/auth', authRoutes);
+app.use('/api/auth',       authRoutes);
+app.use('/api/staff-auth', staffAuthRoutes);  // Staff login (teacher/secretary/finance/DoS)
 
 // Root — show API info instead of 404
 app.get('/', (req, res) => {

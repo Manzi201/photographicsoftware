@@ -69,7 +69,10 @@ sms.interceptors.request.use(config => {
   return config;
 });
 
-// ── School Students (Registration) ───────────────────────────
+// ── Staff Auth ────────────────────────────────────────────────
+export const staffLogin    = (d) => axios.post(`${SMS_URL.replace('/sms','')}/staff-auth/login`, d);
+export const staffLogout   = ()  => sms.post('/staff-auth/logout');
+export const getStaffMe    = ()  => sms.get('/staff-auth/me');
 export const getSmsStudents       = (params) => sms.get('/students', { params });
 export const getSmsStudent        = (id)     => sms.get(`/students/${id}`);
 export const createSmsStudent     = (data)   => sms.post('/students', data, { headers:{'Content-Type':'multipart/form-data'} });
@@ -117,3 +120,8 @@ export const getNotifications   = (p) => sms.get('/notifications', { params: p }
 export const sendFeeReminder    = (d) => sms.post('/notifications/fee-reminder', d);
 export const notifyBulletinReady= (d) => sms.post('/notifications/bulletin', d);
 export const sendCustomNotif    = (d) => sms.post('/notifications/custom', d);
+
+// ── Excel Export ──────────────────────────────────────────────
+export const exportStudentsExcel = (p) => sms.get('/excel/students', { params: p, responseType: 'blob' });
+export const exportMarksExcel    = (p) => sms.get('/excel/marks',    { params: p, responseType: 'blob' });
+export const exportFinanceExcel  = (p) => sms.get('/excel/finance',  { params: p, responseType: 'blob' });

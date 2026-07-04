@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, Upload, Search, Award,
   Printer, Settings, GraduationCap, Menu, X,
   LogOut, ChevronDown, BookOpen, UserCircle, School,
-  FileText, CreditCard, Bell
+  FileText, CreditCard, Bell, Shield, TrendingUp
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
@@ -20,11 +20,13 @@ const NAV = [
   { to: '/generate',      icon: Award,           label: 'Generate Certificate' },
   { to: '/print-all',     icon: Printer,         label: 'Print All' },
   { section: '🏫 School Mgmt' },
-  { to: '/sms/students',  icon: Users,           label: 'Registration' },
-  { to: '/sms/marks',     icon: BookOpen,        label: 'Marks & Grades' },
-  { to: '/sms/bulletins', icon: FileText,        label: 'Bulletins' },
-  { to: '/sms/finance',   icon: CreditCard,      label: 'Finance' },
-  { to: '/sms/notifications', icon: Bell,        label: 'Notifications' },
+  { to: '/sms/admin',         icon: Shield,        label: 'Staff Management' },
+  { to: '/sms/students',      icon: Users,         label: 'Registration' },
+  { to: '/sms/marks',         icon: BookOpen,      label: 'Marks & Grades' },
+  { to: '/sms/bulletins',     icon: FileText,      label: 'Bulletins' },
+  { to: '/sms/promotion',     icon: TrendingUp,    label: 'Promotion' },
+  { to: '/sms/finance',       icon: CreditCard,    label: 'Finance' },
+  { to: '/sms/notifications', icon: Bell,          label: 'Notifications' },
   { section: 'Templates' },
   { to: '/templates/Top Class', icon: GraduationCap, label: 'Top Class' },
   { to: '/templates/P6',        icon: GraduationCap, label: 'P6' },
@@ -59,7 +61,7 @@ export default function Layout() {
               <div className="w-7 h-7 bg-yellow-400 rounded-lg flex items-center justify-center shrink-0">
                 <Award className="w-4 h-4 text-gray-900" />
               </div>
-              <span className="font-bold text-sm truncate">CertSystem</span>
+              <span className="font-bold text-sm truncate">SchoolMS</span>
             </div>
           )}
           <button onClick={() => setOpen(!open)}
