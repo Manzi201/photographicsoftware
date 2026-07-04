@@ -13,12 +13,16 @@ module.exports = async function requireStaffAuth(req, res, next) {
   const token = header.replace('Bearer ', '').trim();
 
   // Try staff session token first
-  const { data: session } = await supabase
-    .from('staff_sessions')
-    .select('*, staff:staff(*), school:schools(*)')
-    .eq('token', token)
-    .gt('expires_at', new Date().toISOString())
-    .single();
+  let session = null;
+  try {
+    const { data } = await supabase
+      .from('staff_sessions')
+      .select('*, staff:staff(*), school:schools(*)')
+      .eq('token', token)
+      .gt('expires_at', new Date().toISOString())
+      .single();
+    session = data;
+  } catch { /* table may not exist yet */ }
 
   if (session?.staff) {
     req.staff    = session.staff;
