@@ -9,7 +9,6 @@ const API_BASE = import.meta.env.VITE_API_URL || (
     ? 'https://photographicsoftware-1.onrender.com/api'
     : '/api'
 );
-
 export default function StaffLogin() {
   const navigate = useNavigate();
   const [form, setForm] = useState({ username: '', password: '' });
@@ -25,22 +24,15 @@ export default function StaffLogin() {
       const res = await axios.post(`${API_BASE}/staff-auth/login`, form);
       const { token, staff, school } = res.data;
 
-      // Save staff session
+      // Save to localStorage (used by StaffAuthContext + role dashboards)
       localStorage.setItem('staff_token',  token);
       localStorage.setItem('staff_data',   JSON.stringify(staff));
       localStorage.setItem('staff_school', JSON.stringify(school));
 
       toast.success(`Welcome, ${staff.full_name}!`);
 
-      // Redirect based on role
-      const routes = {
-        admin:     '/sms/admin',
-        dos:       '/sms/students',
-        teacher:   '/sms/marks',
-        secretary: '/sms/students',
-        finance:   '/sms/finance',
-      };
-      navigate(routes[staff.role] || '/sms/students');
+      // All staff go to /sms/dashboard which routes by role
+      navigate('/sms/dashboard');
     } catch (err) {
       toast.error(err.response?.data?.error || 'Invalid credentials');
     } finally { setLoading(false); }

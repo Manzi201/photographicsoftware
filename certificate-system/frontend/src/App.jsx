@@ -23,6 +23,7 @@ import SmsNotifications from './pages/sms/Notifications';
 import AdminStaff       from './pages/sms/AdminStaff';
 import Promotion        from './pages/sms/Promotion';
 import StaffLogin       from './pages/StaffLogin';
+import RoleDashboard    from './pages/sms/dashboards/RoleDashboard';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -68,6 +69,7 @@ function AppRoutes() {
           <Route path="settings"               element={<Settings />} />
           <Route path="profile"                element={<Profile />} />
           {/* School Management System */}
+          <Route path="sms/dashboard"      element={<RoleDashboard />} />
           <Route path="sms/admin"         element={<AdminStaff />} />
           <Route path="sms/students"      element={<SmsStudents />} />
           <Route path="sms/marks"         element={<SmsMarks />} />
