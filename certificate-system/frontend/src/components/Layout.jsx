@@ -5,8 +5,7 @@ import {
   Printer, Settings, GraduationCap, Menu, X,
   LogOut, ChevronDown, BookOpen, UserCircle, School,
   FileText, CreditCard, Bell, Shield, TrendingUp
-} from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+} from 'lucide-react';import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 
 // ── Nav items per role ─────────────────────────────────────────
@@ -15,29 +14,19 @@ const NAV_BY_ROLE = {
   // ── ADMIN (school owner via Supabase) ──────────────────────
   admin: [
     { section: 'Overview' },
-    { to: '/',              icon: LayoutDashboard, label: 'Dashboard' },
-    { to: '/classes',       icon: BookOpen,        label: 'Classes' },
-    { section: 'Certificates' },
-    { to: '/upload',        icon: Upload,          label: 'Upload Students' },
-    { to: '/search',        icon: Search,          label: 'Search Student' },
-    { to: '/generate',      icon: Award,           label: 'Generate Certificate' },
-    { to: '/print-all',     icon: Printer,         label: 'Print All' },
-    { to: '/templates/Top Class', icon: GraduationCap, label: 'Top Class' },
-    { to: '/templates/P6',        icon: GraduationCap, label: 'P6' },
-    { to: '/templates/S3',        icon: GraduationCap, label: 'S3' },
-    { to: '/templates/S6',        icon: GraduationCap, label: 'S6' },
+    { to: '/',                    icon: LayoutDashboard, label: 'Dashboard' },
     { section: '🏫 School Mgmt' },
-    { to: '/sms/dashboard',     icon: LayoutDashboard, label: 'SMS Dashboard' },
-    { to: '/sms/admin',         icon: Shield,          label: 'Staff Management' },
-    { to: '/sms/students',      icon: Users,           label: 'Registration' },
-    { to: '/sms/marks',         icon: BookOpen,        label: 'Marks & Grades' },
-    { to: '/sms/bulletins',     icon: FileText,        label: 'Bulletins' },
-    { to: '/sms/promotion',     icon: TrendingUp,      label: 'Promotion' },
-    { to: '/sms/finance',       icon: CreditCard,      label: 'Finance' },
-    { to: '/sms/notifications', icon: Bell,            label: 'Notifications' },
+    { to: '/sms/dashboard',       icon: LayoutDashboard, label: 'SMS Dashboard' },
+    { to: '/sms/admin',           icon: Shield,          label: 'Staff Management' },
+    { to: '/sms/students',        icon: Users,           label: 'Registration' },
+    { to: '/sms/marks',           icon: BookOpen,        label: 'Marks & Grades' },
+    { to: '/sms/bulletins',       icon: FileText,        label: 'Bulletins' },
+    { to: '/sms/promotion',       icon: TrendingUp,      label: 'Promotion' },
+    { to: '/sms/finance',         icon: CreditCard,      label: 'Finance' },
+    { to: '/sms/notifications',   icon: Bell,            label: 'Notifications' },
     { section: 'Account' },
-    { to: '/profile',           icon: UserCircle,      label: 'My Profile' },
-    { to: '/settings',          icon: Settings,        label: 'Settings' },
+    { to: '/profile',             icon: UserCircle,      label: 'My Profile' },
+    { to: '/settings',            icon: Settings,        label: 'Settings' },
   ],
 
   // ── SECRETARY ──────────────────────────────────────────────
