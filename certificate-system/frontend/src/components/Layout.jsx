@@ -13,8 +13,6 @@ const NAV_BY_ROLE = {
 
   // ── ADMIN (school owner via Supabase) ──────────────────────
   admin: [
-    { section: 'Overview' },
-    { to: '/',                    icon: LayoutDashboard, label: 'Dashboard' },
     { section: '🏫 School Mgmt' },
     { to: '/sms/dashboard',       icon: LayoutDashboard, label: 'SMS Dashboard' },
     { to: '/sms/admin',           icon: Shield,          label: 'Staff Management' },
