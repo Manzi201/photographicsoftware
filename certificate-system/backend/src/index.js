@@ -8,6 +8,7 @@ const studentRoutes     = require('./routes/students');
 const certificateRoutes = require('./routes/certificates');
 const templateRoutes    = require('./routes/templates');
 const settingsRoutes    = require('./routes/settings');
+const smsRoutes         = require('./routes/sms');         // School Management
 const requireAuth       = require('./middleware/auth');
 
 const app  = express();
@@ -84,6 +85,7 @@ app.get('/api/templates', (req, res) => {
 app.use('/api/students',     requireAuth, studentRoutes);
 app.use('/api/certificates', requireAuth, certificateRoutes);
 app.use('/api/settings',     requireAuth, settingsRoutes);
+app.use('/api/sms',          smsRoutes);   // has its own requireAuth inside
 
 // ── 404 handler ───────────────────────────────────────────────
 app.use((req, res) => {

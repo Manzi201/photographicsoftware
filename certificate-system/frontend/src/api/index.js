@@ -51,3 +51,69 @@ export const printBlob = (blob) => {
 };
 
 export default api;
+
+// ══════════════════════════════════════════════════════════════
+// SCHOOL MANAGEMENT SYSTEM API
+// ══════════════════════════════════════════════════════════════
+const SMS_URL = (() => {
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL.replace('/api','/api/sms');
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost')
+    return 'https://photographicsoftware-1.onrender.com/api/sms';
+  return '/api/sms';
+})();
+
+const sms = axios.create({ baseURL: SMS_URL, timeout: 30000 });
+sms.interceptors.request.use(config => {
+  const token = localStorage.getItem('cert_token');
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+// ── School Students (Registration) ───────────────────────────
+export const getSmsStudents       = (params) => sms.get('/students', { params });
+export const getSmsStudent        = (id)     => sms.get(`/students/${id}`);
+export const createSmsStudent     = (data)   => sms.post('/students', data, { headers:{'Content-Type':'multipart/form-data'} });
+export const updateSmsStudent     = (id, d)  => sms.put(`/students/${id}`, d);
+export const deleteSmsStudent     = (id)     => sms.delete(`/students/${id}`);
+export const getSmsStudentStats   = ()       => sms.get('/students/stats');
+
+// ── Academic ──────────────────────────────────────────────────
+export const getAcademicYears    = ()    => sms.get('/academic-years');
+export const createAcademicYear  = (d)   => sms.post('/academic-years', d);
+export const getTerms            = (p)   => sms.get('/terms', { params: p });
+export const createTerm          = (d)   => sms.post('/terms', d);
+export const getSmsClasses       = (p)   => sms.get('/classes', { params: p });
+export const createSmsClass      = (d)   => sms.post('/classes', d);
+export const deleteSmsClass      = (id)  => sms.delete(`/classes/${id}`);
+export const getSmsSubjects      = (p)   => sms.get('/subjects', { params: p });
+export const createSmsSubject    = (d)   => sms.post('/subjects', d);
+export const deleteSmsSubject    = (id)  => sms.delete(`/subjects/${id}`);
+export const getStaff            = ()    => sms.get('/staff');
+export const createStaff         = (d)   => sms.post('/staff', d);
+export const updateStaff         = (id,d)=> sms.put(`/staff/${id}`, d);
+
+// ── Marks ─────────────────────────────────────────────────────
+export const getMarks         = (p)  => sms.get('/marks', { params: p });
+export const upsertMark       = (d)  => sms.post('/marks', d);
+export const bulkUpsertMarks  = (d)  => sms.post('/marks/bulk', d);
+export const getClassReport   = (p)  => sms.get('/marks/class-report', { params: p });
+
+// ── Bulletins ─────────────────────────────────────────────────
+export const getBulletins      = (p)  => sms.get('/bulletins', { params: p });
+export const generateBulletin  = (d)  => sms.post('/bulletins/generate', d, { responseType:'blob' });
+export const generateClassBulletins = (d) => sms.post('/bulletins/generate-class', d, { responseType:'blob' });
+
+// ── Finance ───────────────────────────────────────────────────
+export const getFeeStructure    = (p) => sms.get('/finance/fee-structure', { params: p });
+export const createFeeStructure = (d) => sms.post('/finance/fee-structure', d);
+export const deleteFeeStructure = (id)=> sms.delete(`/finance/fee-structure/${id}`);
+export const getPayments        = (p) => sms.get('/finance/payments', { params: p });
+export const recordPayment      = (d) => sms.post('/finance/payments', d);
+export const getReceipt         = (id)=> sms.get(`/finance/payments/${id}/receipt`, { responseType:'blob' });
+export const getFinanceSummary  = (p) => sms.get('/finance/summary', { params: p });
+
+// ── Notifications ─────────────────────────────────────────────
+export const getNotifications   = (p) => sms.get('/notifications', { params: p });
+export const sendFeeReminder    = (d) => sms.post('/notifications/fee-reminder', d);
+export const notifyBulletinReady= (d) => sms.post('/notifications/bulletin', d);
+export const sendCustomNotif    = (d) => sms.post('/notifications/custom', d);

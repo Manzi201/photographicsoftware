@@ -368,3 +368,231 @@ SELECT
 FROM information_schema.tables t
 WHERE table_schema = 'public'
 ORDER BY table_name;
+
+-- ══════════════════════════════════════════════════════════════
+-- SCHOOL MANAGEMENT SYSTEM TABLES
+-- All integrated with the same schools table (one database)
+-- ══════════════════════════════════════════════════════════════
+
+-- ── STAFF ─────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS staff (
+  id            UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  school_id     UUID REFERENCES schools(id) ON DELETE CASCADE,
+  user_id       UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  full_name     VARCHAR(200) NOT NULL,
+  email         VARCHAR(200),
+  phone         VARCHAR(30),
+  role          VARCHAR(30) NOT NULL DEFAULT 'teacher',
+  -- roles: admin | teacher | finance | secretary | headteacher
+  is_active     BOOLEAN DEFAULT true,
+  created_at    TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- ── ACADEMIC YEARS ────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS academic_years (
+  id          UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  school_id   UUID REFERENCES schools(id) ON DELETE CASCADE,
+  name        VARCHAR(50) NOT NULL,  -- e.g. "2024-2025"
+  start_date  DATE,
+  end_date    DATE,
+  is_current  BOOLEAN DEFAULT false,
+  created_at  TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- ── TERMS ─────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS terms (
+  id               UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  school_id        UUID REFERENCES schools(id) ON DELETE CASCADE,
+  academic_year_id UUID REFERENCES academic_years(id),
+  name             VARCHAR(30) NOT NULL,  -- "Term 1", "Term 2", "Term 3"
+  number           INT NOT NULL,
+  start_date       DATE,
+  end_date         DATE,
+  is_current       BOOLEAN DEFAULT false,
+  created_at       TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- ── CLASSES ───────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS classes (
+  id               UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  school_id        UUID REFERENCES schools(id) ON DELETE CASCADE,
+  name             VARCHAR(50) NOT NULL,   -- e.g. "P6 A"
+  level            VARCHAR(50),            -- e.g. "P6", "S3"
+  academic_year_id UUID REFERENCES academic_years(id),
+  class_teacher_id UUID REFERENCES staff(id),
+  max_students     INT DEFAULT 50,
+  created_at       TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- ── SUBJECTS ──────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS subjects (
+  id            UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  school_id     UUID REFERENCES schools(id) ON DELETE CASCADE,
+  name          VARCHAR(100) NOT NULL,
+  code          VARCHAR(20),
+  max_marks     INT DEFAULT 100,
+  passing_marks INT DEFAULT 50,
+  coefficient   INT DEFAULT 1,
+  created_at    TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- ── CLASS SUBJECTS ────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS class_subjects (
+  id         UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  class_id   UUID REFERENCES classes(id) ON DELETE CASCADE,
+  subject_id UUID REFERENCES subjects(id) ON DELETE CASCADE,
+  teacher_id UUID REFERENCES staff(id),
+  UNIQUE(class_id, subject_id)
+);
+
+-- ── STUDENT PROFILES (extended registration) ─────────────────
+CREATE TABLE IF NOT EXISTS student_profiles (
+  id               UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  school_id        UUID REFERENCES schools(id) ON DELETE CASCADE,
+  -- Link to certificate system students table (optional)
+  cert_student_id  UUID REFERENCES students(id) ON DELETE SET NULL,
+  -- Basic info
+  first_name       VARCHAR(100) NOT NULL,
+  last_name        VARCHAR(100) NOT NULL,
+  other_names      VARCHAR(100),
+  date_of_birth    DATE,
+  gender           VARCHAR(10),  -- M | F
+  nationality      VARCHAR(50) DEFAULT 'Rwandan',
+  -- Contact
+  parent_name      VARCHAR(200),
+  parent_phone     VARCHAR(30),
+  parent_email     VARCHAR(200),
+  parent_phone2    VARCHAR(30),
+  address          TEXT,
+  -- Academic
+  student_id       VARCHAR(30) UNIQUE,  -- auto-generated e.g. "2025/P6/001"
+  admission_date   DATE DEFAULT CURRENT_DATE,
+  current_class_id UUID REFERENCES classes(id),
+  academic_year_id UUID REFERENCES academic_years(id),
+  -- Documents
+  photo_url        TEXT,
+  -- Finance
+  fee_balance      DECIMAL(10,2) DEFAULT 0,
+  fee_status       VARCHAR(20) DEFAULT 'unpaid',  -- paid|partial|unpaid
+  -- Status
+  status           VARCHAR(20) DEFAULT 'active',  -- active|inactive|graduated|transferred
+  created_at       TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at       TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- ── MARKS ─────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS marks (
+  id               UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  school_id        UUID REFERENCES schools(id) ON DELETE CASCADE,
+  student_id       UUID REFERENCES student_profiles(id) ON DELETE CASCADE,
+  subject_id       UUID REFERENCES subjects(id) ON DELETE CASCADE,
+  class_id         UUID REFERENCES classes(id),
+  term_id          UUID REFERENCES terms(id),
+  academic_year_id UUID REFERENCES academic_years(id),
+  cat1             DECIMAL(5,2),   -- Continuous Assessment 1
+  cat2             DECIMAL(5,2),   -- Continuous Assessment 2
+  exam             DECIMAL(5,2),   -- Main exam mark
+  total            DECIMAL(5,2),   -- Auto-calculated
+  percentage       DECIMAL(5,2),
+  grade            VARCHAR(5),     -- A1, B2, C3, D4, F
+  remarks          VARCHAR(100),
+  entered_by       UUID REFERENCES staff(id),
+  created_at       TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at       TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(student_id, subject_id, term_id)
+);
+
+-- ── BULLETINS (Report Cards) ──────────────────────────────────
+CREATE TABLE IF NOT EXISTS bulletins (
+  id               UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  school_id        UUID REFERENCES schools(id) ON DELETE CASCADE,
+  student_id       UUID REFERENCES student_profiles(id) ON DELETE CASCADE,
+  term_id          UUID REFERENCES terms(id),
+  academic_year_id UUID REFERENCES academic_years(id),
+  class_id         UUID REFERENCES classes(id),
+  total_marks      DECIMAL(6,2),
+  max_possible     DECIMAL(6,2),
+  percentage       DECIMAL(5,2),
+  rank_in_class    INT,
+  class_size       INT,
+  grade            VARCHAR(5),
+  conduct          VARCHAR(50) DEFAULT 'Good',
+  teacher_remarks  TEXT,
+  head_remarks     TEXT,
+  days_present     INT DEFAULT 0,
+  days_absent      INT DEFAULT 0,
+  pdf_url          TEXT,
+  generated_at     TIMESTAMP WITH TIME ZONE,
+  generated_by     UUID REFERENCES staff(id),
+  created_at       TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(student_id, term_id)
+);
+
+-- ── FEE STRUCTURE ─────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS fee_structure (
+  id               UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  school_id        UUID REFERENCES schools(id) ON DELETE CASCADE,
+  academic_year_id UUID REFERENCES academic_years(id),
+  class_level      VARCHAR(50),    -- P1, P2...P6, S1...S6
+  term_id          UUID REFERENCES terms(id),
+  fee_type         VARCHAR(100) NOT NULL,  -- Tuition, Activity, Lunch...
+  amount           DECIMAL(10,2) NOT NULL,
+  is_mandatory     BOOLEAN DEFAULT true,
+  created_at       TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- ── PAYMENTS ──────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS payments (
+  id               UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  school_id        UUID REFERENCES schools(id) ON DELETE CASCADE,
+  student_id       UUID REFERENCES student_profiles(id) ON DELETE CASCADE,
+  term_id          UUID REFERENCES terms(id),
+  academic_year_id UUID REFERENCES academic_years(id),
+  amount           DECIMAL(10,2) NOT NULL,
+  payment_method   VARCHAR(30) DEFAULT 'cash',  -- cash|mtn|airtel|bank
+  reference        VARCHAR(100),   -- mobile money transaction ID
+  notes            TEXT,
+  received_by      UUID REFERENCES staff(id),
+  payment_date     TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  receipt_number   VARCHAR(50),
+  status           VARCHAR(20) DEFAULT 'confirmed',  -- confirmed|pending|cancelled
+  created_at       TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- ── NOTIFICATIONS (SMS + Email log) ──────────────────────────
+CREATE TABLE IF NOT EXISTS notifications (
+  id          UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  school_id   UUID REFERENCES schools(id) ON DELETE CASCADE,
+  type        VARCHAR(20) NOT NULL,  -- sms|email
+  recipient   VARCHAR(200) NOT NULL,
+  subject     VARCHAR(200),
+  message     TEXT NOT NULL,
+  status      VARCHAR(20) DEFAULT 'sent',  -- sent|failed|pending
+  student_id  UUID REFERENCES student_profiles(id),
+  sent_at     TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- ── RLS for new tables (open — backend uses service key) ──────
+DO $$ DECLARE t TEXT; BEGIN
+  FOR t IN SELECT unnest(ARRAY['staff','academic_years','terms','classes',
+    'subjects','class_subjects','student_profiles','marks',
+    'bulletins','fee_structure','payments','notifications']) LOOP
+    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+    BEGIN
+      EXECUTE format('CREATE POLICY "open_%s" ON %I FOR ALL USING (true) WITH CHECK (true)', t, t);
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END;
+  END LOOP;
+END $$;
+
+-- ── Indexes ───────────────────────────────────────────────────
+CREATE INDEX IF NOT EXISTS idx_sp_school       ON student_profiles(school_id);
+CREATE INDEX IF NOT EXISTS idx_sp_class        ON student_profiles(current_class_id);
+CREATE INDEX IF NOT EXISTS idx_sp_status       ON student_profiles(status);
+CREATE INDEX IF NOT EXISTS idx_marks_student   ON marks(student_id);
+CREATE INDEX IF NOT EXISTS idx_marks_term      ON marks(term_id);
+CREATE INDEX IF NOT EXISTS idx_payments_stud   ON payments(student_id);
+CREATE INDEX IF NOT EXISTS idx_classes_school  ON classes(school_id);
+CREATE INDEX IF NOT EXISTS idx_terms_year      ON terms(academic_year_id);
+CREATE INDEX IF NOT EXISTS idx_bulletins_stud  ON bulletins(student_id);
+CREATE INDEX IF NOT EXISTS idx_bulletins_term  ON bulletins(term_id);

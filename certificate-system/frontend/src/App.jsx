@@ -14,6 +14,12 @@ import PrintAll from './pages/PrintAll';
 import TemplatePage from './pages/TemplatePage';
 import Settings from './pages/Settings';
 import Profile from './pages/Profile';
+// School Management
+import SmsStudents      from './pages/sms/Students';
+import SmsMarks         from './pages/sms/Marks';
+import SmsBulletins     from './pages/sms/Bulletins';
+import SmsFinance       from './pages/sms/Finance';
+import SmsNotifications from './pages/sms/Notifications';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -57,6 +63,12 @@ function AppRoutes() {
           <Route path="templates/:templateId"  element={<TemplatePage />} />
           <Route path="settings"               element={<Settings />} />
           <Route path="profile"                element={<Profile />} />
+          {/* School Management System */}
+          <Route path="sms/students"           element={<SmsStudents />} />
+          <Route path="sms/marks"              element={<SmsMarks />} />
+          <Route path="sms/bulletins"          element={<SmsBulletins />} />
+          <Route path="sms/finance"            element={<SmsFinance />} />
+          <Route path="sms/notifications"      element={<SmsNotifications />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

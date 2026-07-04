@@ -3,7 +3,8 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Upload, Search, Award,
   Printer, Settings, GraduationCap, Menu, X,
-  LogOut, ChevronDown, BookOpen, UserCircle, School
+  LogOut, ChevronDown, BookOpen, UserCircle, School,
+  FileText, CreditCard, Bell
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
@@ -18,6 +19,12 @@ const NAV = [
   { section: 'Certificates' },
   { to: '/generate',      icon: Award,           label: 'Generate Certificate' },
   { to: '/print-all',     icon: Printer,         label: 'Print All' },
+  { section: '🏫 School Mgmt' },
+  { to: '/sms/students',  icon: Users,           label: 'Registration' },
+  { to: '/sms/marks',     icon: BookOpen,        label: 'Marks & Grades' },
+  { to: '/sms/bulletins', icon: FileText,        label: 'Bulletins' },
+  { to: '/sms/finance',   icon: CreditCard,      label: 'Finance' },
+  { to: '/sms/notifications', icon: Bell,        label: 'Notifications' },
   { section: 'Templates' },
   { to: '/templates/Top Class', icon: GraduationCap, label: 'Top Class' },
   { to: '/templates/P6',        icon: GraduationCap, label: 'P6' },
