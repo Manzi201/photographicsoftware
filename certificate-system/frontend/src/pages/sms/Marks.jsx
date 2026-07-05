@@ -27,6 +27,7 @@ export default function SmsMarks() {
   const [selSubj,   setSelSubj]   = useState('');
   const [loading,   setLoading]   = useState(false);
   const [saving,    setSaving]    = useState(false);
+  const [noAssignment, setNoAssignment] = useState(false);
 
   // Load classes and terms on mount
   useEffect(() => {
@@ -43,16 +44,21 @@ export default function SmsMarks() {
       .catch(() => toast.error('Failed to load classes/terms'));
   }, []);
 
-  // Load subjects when class changes — filter by teacher if role=teacher
+  // Load subjects when class changes — filter by teacher if role=teacher AND assignments exist
   useEffect(() => {
     if (!selClass) { setSubjects([]); setSelSubj(''); return; }
     getSmsSubjects({ class_id: selClass }).then(r => {
       let subs = r.data.data || [];
-      // Teacher sees only subjects assigned to them
       if (isTeacher && session.staffId) {
-        subs = subs.filter(s => s.teacher?.id === session.staffId);
+        // Filter to subjects assigned to this teacher
+        const mySubjects = subs.filter(s => s.teacher?.id === session.staffId || s.teacher_id === session.staffId);
+        // If DoS hasn't assigned any yet, show all with a note (don't lock out teacher)
+        setSubjects(mySubjects.length > 0 ? mySubjects : subs);
+        setNoAssignment(mySubjects.length === 0 && subs.length > 0);
+      } else {
+        setSubjects(subs);
+        setNoAssignment(false);
       }
-      setSubjects(subs);
       setSelSubj('');
     });
   }, [selClass, isTeacher, session.staffId]);
@@ -132,7 +138,9 @@ export default function SmsMarks() {
         {isTeacher && (
           <div className="flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2 text-xs text-blue-700">
             <Info className="w-3.5 h-3.5 shrink-0"/>
-            You see only subjects assigned to you by the Director of Studies
+            {noAssignment
+              ? 'No subjects assigned to you yet — showing all. Ask Director of Studies to assign your subjects.'
+              : 'You see only subjects assigned to you by the Director of Studies'}
           </div>
         )}
       </div>
@@ -173,7 +181,12 @@ export default function SmsMarks() {
             </select>
             {selClass && subjects.length === 0 && (
               <p className="text-xs text-amber-600 mt-1">
-                {isTeacher ? '⚠ No subjects assigned to you for this class' : '⚠ No subjects assigned — go to Classes & Years'}
+                {isTeacher ? '⚠ No subjects in this class — contact Director of Studies' : '⚠ No subjects — go to Classes & Years to add subjects'}
+              </p>
+            )}
+            {selClass && noAssignment && subjects.length > 0 && (
+              <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                ⚠ No subjects assigned to you yet — showing all (ask DoS to assign subjects to you)
               </p>
             )}
           </div>

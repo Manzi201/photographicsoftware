@@ -181,6 +181,18 @@ exports.createSubject = async (req, res) => {
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 };
 
+exports.updateSubject = async (req, res) => {
+  try {
+    const { name, code, max_marks, passing_marks, coefficient } = req.body;
+    const { data, error } = await supabase.from('subjects')
+      .update({ name, code: code||null, max_marks: max_marks||100, passing_marks: passing_marks||50, coefficient: coefficient||1 })
+      .eq('id', req.params.id).eq('school_id', req.schoolId)
+      .select().single();
+    if (error) throw error;
+    res.json({ success: true, data });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+};
+
 exports.deleteSubject = async (req, res) => {
   try {
     await supabase.from('subjects').delete().eq('id', req.params.id).eq('school_id', req.schoolId);

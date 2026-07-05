@@ -9,7 +9,7 @@ import {
   getAcademicYears, createAcademicYear, updateAcademicYear, deleteAcademicYear,
   getTerms, createTerm, updateTerm, deleteTerm,
   getSmsClasses, createSmsClass, updateSmsClass, deleteSmsClass,
-  getSmsSubjects, createSmsSubject, deleteSmsSubject,
+  getSmsSubjects, createSmsSubject, updateSmsSubject, deleteSmsSubject,
   getStaff,
 } from '../../api';
 import axios from 'axios';
@@ -221,34 +221,74 @@ function ClassModal({ cls, years, staffList, onSave, onClose }) {
   );
 }
 
-// ── Subject & Assign Modal ────────────────────────────────────
+// ── Subject Modal (create + edit) ────────────────────────────
 function SubjectModal({ subject, onSave, onClose }) {
-  const [form, setForm] = useState({ name: subject?.name||'', code: subject?.code||'', max_marks: subject?.max_marks||100, passing_marks: subject?.passing_marks||50, coefficient: subject?.coefficient||1 });
+  const [form, setForm] = useState({
+    name:          subject?.name          || '',
+    code:          subject?.code          || '',
+    max_marks:     subject?.max_marks     || 100,
+    passing_marks: subject?.passing_marks || 50,
+    coefficient:   subject?.coefficient   || 1,
+  });
   const [loading, setLoading] = useState(false);
-  const f = k => e => setForm(p=>({...p,[k]:e.target.value}));
+  const f = k => e => setForm(p => ({ ...p, [k]: e.target.value }));
   const save = async () => {
     if (!form.name.trim()) { toast.error('Subject name required'); return; }
     setLoading(true);
-    try { await createSmsSubject(form); toast.success('Subject created!'); onSave(); }
-    catch(err){ toast.error(err.response?.data?.error||'Error'); } finally { setLoading(false); }
+    try {
+      if (subject?.id) {
+        await updateSmsSubject(subject.id, form);
+        toast.success('Subject updated!');
+      } else {
+        await createSmsSubject(form);
+        toast.success('Subject created!');
+      }
+      onSave();
+    } catch(err){ toast.error(err.response?.data?.error || 'Error'); }
+    finally { setLoading(false); }
   };
   return (
-    <Modal title="New Subject" onClose={onClose}>
+    <Modal title={subject?.id ? 'Edit Subject' : 'New Subject'} onClose={onClose}>
       <div className="p-6 grid grid-cols-2 gap-3">
-        <div className="col-span-2"><label className="block text-xs font-semibold text-gray-600 mb-1">Subject Name *</label>
-          <input className="input-field" value={form.name} onChange={f('name')} placeholder="e.g. Mathematics" autoFocus/></div>
-        <div><label className="block text-xs font-semibold text-gray-600 mb-1">Code</label>
-          <input className="input-field" value={form.code} onChange={f('code')} placeholder="e.g. MATH"/></div>
-        <div><label className="block text-xs font-semibold text-gray-600 mb-1">Coefficient</label>
-          <input type="number" className="input-field" value={form.coefficient} onChange={f('coefficient')} min={1} max={5}/></div>
-        <div><label className="block text-xs font-semibold text-gray-600 mb-1">Max Marks</label>
-          <input type="number" className="input-field" value={form.max_marks} onChange={f('max_marks')} min={1}/></div>
-        <div><label className="block text-xs font-semibold text-gray-600 mb-1">Pass Mark</label>
-          <input type="number" className="input-field" value={form.passing_marks} onChange={f('passing_marks')} min={0}/></div>
+        <div className="col-span-2">
+          <label className="block text-xs font-semibold text-gray-600 mb-1">Subject Name *</label>
+          <input className="input-field" value={form.name} onChange={f('name')} placeholder="e.g. Mathematics" autoFocus/>
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1">Short Code</label>
+          <input className="input-field" value={form.code} onChange={f('code')} placeholder="e.g. MATH"/>
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1">Coefficient</label>
+          <input type="number" className="input-field" value={form.coefficient} onChange={f('coefficient')} min={1} max={10}/>
+          <p className="text-xs text-gray-400 mt-0.5">Weight in overall average</p>
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1">Max Marks (Total)</label>
+          <input type="number" className="input-field" value={form.max_marks} onChange={f('max_marks')} min={1}/>
+          <p className="text-xs text-gray-400 mt-0.5">TEST + EX combined max</p>
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1">Pass Mark</label>
+          <input type="number" className="input-field" value={form.passing_marks} onChange={f('passing_marks')} min={0}/>
+        </div>
+        {/* Preview */}
+        <div className="col-span-2 bg-gray-50 border border-gray-100 rounded-xl p-3">
+          <p className="text-xs font-semibold text-gray-500 mb-1">Preview in report card:</p>
+          <div className="flex gap-4 text-xs text-gray-700">
+            <span><strong>{form.name || 'Subject'}</strong></span>
+            <span>Max: <strong>{form.max_marks}</strong></span>
+            <span>Coef: <strong>×{form.coefficient}</strong></span>
+            <span>TEST max: <strong>{Math.round(form.max_marks / 2)}</strong></span>
+            <span>EX max: <strong>{form.max_marks - Math.round(form.max_marks / 2)}</strong></span>
+          </div>
+        </div>
       </div>
       <div className="flex gap-3 px-6 py-4 border-t">
         <button onClick={onClose} className="btn-secondary flex-1 justify-center">Cancel</button>
-        <button onClick={save} disabled={loading} className="btn-primary flex-1 justify-center">{loading?'Saving…':<><Check className="w-4 h-4"/>Save</>}</button>
+        <button onClick={save} disabled={loading} className="btn-primary flex-1 justify-center">
+          {loading ? 'Saving…' : <><Check className="w-4 h-4"/> {subject?.id ? 'Update' : 'Create'}</>}
+        </button>
       </div>
     </Modal>
   );
@@ -534,8 +574,9 @@ export default function SmsClasses() {
                         <td className="py-3 px-4"><span className="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-0.5 rounded-full">×{s.coefficient||1}</span></td>
                         <td className="py-3 px-4 text-gray-600">{s.max_marks||100}</td>
                         <td className="py-3 px-4 text-gray-600">{s.passing_marks||50}</td>
-                        <td className="py-3 px-4">
-                          <button onClick={()=>delSubject(s)} className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg"><Trash2 className="w-3.5 h-3.5"/></button>
+                        <td className="py-3 px-4 flex items-center gap-1">
+                          <button onClick={()=>setSubjectModal(s)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg" title="Edit"><Edit2 className="w-3.5 h-3.5"/></button>
+                          <button onClick={()=>delSubject(s)} className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg" title="Delete"><Trash2 className="w-3.5 h-3.5"/></button>
                         </td>
                       </tr>
                     ))}
@@ -552,7 +593,7 @@ export default function SmsClasses() {
       {yearModal   && <YearModal    year={yearModal==='new'?null:yearModal}       onSave={()=>{setYearModal(null);load();}}    onClose={()=>setYearModal(null)}/>}
       {classModal  && <ClassModal   cls={classModal?.id?classModal:null}           years={years} staffList={staffList} onSave={()=>{setClassModal(null);load();}} onClose={()=>setClassModal(null)}/>}
       {termModal   && <TermModal    term={termModal?._preset_year?null:termModal} years={years} onSave={()=>{setTermModal(null);load();}}  onClose={()=>setTermModal(null)}/>}
-      {subjectModal&& <SubjectModal onSave={()=>{setSubjectModal(false);load();}} onClose={()=>setSubjectModal(false)}/>}
+      {subjectModal&& <SubjectModal subject={subjectModal===true?null:subjectModal} onSave={()=>{setSubjectModal(false);load();}} onClose={()=>setSubjectModal(false)}/>}
       {assignModal && <AssignModal  cls={assignModal} subjects={subjects} staffList={staffList} onSave={()=>load()} onClose={()=>setAssignModal(null)}/>}
     </div>
   );

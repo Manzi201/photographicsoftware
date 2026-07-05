@@ -128,6 +128,7 @@ export const deleteSmsClass  = (id)     => sms.delete(`/classes/${id}`);
 // ── Subjects ──────────────────────────────────────────────────
 export const getSmsSubjects  = (p)      => sms.get('/subjects', { params: p });
 export const createSmsSubject= (d)      => sms.post('/subjects', d);
+export const updateSmsSubject= (id, d)  => sms.put(`/subjects/${id}`, d);
 export const deleteSmsSubject= (id)     => sms.delete(`/subjects/${id}`);
 
 // ── Staff list ────────────────────────────────────────────────

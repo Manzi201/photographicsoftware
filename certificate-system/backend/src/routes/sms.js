@@ -39,6 +39,7 @@ router.put   ('/classes/:id',           academic.updateClass);
 router.delete('/classes/:id',           academic.deleteClass);
 router.get   ('/subjects',              academic.getSubjects);
 router.post  ('/subjects',              academic.createSubject);
+router.put   ('/subjects/:id',          academic.updateSubject);
 router.delete('/subjects/:id',          academic.deleteSubject);
 router.get   ('/class-subjects',        academic.getClassSubjects);
 router.post  ('/class-subjects',        academic.assignSubject);
