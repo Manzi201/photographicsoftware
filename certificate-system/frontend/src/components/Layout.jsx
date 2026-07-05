@@ -111,11 +111,12 @@ export default function Layout() {
 
   const handleLogout = () => {
     if (isStaffLogin) {
+      // Logout staff session
       localStorage.removeItem('staff_token');
       localStorage.removeItem('staff_data');
       localStorage.removeItem('staff_school');
       toast.success('Logged out');
-      navigate('/login');
+      navigate('/staff-login');
     } else {
       logout();
       toast.success('Logged out');
