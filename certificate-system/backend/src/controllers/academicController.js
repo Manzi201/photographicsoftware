@@ -63,7 +63,10 @@ exports.getTerms = async (req, res) => {
 exports.createTerm = async (req, res) => {
   try {
     const { name, number, academic_year_id, start_date, end_date, is_current } = req.body;
-    if (!name || !academic_year_id) return res.status(400).json({ success: false, error: 'name and academic_year_id required' });
+    if (!name) return res.status(400).json({ success: false, error: 'name required' });
+    if (!academic_year_id || academic_year_id === 'undefined' || academic_year_id === '') {
+      return res.status(400).json({ success: false, error: 'academic_year_id is required' });
+    }
     if (is_current) {
       await supabase.from('terms').update({ is_current: false }).eq('school_id', req.schoolId);
     }

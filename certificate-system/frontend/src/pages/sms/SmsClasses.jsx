@@ -81,22 +81,42 @@ function TermModal({ term, years, onSave, onClose }) {
     { label:'Term 1', number:1 }, { label:'Term 2', number:2 },
     { label:'Term 3', number:3 }, { label:'Annual (avg T1+T2+T3)', number:4 },
   ];
+
+  // Resolve preset year: could come from _preset_year (new from year row) or academic_year_id (editing)
+  const presetYearId = term?._preset_year || term?.academic_year_id || years.find(y=>y.is_current)?.id || years[0]?.id || '';
+
   const [form, setForm] = useState({
-    name: term?.name||'', number: term?.number||1,
-    academic_year_id: term?.academic_year_id||years.find(y=>y.is_current)?.id||'',
-    start_date: term?.start_date||'', end_date: term?.end_date||'', is_current: term?.is_current||false,
+    name: term?.name || '',
+    number: term?.number || 1,
+    academic_year_id: presetYearId,
+    start_date: term?.start_date || '',
+    end_date:   term?.end_date   || '',
+    is_current: term?.is_current || false,
   });
   const [loading, setLoading] = useState(false);
   const f = k => e => setForm(p=>({...p,[k]:e.target.value}));
+
   const save = async () => {
-    if (!form.name.trim()||!form.academic_year_id) { toast.error('Name and Year required'); return; }
+    if (!form.name.trim())           { toast.error('Term name required'); return; }
+    if (!form.academic_year_id)      { toast.error('Select an academic year'); return; }
     setLoading(true);
-    try { term ? await updateTerm(term.id, form) : await createTerm(form); toast.success(term?'Updated!':'Created!'); onSave(); }
-    catch(err){ toast.error(err.response?.data?.error||'Error'); } finally { setLoading(false); }
+    try {
+      // editing: term has an id and no _preset_year
+      if (term?.id && !term._preset_year) {
+        await updateTerm(term.id, form);
+      } else {
+        await createTerm(form);
+      }
+      toast.success(term?.id && !term._preset_year ? 'Updated!' : 'Created!');
+      onSave();
+    } catch(err){ toast.error(err.response?.data?.error || 'Error'); }
+    finally { setLoading(false); }
   };
-  const pickType = (tt) => setForm(p=>({...p, name:tt.label, number:tt.number}));
+
+  const pickType = tt => setForm(p=>({...p, name:tt.label, number:tt.number}));
+
   return (
-    <Modal title={term?'Edit Term':'New Term'} onClose={onClose}>
+    <Modal title={term?.id && !term._preset_year ? 'Edit Term' : 'New Term'} onClose={onClose}>
       <div className="p-6 space-y-4">
         <div>
           <label className="block text-xs font-semibold text-gray-600 mb-2">Quick Select</label>
@@ -106,32 +126,47 @@ function TermModal({ term, years, onSave, onClose }) {
                 className={`px-3 py-2 rounded-xl border text-xs font-semibold transition-all text-left
                   ${form.number===tt.number?'bg-blue-600 text-white border-blue-600':'bg-gray-50 text-gray-600 border-gray-200 hover:border-blue-300'}`}>
                 {tt.label}
-                {tt.number===4&&<span className="block text-[10px] opacity-70 mt-0.5">Calculates average automatically</span>}
+                {tt.number===4 && <span className="block text-[10px] opacity-70 mt-0.5">Average T1+T2+T3 automatically</span>}
               </button>
             ))}
           </div>
         </div>
-        <div><label className="block text-xs font-semibold text-gray-600 mb-1">Term Name *</label>
-          <input className="input-field" value={form.name} onChange={f('name')} placeholder="e.g. Term 1"/></div>
-        <div><label className="block text-xs font-semibold text-gray-600 mb-1">Academic Year *</label>
+
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1">Term Name *</label>
+          <input className="input-field" value={form.name} onChange={f('name')} placeholder="e.g. Term 1" autoFocus/>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1">Academic Year *</label>
           <select className="select-field" value={form.academic_year_id} onChange={f('academic_year_id')}>
             <option value="">— Select Year —</option>
             {years.map(y=><option key={y.id} value={y.id}>{y.name}{y.is_current?' (current)':''}</option>)}
-          </select></div>
-        <div className="grid grid-cols-2 gap-3">
-          <div><label className="block text-xs font-semibold text-gray-600 mb-1">Start Date</label>
-            <input type="date" className="input-field" value={form.start_date} onChange={f('start_date')}/></div>
-          <div><label className="block text-xs font-semibold text-gray-600 mb-1">End Date</label>
-            <input type="date" className="input-field" value={form.end_date} onChange={f('end_date')}/></div>
+          </select>
         </div>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input type="checkbox" className="w-4 h-4 accent-blue-600" checked={form.is_current} onChange={e=>setForm(p=>({...p,is_current:e.target.checked}))}/>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Start Date</label>
+            <input type="date" className="input-field" value={form.start_date} onChange={f('start_date')}/>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">End Date</label>
+            <input type="date" className="input-field" value={form.end_date} onChange={f('end_date')}/>
+          </div>
+        </div>
+
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <input type="checkbox" className="w-4 h-4 accent-blue-600"
+            checked={form.is_current} onChange={e=>setForm(p=>({...p,is_current:e.target.checked}))}/>
           <span className="text-sm font-medium text-gray-700">Set as current term</span>
         </label>
       </div>
       <div className="flex gap-3 px-6 py-4 border-t">
         <button onClick={onClose} className="btn-secondary flex-1 justify-center">Cancel</button>
-        <button onClick={save} disabled={loading} className="btn-primary flex-1 justify-center">{loading?'Saving…':<><Check className="w-4 h-4"/>Save</>}</button>
+        <button onClick={save} disabled={loading} className="btn-primary flex-1 justify-center">
+          {loading ? 'Saving…' : <><Check className="w-4 h-4"/> Save</>}
+        </button>
       </div>
     </Modal>
   );
