@@ -82,7 +82,9 @@ const NAV_BY_ROLE = {
 export default function Layout() {
   const { user, school, logout } = useAuth();
   const navigate = useNavigate();
-  const [open, setOpen] = useState(true);
+  // Desktop: open by default; Mobile: closed by default
+  const [open,     setOpen]     = useState(window.innerWidth >= 1024);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenu, setUserMenu] = useState(false);
 
   // Detect current role
@@ -126,27 +128,44 @@ export default function Layout() {
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
-      {/* ── Sidebar ── */}
-      <aside className={`${open ? 'w-64' : 'w-16'} bg-gray-950 text-white flex flex-col transition-all duration-300 shrink-0`}>
+
+      {/* ── Mobile overlay ── */}
+      {mobileOpen && (
+        <div className="fixed inset-0 bg-black/60 z-30 lg:hidden" onClick={() => setMobileOpen(false)}/>
+      )}
+
+      {/* ── Sidebar — desktop collapsible, mobile drawer ── */}
+      <aside className={`
+        fixed lg:static inset-y-0 left-0 z-40
+        ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
+        lg:translate-x-0
+        ${open ? 'w-64' : 'lg:w-16 w-64'}
+        bg-gray-950 text-white flex flex-col
+        transition-all duration-300 shrink-0
+      `}>
 
         {/* Brand */}
         <div className="flex items-center gap-3 px-4 py-4 border-b border-gray-800 min-h-[60px]">
-          {open && (
-            <div className="flex items-center gap-2 flex-1 min-w-0">
-              <div className="w-7 h-7 bg-yellow-400 rounded-lg flex items-center justify-center shrink-0">
-                <Award className="w-4 h-4 text-gray-900" />
-              </div>
-              <span className="font-bold text-sm truncate">SchoolMS</span>
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <div className="w-7 h-7 bg-yellow-400 rounded-lg flex items-center justify-center shrink-0">
+              <Award className="w-4 h-4 text-gray-900" />
             </div>
-          )}
+            {(open || mobileOpen) && <span className="font-bold text-sm truncate">SchoolMS</span>}
+          </div>
+          {/* Desktop collapse toggle */}
           <button onClick={() => setOpen(!open)}
-            className="p-1.5 rounded-lg hover:bg-gray-800 transition-colors ml-auto shrink-0">
+            className="p-1.5 rounded-lg hover:bg-gray-800 transition-colors shrink-0 hidden lg:flex">
             {open ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+          </button>
+          {/* Mobile close */}
+          <button onClick={() => setMobileOpen(false)}
+            className="p-1.5 rounded-lg hover:bg-gray-800 transition-colors shrink-0 lg:hidden">
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Role badge + school info */}
-        {open && (
+        {(open || mobileOpen) && (
           <div className="mx-3 mt-3 bg-blue-950 border border-blue-800 rounded-xl px-3 py-2.5">
             <div className="flex items-center gap-2 min-w-0">
               <div className="w-7 h-7 rounded-md bg-blue-700 flex items-center justify-center shrink-0">
@@ -175,8 +194,9 @@ export default function Layout() {
         {/* Nav items */}
         <nav className="flex-1 overflow-y-auto py-3 space-y-0.5">
           {NAV.map((item, i) => {
+            const showLabel = open || mobileOpen;
             if (item.section) {
-              return open
+              return showLabel
                 ? <div key={i} className="px-4 pt-4 pb-1.5">
                     <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">{item.section}</span>
                   </div>
@@ -186,13 +206,14 @@ export default function Layout() {
             return (
               <NavLink key={item.to} to={item.to}
                 end={item.to === '/' || item.to === '/sms/dashboard'}
+                onClick={() => setMobileOpen(false)}
                 className={({ isActive }) =>
                   `flex items-center gap-3 mx-2 px-3 py-2.5 rounded-xl text-sm transition-all
                    ${isActive
                      ? 'bg-blue-600 text-white shadow-sm'
                      : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
                 <Icon className="w-4 h-4 shrink-0" />
-                {open && <span className="truncate font-medium">{item.label}</span>}
+                {showLabel && <span className="truncate font-medium">{item.label}</span>}
               </NavLink>
             );
           })}
@@ -247,8 +268,26 @@ export default function Layout() {
       </aside>
 
       {/* Main */}
-      <main className="flex-1 overflow-y-auto">
-        <Outlet />
+      <main className="flex-1 overflow-y-auto flex flex-col min-h-0">
+        {/* ── Mobile top bar ── */}
+        <div className="lg:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200 sticky top-0 z-20 shadow-sm">
+          <button onClick={() => setMobileOpen(true)} className="p-2 rounded-xl hover:bg-gray-100 transition-colors">
+            <Menu className="w-5 h-5 text-gray-700"/>
+          </button>
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 bg-yellow-400 rounded-lg flex items-center justify-center">
+              <Award className="w-3.5 h-3.5 text-gray-900"/>
+            </div>
+            <span className="font-bold text-sm text-gray-900">SchoolMS</span>
+          </div>
+          <button onClick={handleLogout} className="p-2 rounded-xl hover:bg-red-50 text-red-400 transition-colors">
+            <LogOut className="w-5 h-5"/>
+          </button>
+        </div>
+        {/* Page content */}
+        <div className="flex-1 overflow-y-auto">
+          <Outlet />
+        </div>
       </main>
     </div>
   );
