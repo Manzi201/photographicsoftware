@@ -62,15 +62,26 @@ const SMS_URL = (() => {
   return '/api/sms';
 })();
 
-const sms = axios.create({ baseURL: SMS_URL, timeout: 30000 });
+const sms = axios.create({ baseURL: SMS_URL, timeout: 60000 }); // 60s for Render cold start
 sms.interceptors.request.use(config => {
-  // Use staff_token if logged in as staff, otherwise use supabase token
   const staffToken = localStorage.getItem('staff_token');
   const certToken  = localStorage.getItem('cert_token');
   const token = staffToken || certToken;
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
+// Retry once on timeout (Render cold start)
+sms.interceptors.response.use(
+  r => r,
+  async err => {
+    if ((err.code === 'ECONNABORTED' || err.response?.status === 503) && !err.config._retry) {
+      err.config._retry = true;
+      err.config.timeout = 60000;
+      return sms(err.config);
+    }
+    return Promise.reject(err);
+  }
+);
 
 // ── Staff Auth ────────────────────────────────────────────────
 export const staffLogin    = (d) => axios.post(`${SMS_URL.replace('/sms','')}/staff-auth/login`, d);

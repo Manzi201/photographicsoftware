@@ -19,6 +19,9 @@ export default function SmsMarks() {
     Promise.all([getSmsClasses(), getTerms()]).then(([c,t]) => {
       setClasses(c.data.data || []);
       setTerms(t.data.data   || []);
+    }).catch(err => {
+      const msg = err.code === 'ECONNABORTED' ? 'Server waking up, please wait 30s and refresh' : (err.response?.data?.error || 'Failed to load');
+      toast.error(msg);
     });
   }, []);
 
