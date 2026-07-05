@@ -12,7 +12,7 @@ function StudentModal({ student, classes, years, onSave, onClose }) {
     first_name:'', last_name:'', other_names:'', date_of_birth:'',
     gender:'M', nationality:'Rwandan', parent_name:'', parent_phone:'',
     parent_email:'', parent_phone2:'', address:'', current_class_id:'',
-    academic_year_id:'', level:'', status:'active',
+    academic_year_id:'', status:'active',
   });
   const [photo, setPhoto] = useState(null);
   const [loading, setLoading] = useState(false);

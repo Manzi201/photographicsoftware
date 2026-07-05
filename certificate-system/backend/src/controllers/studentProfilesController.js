@@ -55,13 +55,12 @@ exports.createStudent = async (req, res) => {
   try {
     const body = req.body;
 
-    // Generate student_id: YEAR/LEVEL/SEQ
+    // Generate student_id: YEAR/SEQ
     const year = new Date().getFullYear();
     const { count } = await supabase.from('student_profiles')
       .select('*', { count: 'exact', head: true }).eq('school_id', req.schoolId);
-    const seq   = String((count || 0) + 1).padStart(3, '0');
-    const level = (body.level || 'ST').substring(0, 3).toUpperCase();
-    const student_id = `${year}/${level}/${seq}`;
+    const seq        = String((count || 0) + 1).padStart(4, '0');
+    const student_id = `${year}/${seq}`;
 
     // Photo upload
     let photo_url = body.photo_url || null;
@@ -92,7 +91,6 @@ exports.createStudent = async (req, res) => {
       admission_date:   body.admission_date   || new Date().toISOString().split('T')[0],
       photo_url,
       status: 'active',
-      level:  body.level || null,
     }]).select().single();
     if (error) throw error;
     res.status(201).json({ success: true, data });
@@ -104,8 +102,8 @@ exports.createStudent = async (req, res) => {
 // PUT /api/sms/students/:id
 exports.updateStudent = async (req, res) => {
   try {
-    // Strip any relational fields that shouldn't be passed directly
-    const { current_class, academic_year, ...body } = req.body;
+    // Strip relational/computed fields not in DB schema
+    const { current_class, academic_year, level, ...body } = req.body;
     const { data, error } = await supabase.from('student_profiles')
       .update({ ...body, updated_at: new Date().toISOString() })
       .eq('id', req.params.id).eq('school_id', req.schoolId).select().single();
