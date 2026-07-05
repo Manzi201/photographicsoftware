@@ -4,78 +4,91 @@ import {
   LayoutDashboard, Users, Upload, Search, Award,
   Printer, Settings, GraduationCap, Menu, X,
   LogOut, ChevronDown, BookOpen, UserCircle, School,
-  FileText, CreditCard, Bell, Shield, TrendingUp, Folder
-} from 'lucide-react';import { useAuth } from '../context/AuthContext';
+  FileText, CreditCard, Bell, Shield, TrendingUp, Folder,
+  Home, Layers, BarChart2, Wallet
+} from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 
 // ── Nav items per role ─────────────────────────────────────────
 const NAV_BY_ROLE = {
 
-  // ── ADMIN (school owner via Supabase) ──────────────────────
+  // ── ADMIN ──────────────────────────────────────────────────
   admin: [
-    { section: '🏫 School Mgmt' },
-    { to: '/sms/dashboard',       icon: LayoutDashboard, label: 'SMS Dashboard' },
-    { to: '/sms/admin',           icon: Shield,          label: 'Staff Management' },
-    { to: '/sms/students',        icon: Users,           label: 'Registration' },
-    { to: '/sms/marks',           icon: BookOpen,        label: 'Marks & Grades' },
-    { to: '/sms/bulletins',       icon: FileText,        label: 'Bulletins' },
-    { to: '/sms/promotion',       icon: TrendingUp,      label: 'Promotion' },
-    { to: '/sms/finance',         icon: CreditCard,      label: 'Finance' },
-    { to: '/sms/notifications',   icon: Bell,            label: 'Notifications' },
-    { section: 'Account' },
-    { to: '/profile',             icon: UserCircle,      label: 'My Profile' },
-    { to: '/settings',            icon: Settings,        label: 'Settings' },
+    { section: 'Overview' },
+    { to: '/sms/dashboard',     icon: Home,          label: 'Dashboard' },
+
+    { section: 'People' },
+    { to: '/sms/admin',         icon: Shield,        label: 'Staff Management' },
+    { to: '/sms/students',      icon: Users,         label: 'Students' },
+
+    { section: 'Academics' },
+    { to: '/sms/marks',         icon: BookOpen,      label: 'Marks & Grades' },
+    { to: '/sms/bulletins',     icon: FileText,      label: 'Bulletins' },
+    { to: '/sms/promotion',     icon: TrendingUp,    label: 'Promotion' },
+
+    { section: 'Administration' },
+    { to: '/sms/finance',       icon: CreditCard,    label: 'Finance' },
+    { to: '/sms/notifications', icon: Bell,          label: 'Notifications' },
+    { to: '/settings',          icon: Settings,      label: 'Settings' },
   ],
 
   // ── SECRETARY ──────────────────────────────────────────────
   secretary: [
-    { section: 'My Dashboard' },
-    { to: '/sms/dashboard',       icon: LayoutDashboard, label: 'Dashboard' },
+    { section: 'Overview' },
+    { to: '/sms/dashboard',       icon: Home,          label: 'Dashboard' },
+
     { section: 'Students' },
-    { to: '/sms/students',        icon: Users,           label: 'Registration' },
-    { to: '/upload',              icon: Upload,          label: 'Upload Photos/CSV' },
-    { to: '/search',              icon: Search,          label: 'Search Student' },
+    { to: '/sms/students',        icon: Users,         label: 'Registration' },
+    { to: '/upload',              icon: Upload,        label: 'Upload Photos/CSV' },
+    { to: '/search',              icon: Search,        label: 'Search Student' },
+
     { section: 'Certificates' },
-    { to: '/generate',            icon: Award,           label: 'Generate Certificate' },
-    { to: '/print-all',           icon: Printer,         label: 'Print All' },
-    { to: '/templates/Top Class', icon: GraduationCap,   label: 'Top Class' },
-    { to: '/templates/P6',        icon: GraduationCap,   label: 'P6' },
-    { to: '/templates/S3',        icon: GraduationCap,   label: 'S3' },
-    { to: '/templates/S6',        icon: GraduationCap,   label: 'S6' },
+    { to: '/generate',            icon: Award,         label: 'Generate Certificate' },
+    { to: '/print-all',           icon: Printer,       label: 'Print All' },
+    { to: '/templates/Top Class', icon: GraduationCap, label: 'Top Class' },
+    { to: '/templates/P6',        icon: GraduationCap, label: 'P6' },
+    { to: '/templates/S3',        icon: GraduationCap, label: 'S3' },
+    { to: '/templates/S6',        icon: GraduationCap, label: 'S6' },
+
     { section: 'Report Cards' },
-    { to: '/sms/bulletins',       icon: FileText,        label: 'Print Bulletins' },
+    { to: '/sms/bulletins',       icon: FileText,      label: 'Print Bulletins' },
+
     { section: 'Documents' },
-    { to: '/sms/documents',       icon: Folder,          label: 'School Documents' },
+    { to: '/sms/documents',       icon: Folder,        label: 'School Documents' },
   ],
 
   // ── TEACHER ────────────────────────────────────────────────
   teacher: [
-    { section: 'My Dashboard' },
-    { to: '/sms/dashboard',     icon: LayoutDashboard, label: 'Dashboard' },
+    { section: 'Overview' },
+    { to: '/sms/dashboard',   icon: Home,      label: 'Dashboard' },
+
     { section: 'Academics' },
-    { to: '/sms/marks',         icon: BookOpen,        label: 'Enter Marks' },
-    { to: '/sms/bulletins',     icon: FileText,        label: 'View Bulletins' },
+    { to: '/sms/marks',       icon: BookOpen,  label: 'Enter Marks' },
+    { to: '/sms/bulletins',   icon: FileText,  label: 'View Bulletins' },
   ],
 
   // ── FINANCE ────────────────────────────────────────────────
   finance: [
-    { section: 'My Dashboard' },
-    { to: '/sms/dashboard',     icon: LayoutDashboard, label: 'Dashboard' },
+    { section: 'Overview' },
+    { to: '/sms/dashboard',     icon: Home,       label: 'Dashboard' },
+
     { section: 'Finance' },
-    { to: '/sms/finance',       icon: CreditCard,      label: 'Fees & Payments' },
-    { to: '/sms/notifications', icon: Bell,            label: 'Fee Reminders' },
+    { to: '/sms/finance',       icon: CreditCard, label: 'Fees & Payments' },
+    { to: '/sms/notifications', icon: Bell,       label: 'Fee Reminders' },
   ],
 
-  // ── DIRECTOR OF STUDIES ─────────────────────────────────────
+  // ── DIRECTOR OF STUDIES ────────────────────────────────────
   dos: [
-    { section: 'My Dashboard' },
-    { to: '/sms/dashboard',     icon: LayoutDashboard, label: 'Dashboard' },
+    { section: 'Overview' },
+    { to: '/sms/dashboard',   icon: Home,       label: 'Dashboard' },
+
     { section: 'Academics' },
-    { to: '/sms/students',      icon: Users,           label: 'Students' },
-    { to: '/sms/marks',         icon: BookOpen,        label: 'Marks & Grades' },
-    { to: '/sms/bulletins',     icon: FileText,        label: 'Bulletins' },
-    { to: '/sms/promotion',     icon: TrendingUp,      label: 'Promotion' },
-    { to: '/classes',           icon: BookOpen,        label: 'Classes' },
+    { to: '/sms/students',    icon: Users,      label: 'Students' },
+    { to: '/sms/marks',       icon: BookOpen,   label: 'Marks & Grades' },
+    { to: '/sms/bulletins',   icon: FileText,   label: 'Bulletins' },
+    { to: '/sms/promotion',   icon: TrendingUp, label: 'Promotion' },
+    { to: '/classes',         icon: Layers,     label: 'Classes' },
   ],
 };
 
@@ -90,38 +103,36 @@ export default function Layout() {
   // Detect current role
   const staffData  = localStorage.getItem('staff_data');
   const staffToken = localStorage.getItem('staff_token');
-  let currentRole = 'admin';
-  let currentName = school?.school_name || 'SchoolMS';
-  let currentSubtitle = school?.active_year || '';
-  let isStaffLogin = false;
+  let currentRole     = 'admin';
+  let currentName     = school?.school_name || 'SchoolMS';
+  let currentSubtitle = school?.active_year ? `Year ${school.active_year}` : '';
+  let isStaffLogin    = false;
 
   if (staffToken && staffData) {
-    const staff = JSON.parse(staffData);
-    currentRole    = staff.role || 'admin';
-    currentName    = staff.full_name || 'Staff';
-    const staffSchool = localStorage.getItem('staff_school');
-    if (staffSchool) {
-      const s = JSON.parse(staffSchool);
-      currentSubtitle = `${s.school_name} · ${s.active_year||''}`;
-    }
-    isStaffLogin = true;
+    try {
+      const staff = JSON.parse(staffData);
+      currentRole = staff.role || 'admin';
+      currentName = staff.full_name || 'Staff';
+      const staffSchool = localStorage.getItem('staff_school');
+      if (staffSchool) {
+        const s = JSON.parse(staffSchool);
+        currentSubtitle = `${s.school_name || ''}${s.active_year ? ' · ' + s.active_year : ''}`;
+      }
+      isStaffLogin = true;
+    } catch {}
   }
 
   const NAV = NAV_BY_ROLE[currentRole] || NAV_BY_ROLE.admin;
 
   const handleLogout = () => {
     if (isStaffLogin) {
-      // Logout staff session
       localStorage.removeItem('staff_token');
       localStorage.removeItem('staff_data');
       localStorage.removeItem('staff_school');
-      toast.success('Logged out');
-      navigate('/staff-login');
-    } else {
-      logout();
-      toast.success('Logged out');
-      navigate('/login');
     }
+    logout();
+    toast.success('Logged out');
+    navigate('/login');
   };
 
   const ROLE_LABELS = { admin:'Administrator', secretary:'Secretary', teacher:'Teacher', finance:'Finance', dos:'Director of Studies' };
@@ -172,22 +183,28 @@ export default function Layout() {
                 <School className="w-4 h-4 text-white" />
               </div>
               <div className="min-w-0">
-                <p className="text-xs font-semibold text-white truncate">{currentName}</p>
-                <p className="text-xs text-blue-400 truncate">{currentSubtitle}</p>
+                <p className="text-xs font-semibold text-white truncate">
+                  {isStaffLogin
+                    ? ((() => { try { return JSON.parse(localStorage.getItem('staff_school') || '{}').school_name || 'School'; } catch { return 'School'; } })())
+                    : (school?.school_name || 'My School')}
+                </p>
+                <p className="text-xs text-blue-400 truncate">
+                  {isStaffLogin
+                    ? ((() => { try { const s = JSON.parse(localStorage.getItem('staff_school') || '{}'); return s.active_year ? `Year ${s.active_year}` : ''; } catch { return ''; } })())
+                    : (school?.active_year ? `Year ${school.active_year}` : '')}
+                </p>
               </div>
             </div>
-            {isStaffLogin && (
-              <div className="mt-1.5">
-                <span className={`text-xs font-bold px-2 py-0.5 rounded-full
-                  ${currentRole==='admin'?'bg-red-900 text-red-300':
-                    currentRole==='secretary'?'bg-green-900 text-green-300':
-                    currentRole==='teacher'?'bg-blue-900 text-blue-300':
-                    currentRole==='finance'?'bg-amber-900 text-amber-300':
-                    'bg-purple-900 text-purple-300'}`}>
-                  {ROLE_LABELS[currentRole]||currentRole}
-                </span>
-              </div>
-            )}
+            <div className="mt-1.5">
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-full
+                ${currentRole==='admin'    ? 'bg-red-900 text-red-300'    :
+                  currentRole==='secretary'? 'bg-green-900 text-green-300' :
+                  currentRole==='teacher'  ? 'bg-blue-900 text-blue-300'   :
+                  currentRole==='finance'  ? 'bg-amber-900 text-amber-300' :
+                                             'bg-purple-900 text-purple-300'}`}>
+                {ROLE_LABELS[currentRole] || currentRole}
+              </span>
+            </div>
           </div>
         )}
 
