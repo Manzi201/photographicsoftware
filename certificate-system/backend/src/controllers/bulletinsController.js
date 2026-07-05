@@ -1,5 +1,5 @@
 const { supabase } = require('../supabase');
-const { PDFDocument, rgb, StandardFonts, degrees } = require('pdf-lib');
+const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
 const fontkit = require('@pdf-lib/fontkit');
 const fs   = require('fs');
 const path = require('path');
@@ -23,12 +23,8 @@ async function embedImg(doc, buf) {
   try { return await doc.embedPng(buf); } catch {}
   return null;
 }
-function gradeColor(pct) {
-  if (pct >= 80) return rgb(0.00, 0.50, 0.10);
-  if (pct >= 60) return rgb(0.04, 0.36, 0.72);
-  if (pct >= 50) return rgb(0.60, 0.40, 0.00);
-  return rgb(0.75, 0.05, 0.05);
-}
+
+// ── Grade helpers ─────────────────────────────────────────────
 function grade(pct) {
   if (pct >= 80) return 'A1';
   if (pct >= 70) return 'B2';
@@ -38,8 +34,22 @@ function grade(pct) {
   return 'F';
 }
 
-// ── Generate a single bulletin PDF ────────────────────────────
-async function generateBulletinPDF(student, marks, subjects, classInfo, termInfo, yearInfo, school, bulletinMeta) {
+// ── Draw centered text helper ─────────────────────────────────
+function drawCentered(page, text, font, size, color, x, width, y) {
+  const tw = font.widthOfTextAtSize(text, size);
+  page.drawText(text, { x: x + (width - tw) / 2, y, size, font, color });
+}
+
+// ── Draw bordered cell ────────────────────────────────────────
+function drawCell(page, x, y, w, h, bgColor) {
+  if (bgColor) page.drawRectangle({ x, y, width: w, height: h, color: bgColor });
+  page.drawRectangle({ x, y, width: w, height: h, borderColor: rgb(0.2, 0.2, 0.4), borderWidth: 0.5 });
+}
+
+// ════════════════════════════════════════════════════════════════
+// GENERATE BULLETIN PDF — Rwandan school report card format
+// ════════════════════════════════════════════════════════════════
+async function generateBulletinPDF(student, marks, subjects, classInfo, termInfo, yearInfo, school, meta) {
   const doc = await PDFDocument.create();
   doc.registerFontkit(fontkit);
 
@@ -49,170 +59,267 @@ async function generateBulletinPDF(student, marks, subjects, classInfo, termInfo
   };
   const B  = await loadFont('Montserrat-Bold.ttf');
   const R  = await loadFont('Montserrat-Regular.ttf');
-  const I  = await loadFont('Montserrat-Italic.ttf');
   const SB = await loadFont('Montserrat-SemiBold.ttf');
 
-  const page = doc.addPage([595.28, 841.89]); // A4 Portrait
+  const page = doc.addPage([595.28, 841.89]); // A4
   const W = 595.28, H = 841.89;
+  const NAVY  = rgb(0.04, 0.14, 0.40);
+  const WHITE = rgb(1, 1, 1);
+  const BLACK = rgb(0.05, 0.05, 0.05);
+  const LGRAY = rgb(0.93, 0.94, 0.97);
+  const MGRAY = rgb(0.75, 0.75, 0.80);
 
-  const navy = rgb(0.05, 0.14, 0.40);
-  const gold = rgb(0.75, 0.55, 0.00);
-  const ltGray = rgb(0.96, 0.96, 0.97);
-  const dkGray = rgb(0.30, 0.30, 0.32);
-  const black  = rgb(0.08, 0.08, 0.08);
+  const ML = 20, MR = 20; // margins
+  const CW = W - ML - MR;  // content width
 
-  // ── Header ───────────────────────────────────────────────────
-  page.drawRectangle({ x:0, y:H-90, width:W, height:90, color:navy });
-  page.drawRectangle({ x:0, y:H-95, width:W, height:5, color:gold });
+  // ── TOP HEADER (3 columns) ───────────────────────────────────
+  const HDR_H = 90;
+  page.drawRectangle({ x: 0, y: H - HDR_H, width: W, height: HDR_H, color: WHITE });
+  page.drawLine({ start:{x:0,y:H-HDR_H}, end:{x:W,y:H-HDR_H}, thickness:2, color:NAVY });
 
-  // Logo
+  // Left: Republic + School info
+  const sn = school.school_name || 'My School';
+  const cityAddr = school.address || school.city || 'Kigali';
+  page.drawText('REPUBLIC OF RWANDA', { x:ML, y:H-18, size:8, font:B, color:NAVY });
+  page.drawText(sn, { x:ML, y:H-30, size:8, font:B, color:BLACK });
+  page.drawText(cityAddr, { x:ML, y:H-41, size:7, font:R, color:BLACK });
+  if (school.phone) page.drawText(school.phone, { x:ML, y:H-52, size:7, font:R, color:BLACK });
+
+  // Center: Logo
+  const LOGO_X = (W - 60) / 2, LOGO_Y = H - HDR_H + 10;
   if (school.logo_url) {
     try {
       const buf = await fetchBuf(school.logo_url);
       const img = await embedImg(doc, buf);
-      if (img) page.drawImage(img, { x:18, y:H-82, width:66, height:66 });
+      if (img) page.drawImage(img, { x: LOGO_X, y: LOGO_Y, width: 60, height: 66 });
     } catch {}
+  } else {
+    page.drawRectangle({ x: LOGO_X, y: LOGO_Y, width: 60, height: 60, color: LGRAY });
+    drawCentered(page, sn.substring(0,2).toUpperCase(), B, 20, NAVY, LOGO_X, 60, LOGO_Y+22);
   }
 
-  // School name
-  const sn = (school.school_name || 'SCHOOL').toUpperCase();
-  let snSz = 18; while (B.widthOfTextAtSize(sn, snSz) > W-180 && snSz > 10) snSz--;
-  const snW = B.widthOfTextAtSize(sn, snSz);
-  page.drawText(sn, { x:(W-snW)/2, y:H-46, size:snSz, font:B, color:rgb(1,1,1) });
-  const rptTitle = bulletinMeta.is_annual ? 'ANNUAL REPORT CARD' : 'SCHOOL REPORT CARD';
-  const rtW = SB.widthOfTextAtSize(rptTitle, 11);
-  page.drawText(rptTitle, { x:(W-rtW)/2, y:H-62, size:11, font:SB, color:gold });
-  const termStr = `${termInfo?.name || ''} — ${yearInfo?.name || ''}`;
-  const tsW = R.widthOfTextAtSize(termStr, 9);
-  page.drawText(termStr, { x:(W-tsW)/2, y:H-76, size:9, font:R, color:rgb(0.80,0.85,0.95) });
+  // Right: Ministry + Year + Term
+  const RX = W - 190;
+  page.drawText('MINISTRY OF EDUCATION', { x: RX, y: H-18, size:8, font:B, color:NAVY });
+  page.drawText(`School Year: ${yearInfo?.name || ''}`, { x:RX, y:H-30, size:8, font:R, color:BLACK });
+  const termLabel = meta.is_annual ? 'Annual Report' : (termInfo?.name || '');
+  const tlW = B.widthOfTextAtSize(termLabel, 10);
+  page.drawText(termLabel, { x: W - MR - tlW, y: H-46, size:10, font:B, color:NAVY });
 
-  // ── Student Info Banner ──────────────────────────────────────
-  const infoY = H - 95;
-  page.drawRectangle({ x:0, y:infoY-65, width:W, height:65, color:ltGray });
-  page.drawLine({ start:{x:0,y:infoY-65}, end:{x:W,y:infoY-65}, thickness:0.8, color:rgb(0.85,0.85,0.88) });
+  // ── REPORT CARD TITLE BAR ────────────────────────────────────
+  const TITLE_Y = H - HDR_H - 22;
+  page.drawRectangle({ x: ML, y: TITLE_Y, width: CW, height: 20, color: NAVY });
+  const title = meta.is_annual ? 'ANNUAL REPORT CARD' : 'REPORT CARD';
+  drawCentered(page, title, B, 12, WHITE, ML, CW, TITLE_Y + 5);
 
-  // Student photo
+  // ── STUDENT INFO ROW ─────────────────────────────────────────
+  const INFO_Y = TITLE_Y - 70;
+  page.drawRectangle({ x:ML, y:INFO_Y, width:CW, height:68, color:WHITE });
+  page.drawRectangle({ x:ML, y:INFO_Y, width:CW, height:68, borderColor:NAVY, borderWidth:0.8 });
+
+  // Photo box left
+  const PH_W = 52, PH_H = 64;
+  page.drawRectangle({ x:ML+4, y:INFO_Y+2, width:PH_W, height:PH_H, color:LGRAY });
   if (student.photo_url) {
     try {
       const buf = await fetchBuf(student.photo_url);
       const img = await embedImg(doc, buf);
-      if (img) page.drawImage(img, { x:16, y:infoY-62, width:46, height:58 });
+      if (img) page.drawImage(img, { x:ML+4, y:INFO_Y+2, width:PH_W, height:PH_H });
     } catch {}
-  } else {
-    page.drawRectangle({ x:16, y:infoY-62, width:46, height:58, color:rgb(0.88,0.88,0.90) });
   }
 
-  const ix = 72;
-  page.drawText(`${student.last_name.toUpperCase()} ${student.first_name}`, { x:ix, y:infoY-16, size:13, font:B, color:navy });
-  page.drawText(`ID: ${student.student_id || '—'}`, { x:ix, y:infoY-30, size:9, font:R, color:dkGray });
-  page.drawText(`Class: ${classInfo?.name || '—'}  |  Gender: ${student.gender || '—'}`, { x:ix, y:infoY-42, size:9, font:R, color:dkGray });
-  page.drawText(`Attendance: ${bulletinMeta.days_present || 0}/${(bulletinMeta.days_present || 0) + (bulletinMeta.days_absent || 0)} days`, { x:ix, y:infoY-54, size:9, font:R, color:dkGray });
-
-  // Rank + % on right
-  const pct = bulletinMeta.percentage || 0;
-  const rankStr = bulletinMeta.rank_in_class ? `${bulletinMeta.rank_in_class}/${bulletinMeta.class_size}` : '—';
-  page.drawText('TOTAL', { x:W-120, y:infoY-16, size:8, font:SB, color:navy });
-  page.drawText(`${pct.toFixed(1)}%`, { x:W-120, y:infoY-30, size:18, font:B, color:gradeColor(pct) });
-  page.drawText(grade(pct), { x:W-120, y:infoY-46, size:14, font:B, color:gradeColor(pct) });
-  page.drawText(`Rank: ${rankStr}`, { x:W-120, y:infoY-58, size:9, font:R, color:dkGray });
-
-  // ── Marks Table ──────────────────────────────────────────────
-  const tableTop = infoY - 78;
-  const cols = { subj:16, cat1:310, cat2:360, exam:410, total:460, pct:500, grade:545 };
-  const colW = { subj:290, cat1:46, cat2:46, exam:46, total:36, pct:42, grade:42 };
-
-  // Header row
-  page.drawRectangle({ x:12, y:tableTop-20, width:W-24, height:20, color:navy });
-  [['Subject', cols.subj], ['CA1', cols.cat1], ['CA2', cols.cat2], ['Exam', cols.exam],
-   ['Total', cols.total], ['%', cols.pct], ['Grade', cols.grade]
-  ].forEach(([label, x]) => {
-    const lw = B.widthOfTextAtSize(label, 8);
-    page.drawText(label, { x, y:tableTop-14, size:8, font:B, color:rgb(1,1,1) });
+  // Student fields
+  const IFX = ML + PH_W + 10;
+  const IFY = INFO_Y + 54;
+  const labelW = 95;
+  const fieldRows = [
+    ['STUDENT NAME:', `${student.last_name?.toUpperCase() || ''} ${student.first_name || ''}`],
+    ['BORN:', student.date_of_birth ? `${student.date_of_birth}` : 'at'],
+    ['ID NO.:', student.student_id || '—'],
+  ];
+  fieldRows.forEach(([lbl, val], i) => {
+    page.drawText(lbl, { x:IFX, y:IFY - i*18, size:8, font:R, color:MGRAY });
+    page.drawText(val, { x:IFX+labelW, y:IFY - i*18, size:9, font:B, color:BLACK });
   });
 
-  let rowY = tableTop - 22;
-  let totalWeighted = 0, totalCoeff = 0, totalMaxW = 0;
+  // Right column
+  const RCX = W/2 + 20;
+  const rightRows = [
+    ['CLASS:', classInfo?.name || '—'],
+    ['NO. OF STUDENTS:', String(meta.class_size || '—')],
+    ['CONDUCT:', `${meta.conduct || 'Good'}`],
+  ];
+  rightRows.forEach(([lbl, val], i) => {
+    page.drawText(lbl, { x:RCX, y:IFY - i*18, size:8, font:R, color:MGRAY });
+    page.drawText(val, { x:RCX+120, y:IFY - i*18, size:9, font:B, color:BLACK });
+  });
+
+  // ── MARKS TABLE ──────────────────────────────────────────────
+  // Columns: SUBJECTS | MAX POINT(TEST/EX/TOT) | O.P(TEST/EX/TOT) | RANK
+  const TBL_Y = INFO_Y - 2;      // top of table
+  const ROW_H = 16;
+
+  // Column x positions & widths
+  const C_SUBJ  = ML,           C_SUBJ_W  = 130;
+  const C_MTEST = ML+130,       C_COL_W   = 38;
+  const C_MEX   = ML+130+38;
+  const C_MTOT  = ML+130+76;
+  const C_OTEST = ML+130+114;
+  const C_OEX   = ML+130+152;
+  const C_OTOT  = ML+130+190;
+  const C_RANK  = ML+130+228,   C_RANK_W  = CW - 130 - 228;
+
+  // Group headers
+  const GHY = TBL_Y - ROW_H;
+  drawCell(page, C_SUBJ,  GHY, C_SUBJ_W, ROW_H, NAVY);
+  drawCell(page, C_MTEST, GHY, C_COL_W*3, ROW_H, NAVY);
+  drawCell(page, C_OTEST, GHY, C_COL_W*3, ROW_H, NAVY);
+  drawCell(page, C_RANK,  GHY, C_RANK_W, ROW_H, NAVY);
+  drawCentered(page,'SUBJECTS', B, 8, WHITE, C_SUBJ,  C_SUBJ_W,  GHY+4);
+  drawCentered(page,'MAX POINT',B, 8, WHITE, C_MTEST, C_COL_W*3, GHY+4);
+  drawCentered(page,'O.P',      B, 8, WHITE, C_OTEST, C_COL_W*3, GHY+4);
+  drawCentered(page,'RANK',     B, 8, WHITE, C_RANK,  C_RANK_W,  GHY+4);
+
+  // Sub-headers
+  const SHY = GHY - ROW_H;
+  const subCols = [
+    [C_SUBJ,'',C_SUBJ_W],[C_MTEST,'TEST',C_COL_W],[C_MEX,'EX',C_COL_W],[C_MTOT,'TOT',C_COL_W],
+    [C_OTEST,'TEST',C_COL_W],[C_OEX,'EX',C_COL_W],[C_OTOT,'TOT',C_COL_W],[C_RANK,'',C_RANK_W],
+  ];
+  subCols.forEach(([x,lbl,w]) => {
+    drawCell(page, x, SHY, w, ROW_H, LGRAY);
+    if (lbl) drawCentered(page, lbl, B, 7, NAVY, x, w, SHY+4);
+  });
+
+  // Subject rows
+  let rowY = SHY - ROW_H;
+  let grandTotalPts = 0, grandMaxPts = 0;
+  let grandTestMax = 0, grandExMax = 0;
+  let grandTestOp  = 0, grandExOp  = 0;
+
+  // Build per-subject rank (by subject total across class)
+  const subjectRanks = {};
 
   subjects.forEach((sub, idx) => {
-    const m = marks.find(mk => mk.subject_id === sub.id);
-    const isEven = idx % 2 === 0;
-    if (isEven) page.drawRectangle({ x:12, y:rowY-16, width:W-24, height:17, color:rgb(0.97,0.97,0.99) });
+    const m    = marks.find(mk => mk.subject_id === sub.id);
+    const bg   = idx % 2 === 0 ? WHITE : LGRAY;
+    const coef = sub.coefficient || 1;
+    const maxM = sub.max_marks || 100;
+    // Split max: TEST = half, EX = other half (or use cat marks directly)
+    const maxTest = m?.cat1 != null ? maxM / 2 : maxM / 2;
+    const maxEx   = m?.cat2 != null ? maxM / 2 : maxM / 2;
+    const opTest  = m?.cat1 ?? null;
+    const opEx    = m?.cat2 != null ? (parseFloat(m.cat2||0) + parseFloat(m.exam||0)) : (m?.exam ?? null);
+    const opTot   = m?.total ?? null;
 
-    const coef  = sub.coefficient || 1;
-    const maxM  = sub.max_marks   || 100;
-    const tot   = m?.total  ?? null;
-    const pctS  = tot !== null ? Math.min(100, (tot / maxM) * 100) : null;
-    const grd   = pctS !== null ? grade(pctS) : '—';
+    // Accumulate grand totals
+    grandTestMax += maxTest * coef;
+    grandExMax   += maxEx   * coef;
+    if (opTest != null) grandTestOp += parseFloat(opTest) * coef;
+    if (opEx   != null) grandExOp   += parseFloat(opEx)   * coef;
+    if (opTot  != null) { grandTotalPts += opTot * coef; grandMaxPts += maxM * coef; }
 
-    if (tot !== null) {
-      totalWeighted += tot * coef;
-      totalCoeff    += coef;
-      totalMaxW     += maxM * coef;
-    }
+    // Subject rank placeholder (rank in class for this subject)
+    const subRank = subjectRanks[sub.id] || '—';
 
-    page.drawText(sub.name, { x:cols.subj, y:rowY-12, size:9, font:R, color:black });
-    if (sub.coefficient > 1) page.drawText(`(×${sub.coefficient})`, { x:cols.subj+B.widthOfTextAtSize(sub.name,9)+4, y:rowY-12, size:7, font:I, color:navy });
-    page.drawText(m?.cat1  != null ? String(m.cat1)  : '—', { x:cols.cat1,  y:rowY-12, size:9, font:R, color:black });
-    page.drawText(m?.cat2  != null ? String(m.cat2)  : '—', { x:cols.cat2,  y:rowY-12, size:9, font:R, color:black });
-    page.drawText(m?.exam  != null ? String(m.exam)  : '—', { x:cols.exam,  y:rowY-12, size:9, font:R, color:black });
-    page.drawText(tot       != null ? tot.toFixed(1)  : '—', { x:cols.total, y:rowY-12, size:9, font:SB, color:black });
-    page.drawText(pctS      != null ? pctS.toFixed(1)+'%' : '—', { x:cols.pct, y:rowY-12, size:9, font:R, color:dkGray });
-    if (pctS !== null) page.drawText(grd, { x:cols.grade, y:rowY-12, size:9, font:B, color:gradeColor(pctS) });
-    page.drawLine({ start:{x:12,y:rowY-16}, end:{x:W-12,y:rowY-16}, thickness:0.3, color:rgb(0.88,0.88,0.90) });
-    rowY -= 17;
+    [C_SUBJ,C_MTEST,C_MEX,C_MTOT,C_OTEST,C_OEX,C_OTOT,C_RANK].forEach((x,ci) => {
+      drawCell(page, x, rowY, ci===0?C_SUBJ_W:ci===7?C_RANK_W:C_COL_W, ROW_H, bg);
+    });
+
+    page.drawText(sub.name.toUpperCase(), { x:C_SUBJ+3, y:rowY+4, size:7.5, font:R, color:BLACK });
+    const fmtNum = n => n != null ? String(parseFloat(n.toFixed(1))) : '—';
+    drawCentered(page, fmtNum(maxTest), R, 8, BLACK, C_MTEST, C_COL_W, rowY+4);
+    drawCentered(page, fmtNum(maxEx),   R, 8, BLACK, C_MEX,   C_COL_W, rowY+4);
+    drawCentered(page, fmtNum(maxM),    R, 8, BLACK, C_MTOT,  C_COL_W, rowY+4);
+    drawCentered(page, fmtNum(opTest),  R, 8, BLACK, C_OTEST, C_COL_W, rowY+4);
+    drawCentered(page, fmtNum(opEx),    R, 8, BLACK, C_OEX,   C_COL_W, rowY+4);
+    drawCentered(page, fmtNum(opTot),   SB,8, BLACK, C_OTOT,  C_COL_W, rowY+4);
+    drawCentered(page, String(subRank), R, 8, BLACK, C_RANK,  C_RANK_W,rowY+4);
+    rowY -= ROW_H;
   });
 
-  // Total row
-  const finalPct = totalMaxW > 0 ? (totalWeighted / totalMaxW) * 100 : 0;
-  page.drawRectangle({ x:12, y:rowY-18, width:W-24, height:19, color:navy });
-  page.drawText('OVERALL', { x:cols.subj, y:rowY-12, size:9, font:B, color:rgb(1,1,1) });
-  page.drawText(totalWeighted.toFixed(1), { x:cols.total, y:rowY-12, size:9, font:B, color:gold });
-  page.drawText(finalPct.toFixed(1)+'%', { x:cols.pct, y:rowY-12, size:9, font:B, color:gold });
-  page.drawText(grade(finalPct), { x:cols.grade, y:rowY-12, size:9, font:B, color:gold });
-  rowY -= 20;
+  // TOTAL row
+  drawCell(page, C_SUBJ,  rowY, C_SUBJ_W,  ROW_H, NAVY);
+  [C_MTEST,C_MEX,C_MTOT,C_OTEST,C_OEX,C_OTOT,C_RANK].forEach((x,ci) => {
+    drawCell(page, x, rowY, ci===6?C_RANK_W:C_COL_W, ROW_H, NAVY);
+  });
+  page.drawText('TOTAL', { x:C_SUBJ+3, y:rowY+4, size:8, font:B, color:WHITE });
+  const fmt = n => String(parseFloat(n.toFixed(1)));
+  drawCentered(page,fmt(grandTestMax),B,8,WHITE,C_MTEST,C_COL_W,rowY+4);
+  drawCentered(page,fmt(grandExMax),  B,8,WHITE,C_MEX,  C_COL_W,rowY+4);
+  drawCentered(page,fmt(grandMaxPts), B,8,WHITE,C_MTOT, C_COL_W,rowY+4);
+  drawCentered(page,fmt(grandTestOp), B,8,WHITE,C_OTEST,C_COL_W,rowY+4);
+  drawCentered(page,fmt(grandExOp),   B,8,WHITE,C_OEX,  C_COL_W,rowY+4);
+  drawCentered(page,fmt(grandTotalPts),B,8,WHITE,C_OTOT, C_COL_W,rowY+4);
+  rowY -= ROW_H;
 
-  // ── Remarks ──────────────────────────────────────────────────
-  rowY -= 12;
-  page.drawText('Class Teacher Remarks:', { x:16, y:rowY, size:9, font:SB, color:navy });
-  page.drawLine({ start:{x:16,y:rowY-14}, end:{x:W/2-10,y:rowY-14}, thickness:0.6, color:rgb(0.7,0.7,0.7) });
-  if (bulletinMeta.teacher_remarks) page.drawText(bulletinMeta.teacher_remarks, { x:16, y:rowY-12, size:9, font:I, color:dkGray });
+  // ── AVERAGE + RANK BAR ───────────────────────────────────────
+  rowY -= 4;
+  const avgPct = grandMaxPts > 0 ? (grandTotalPts / grandMaxPts * 100) : (meta.percentage || 0);
+  const rankStr = meta.rank_in_class ? `${meta.rank_in_class} out of ${meta.class_size}` : '—';
 
-  page.drawText("Head Teacher's Remarks:", { x:W/2+5, y:rowY, size:9, font:SB, color:navy });
-  page.drawLine({ start:{x:W/2+5,y:rowY-14}, end:{x:W-16,y:rowY-14}, thickness:0.6, color:rgb(0.7,0.7,0.7) });
-  if (bulletinMeta.head_remarks) page.drawText(bulletinMeta.head_remarks, { x:W/2+5, y:rowY-12, size:9, font:I, color:dkGray });
-  rowY -= 30;
+  page.drawRectangle({ x:ML, y:rowY-ROW_H, width:CW/2-4, height:ROW_H, color:LGRAY, borderColor:NAVY, borderWidth:0.6 });
+  page.drawRectangle({ x:ML+CW/2+4, y:rowY-ROW_H, width:CW/2-4, height:ROW_H, color:LGRAY, borderColor:NAVY, borderWidth:0.6 });
+  page.drawText('AVERAGE:', { x:ML+8, y:rowY-ROW_H+5, size:9, font:B, color:NAVY });
+  page.drawText(`${avgPct.toFixed(1)}%`, { x:ML+80, y:rowY-ROW_H+5, size:11, font:B, color:NAVY });
+  page.drawText('RANK:', { x:ML+CW/2+12, y:rowY-ROW_H+5, size:9, font:B, color:NAVY });
+  page.drawText(rankStr, { x:ML+CW/2+60, y:rowY-ROW_H+5, size:11, font:B, color:NAVY });
+  rowY -= (ROW_H + 10);
 
-  // ── Signatures ───────────────────────────────────────────────
-  page.drawLine({ start:{x:20,y:rowY-14}, end:{x:160,y:rowY-14}, thickness:0.7, color:rgb(0.5,0.5,0.5) });
-  page.drawText('Class Teacher', { x:20, y:rowY-26, size:9, font:R, color:dkGray });
-  page.drawLine({ start:{x:W/2-60,y:rowY-14}, end:{x:W/2+60,y:rowY-14}, thickness:0.7, color:rgb(0.5,0.5,0.5) });
-  page.drawText('Head Teacher', { x:W/2-60+(120-SB.widthOfTextAtSize('Head Teacher',9))/2, y:rowY-26, size:9, font:R, color:dkGray });
-  page.drawLine({ start:{x:W-170,y:rowY-14}, end:{x:W-20,y:rowY-14}, thickness:0.7, color:rgb(0.5,0.5,0.5) });
-  page.drawText('Parent / Guardian', { x:W-170, y:rowY-26, size:9, font:R, color:dkGray });
+  // ── OBSERVATIONS + SIGNATURES ────────────────────────────────
+  const OBS_H = 80;
+  const OBS_W = CW * 0.55;
+  const SIG_W = CW - OBS_W - 4;
+  const SIG_X = ML + OBS_W + 4;
 
-  // Signature image
+  // Observations box
+  page.drawRectangle({ x:ML, y:rowY-OBS_H, width:OBS_W, height:OBS_H, color:WHITE, borderColor:NAVY, borderWidth:0.6 });
+  drawCentered(page, 'OBSERVATIONS', B, 8, NAVY, ML, OBS_W, rowY-12);
+  // Lines for writing
+  for (let i = 1; i <= 3; i++) {
+    page.drawLine({ start:{x:ML+8, y:rowY-12-i*16}, end:{x:ML+OBS_W-8, y:rowY-12-i*16}, thickness:0.4, color:MGRAY });
+  }
+  if (meta.teacher_remarks) {
+    page.drawText(meta.teacher_remarks, { x:ML+8, y:rowY-26, size:8, font:R, color:BLACK, maxWidth:OBS_W-16 });
+  }
+
+  // Signatures box
+  page.drawRectangle({ x:SIG_X, y:rowY-OBS_H, width:SIG_W, height:OBS_H, color:WHITE, borderColor:NAVY, borderWidth:0.6 });
+  const SIG_MID = rowY - OBS_H/2 - 2;
+
+  // Teacher signature
+  page.drawText('TEACHER SIGNATURE', { x:SIG_X+8, y:rowY-14, size:7.5, font:B, color:NAVY });
+  page.drawLine({ start:{x:SIG_X+8,y:rowY-28}, end:{x:SIG_X+SIG_W-40,y:rowY-28}, thickness:0.5, color:MGRAY });
+  page.drawText('Date: ___________', { x:SIG_X+SIG_W-80, y:rowY-28, size:7, font:R, color:MGRAY });
   if (school.signature_url) {
     try {
       const buf = await fetchBuf(school.signature_url);
       const img = await embedImg(doc, buf);
-      if (img) page.drawImage(img, { x:W/2-55, y:rowY-12, width:110, height:24, opacity:0.85 });
+      if (img) page.drawImage(img, { x:SIG_X+8, y:rowY-40, width:70, height:18, opacity:0.8 });
     } catch {}
   }
 
-  // ── Footer ───────────────────────────────────────────────────
-  page.drawRectangle({ x:0, y:0, width:W, height:28, color:navy });
-  const date = new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'long', year:'numeric' });
-  page.drawText(`Issued: ${date}`, { x:16, y:10, size:8, font:R, color:rgb(0.75,0.80,0.95) });
-  const stamp = `${school.school_name || ''} — Official Report Card`;
-  const stW = R.widthOfTextAtSize(stamp, 8);
-  page.drawText(stamp, { x:(W-stW)/2, y:10, size:8, font:R, color:gold });
+  // Divider
+  page.drawLine({ start:{x:SIG_X+8,y:SIG_MID}, end:{x:SIG_X+SIG_W-8,y:SIG_MID}, thickness:0.4, color:MGRAY });
+
+  // Parent signature
+  page.drawText('PARENT SIGNATURE', { x:SIG_X+8, y:SIG_MID-12, size:7.5, font:B, color:NAVY });
+  page.drawLine({ start:{x:SIG_X+8,y:SIG_MID-26}, end:{x:SIG_X+SIG_W-40,y:SIG_MID-26}, thickness:0.5, color:MGRAY });
+  page.drawText('Date: ___________', { x:SIG_X+SIG_W-80, y:SIG_MID-26, size:7, font:R, color:MGRAY });
+
+  // ── FOOTER ───────────────────────────────────────────────────
+  page.drawLine({ start:{x:ML,y:28}, end:{x:W-MR,y:28}, thickness:0.8, color:NAVY });
+  const footerText = school.cert_purpose || 'EDUCATION FOR LIFE';
+  drawCentered(page, `— ${footerText} —`, R, 8, NAVY, ML, CW, 14);
 
   return await doc.save();
 }
 
-// ── CONTROLLERS ───────────────────────────────────────────────
 
-// GET /api/sms/bulletins?student_id=&term_id=
+// ════════════════════════════════════════════════════════════════
+// CONTROLLERS
+// ════════════════════════════════════════════════════════════════
+
 exports.getBulletins = async (req, res) => {
   try {
     const { student_id, term_id, class_id } = req.query;
@@ -228,184 +335,101 @@ exports.getBulletins = async (req, res) => {
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 };
 
-// ── Helper: compute marks for Annual (average of T1+T2+T3) ───
 async function computeAnnualMarks(studentId, classId, schoolId, academicYearId) {
-  // Get the 3 term IDs for this year
   const { data: allTerms } = await supabase.from('terms')
     .select('id,number').eq('academic_year_id', academicYearId).eq('school_id', schoolId)
     .in('number', [1, 2, 3]);
-
   if (!allTerms?.length) return [];
-
-  // Get marks for each term
   const allMarks = await Promise.all(allTerms.map(t =>
-    supabase.from('marks').select('*, subject:subjects(*)')
-      .eq('student_id', studentId).eq('term_id', t.id)
+    supabase.from('marks').select('*, subject:subjects(*)').eq('student_id', studentId).eq('term_id', t.id)
   ));
-
-  // Build averaged marks per subject
   const subjectMap = {};
   allMarks.forEach(({ data: mks }) => {
     (mks || []).forEach(m => {
       if (!subjectMap[m.subject_id]) subjectMap[m.subject_id] = { ...m, _count: 0, _totalSum: 0 };
-      if (m.total != null) {
-        subjectMap[m.subject_id]._totalSum += m.total;
-        subjectMap[m.subject_id]._count    += 1;
-      }
+      if (m.total != null) { subjectMap[m.subject_id]._totalSum += m.total; subjectMap[m.subject_id]._count += 1; }
     });
   });
-
   return Object.values(subjectMap).map(m => ({
-    ...m,
-    cat1: null, cat2: null, exam: null,
+    ...m, cat1: null, cat2: null, exam: null,
     total: m._count > 0 ? parseFloat((m._totalSum / m._count).toFixed(2)) : null,
   }));
 }
 
-// POST /api/sms/bulletins/generate — generate PDF for one student
 exports.generateOne = async (req, res) => {
   try {
     const { student_id, term_id, class_id, academic_year_id, teacher_remarks, head_remarks, conduct, days_present, days_absent } = req.body;
-
-    // Get term info to check if Annual
     const { data: termInfo } = await supabase.from('terms').select('*').eq('id', term_id).single();
     const isAnnual = termInfo?.number === 4;
-
     const [{ data: student }, { data: classSubs }, { data: yearInfo }, { data: classInfo }] = await Promise.all([
       supabase.from('student_profiles').select('*').eq('id', student_id).single(),
       supabase.from('class_subjects').select('*, subject:subjects(*)').eq('class_id', class_id),
       supabase.from('academic_years').select('*').eq('id', academic_year_id).single(),
       supabase.from('classes').select('*').eq('id', class_id).single(),
     ]);
-
     const subjects = (classSubs || []).map(cs => cs.subject);
-
-    // Get marks — averaged if Annual
     let marks;
     if (isAnnual) {
       marks = await computeAnnualMarks(student_id, class_id, req.schoolId, academic_year_id);
     } else {
-      const { data: m } = await supabase.from('marks').select('*, subject:subjects(*)')
-        .eq('student_id', student_id).eq('term_id', term_id);
+      const { data: m } = await supabase.from('marks').select('*, subject:subjects(*)').eq('student_id', student_id).eq('term_id', term_id);
       marks = m || [];
     }
-
-    // Calculate totals
-    const { data: allBulletins } = await supabase.from('bulletins')
-      .select('student_id, percentage').eq('term_id', term_id).eq('class_id', class_id);
-
-    let totalWeighted = 0, totalMaxW = 0;
+    const { data: allBulletins } = await supabase.from('bulletins').select('student_id,percentage').eq('term_id', term_id).eq('class_id', class_id);
+    let tw = 0, tmx = 0;
     subjects.forEach(sub => {
       const m = marks.find(mk => mk.subject_id === sub.id);
-      if (m?.total != null) {
-        totalWeighted += m.total * (sub.coefficient || 1);
-        totalMaxW     += (sub.max_marks || 100) * (sub.coefficient || 1);
-      }
+      if (m?.total != null) { tw += m.total * (sub.coefficient||1); tmx += (sub.max_marks||100) * (sub.coefficient||1); }
     });
-    const pct = totalMaxW > 0 ? (totalWeighted / totalMaxW) * 100 : 0;
-
-    const peers = [...(allBulletins || []), { student_id, percentage: pct }]
-      .sort((a, b) => (b.percentage || 0) - (a.percentage || 0));
+    const pct = tmx > 0 ? (tw / tmx) * 100 : 0;
+    const peers = [...(allBulletins||[]), { student_id, percentage: pct }].sort((a,b)=>(b.percentage||0)-(a.percentage||0));
     const rank = peers.findIndex(p => p.student_id === student_id) + 1;
-
-    const bulletinMeta = {
-      percentage: pct, rank_in_class: rank, class_size: peers.length,
-      teacher_remarks, head_remarks, conduct: conduct || 'Good',
-      days_present: parseInt(days_present || 0), days_absent: parseInt(days_absent || 0),
-      is_annual: isAnnual,
-    };
-
-    const pdfBytes = await generateBulletinPDF(
-      student, marks, subjects, classInfo, termInfo, yearInfo, req.school, bulletinMeta
-    );
-
-    await supabase.from('bulletins').upsert([{
-      school_id: req.schoolId, student_id, term_id, class_id, academic_year_id,
-      total_marks: totalWeighted, max_possible: totalMaxW,
-      percentage: pct, rank_in_class: rank, class_size: peers.length,
-      grade: pct >= 80 ? 'A1' : pct >= 70 ? 'B2' : pct >= 60 ? 'C3' : pct >= 50 ? 'D4' : 'F',
-      conduct, teacher_remarks, head_remarks,
-      days_present: parseInt(days_present || 0), days_absent: parseInt(days_absent || 0),
-      generated_at: new Date().toISOString(), generated_by: req.staff?.id || null,
-    }], { onConflict: 'student_id,term_id' });
-
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${student.student_id || student_id}_bulletin.pdf"`);
+    const bulletinMeta = { percentage:pct, rank_in_class:rank, class_size:peers.length, teacher_remarks, head_remarks, conduct:conduct||'Good', days_present:parseInt(days_present||0), days_absent:parseInt(days_absent||0), is_annual:isAnnual };
+    const pdfBytes = await generateBulletinPDF(student, marks, subjects, classInfo, termInfo, yearInfo, req.school, bulletinMeta);
+    await supabase.from('bulletins').upsert([{ school_id:req.schoolId, student_id, term_id, class_id, academic_year_id, total_marks:tw, max_possible:tmx, percentage:pct, rank_in_class:rank, class_size:peers.length, grade:pct>=80?'A1':pct>=70?'B2':pct>=60?'C3':pct>=50?'D4':'F', conduct, teacher_remarks, head_remarks, days_present:parseInt(days_present||0), days_absent:parseInt(days_absent||0), generated_at:new Date().toISOString(), generated_by:req.staff?.id||null }], { onConflict:'student_id,term_id' });
+    res.setHeader('Content-Type','application/pdf');
+    res.setHeader('Content-Disposition',`attachment; filename="${student.student_id||student_id}_bulletin.pdf"`);
     res.send(Buffer.from(pdfBytes));
-  } catch (err) {
-    console.error('generateOne error:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
+  } catch (err) { console.error('generateOne error:', err); res.status(500).json({ success:false, error:err.message }); }
 };
 
-// POST /api/sms/bulletins/generate-class — generate all bulletins for a class/term
 exports.generateClass = async (req, res) => {
   try {
     const { term_id, class_id, academic_year_id, conduct, teacher_remarks, head_remarks } = req.body;
-
     const { data: termInfo } = await supabase.from('terms').select('*').eq('id', term_id).single();
     const isAnnual = termInfo?.number === 4;
-
-    const { data: students } = await supabase.from('student_profiles')
-      .select('*').eq('current_class_id', class_id).eq('status', 'active').eq('school_id', req.schoolId);
-
-    if (!students?.length) return res.status(404).json({ success: false, error: 'No students in class' });
-
+    const { data: students } = await supabase.from('student_profiles').select('*').eq('current_class_id', class_id).eq('status','active').eq('school_id', req.schoolId);
+    if (!students?.length) return res.status(404).json({ success:false, error:'No students in class' });
     const [{ data: classSubs }, { data: yearInfo }, { data: classInfo }] = await Promise.all([
       supabase.from('class_subjects').select('*, subject:subjects(*)').eq('class_id', class_id),
       supabase.from('academic_years').select('*').eq('id', academic_year_id).single(),
       supabase.from('classes').select('*').eq('id', class_id).single(),
     ]);
-    const subjects = (classSubs || []).map(cs => cs.subject);
-
-    // Get marks per student
+    const subjects = (classSubs||[]).map(cs=>cs.subject);
     let allMarksMap = {};
     if (isAnnual) {
-      for (const st of students) {
-        allMarksMap[st.id] = await computeAnnualMarks(st.id, class_id, req.schoolId, academic_year_id);
-      }
+      for (const st of students) allMarksMap[st.id] = await computeAnnualMarks(st.id, class_id, req.schoolId, academic_year_id);
     } else {
       const { data: allMarks } = await supabase.from('marks').select('*').eq('class_id', class_id).eq('term_id', term_id);
-      students.forEach(st => { allMarksMap[st.id] = (allMarks || []).filter(m => m.student_id === st.id); });
+      students.forEach(st => { allMarksMap[st.id] = (allMarks||[]).filter(m=>m.student_id===st.id); });
     }
-
-    // Calculate percentages for ranking
     const studentPcts = students.map(st => {
-      const stMarks = allMarksMap[st.id] || [];
-      let tw = 0, tmx = 0;
-      subjects.forEach(sub => {
-        const m = stMarks.find(mk => mk.subject_id === sub.id);
-        if (m?.total != null) { tw += m.total * (sub.coefficient||1); tmx += (sub.max_marks||100) * (sub.coefficient||1); }
-      });
-      return { student: st, pct: tmx > 0 ? (tw/tmx)*100 : 0, total: tw, maxTotal: tmx };
-    }).sort((a,b) => b.pct - a.pct);
-    studentPcts.forEach((sp,i) => { sp.rank = i+1; });
-
+      const sm = allMarksMap[st.id]||[]; let tw=0,tmx=0;
+      subjects.forEach(sub => { const m=sm.find(mk=>mk.subject_id===sub.id); if(m?.total!=null){tw+=m.total*(sub.coefficient||1);tmx+=(sub.max_marks||100)*(sub.coefficient||1);} });
+      return { student:st, pct:tmx>0?(tw/tmx)*100:0, total:tw, maxTotal:tmx };
+    }).sort((a,b)=>b.pct-a.pct);
+    studentPcts.forEach((sp,i)=>{ sp.rank=i+1; });
     const merged = await PDFDocument.create();
     for (const sp of studentPcts) {
-      const meta = {
-        percentage: sp.pct, rank_in_class: sp.rank, class_size: students.length,
-        teacher_remarks, head_remarks, conduct: conduct||'Good', days_present:0, days_absent:0, is_annual: isAnnual,
-      };
+      const meta = { percentage:sp.pct, rank_in_class:sp.rank, class_size:students.length, teacher_remarks, head_remarks, conduct:conduct||'Good', days_present:0, days_absent:0, is_annual:isAnnual };
       const bytes = await generateBulletinPDF(sp.student, allMarksMap[sp.student.id]||[], subjects, classInfo, termInfo, yearInfo, req.school, meta);
       const bDoc = await PDFDocument.load(bytes);
       const [pg] = await merged.copyPages(bDoc,[0]);
       merged.addPage(pg);
-
-      await supabase.from('bulletins').upsert([{
-        school_id:req.schoolId, student_id:sp.student.id, term_id, class_id, academic_year_id,
-        total_marks:sp.total, max_possible:sp.maxTotal, percentage:sp.pct,
-        rank_in_class:sp.rank, class_size:students.length,
-        grade: sp.pct>=80?'A1':sp.pct>=70?'B2':sp.pct>=60?'C3':sp.pct>=50?'D4':'F',
-        conduct, teacher_remarks, head_remarks, generated_at: new Date().toISOString(),
-      }],{onConflict:'student_id,term_id'});
+      await supabase.from('bulletins').upsert([{ school_id:req.schoolId, student_id:sp.student.id, term_id, class_id, academic_year_id, total_marks:sp.total, max_possible:sp.maxTotal, percentage:sp.pct, rank_in_class:sp.rank, class_size:students.length, grade:sp.pct>=80?'A1':sp.pct>=70?'B2':sp.pct>=60?'C3':sp.pct>=50?'D4':'F', conduct, teacher_remarks, head_remarks, generated_at:new Date().toISOString() }],{onConflict:'student_id,term_id'});
     }
-
     res.setHeader('Content-Type','application/pdf');
     res.setHeader('Content-Disposition',`attachment; filename="${classInfo?.name||'class'}_${isAnnual?'annual':termInfo?.name||''}_bulletins.pdf"`);
     res.send(Buffer.from(await merged.save()));
-  } catch (err) {
-    console.error('generateClass error:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
+  } catch (err) { console.error('generateClass error:', err); res.status(500).json({ success:false, error:err.message }); }
 };
