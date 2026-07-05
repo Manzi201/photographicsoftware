@@ -57,7 +57,8 @@ function AppRoutes() {
       <Routes>
         <Route path="/login"       element={<PublicRoute><Login /></PublicRoute>} />
         <Route path="/register"    element={<PublicRoute><Register /></PublicRoute>} />
-        <Route path="/staff-login" element={<StaffLogin />} />
+        {/* /staff-login now redirects to /login (unified) */}
+        <Route path="/staff-login" element={<Navigate to="/login" replace />} />
 
         <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route index                         element={<Dashboard />} />
