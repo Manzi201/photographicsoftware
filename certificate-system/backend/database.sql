@@ -1,11 +1,11 @@
 -- ================================================================
 -- SCHOOL MANAGEMENT SYSTEM — Complete Database Setup
--- Version: 2.0  |  Updated: 2026
+-- Version: 3.0  |  Updated: July 2026
 -- ================================================================
 -- HOW TO RUN:
 --   Go to Supabase Dashboard → SQL Editor → New Query
 --   Paste ALL of this file and click RUN
---   It is safe to run multiple times (uses IF NOT EXISTS / IF EXISTS)
+--   Safe to run multiple times (IF NOT EXISTS throughout)
 -- ================================================================
 
 
@@ -28,7 +28,6 @@ CREATE TABLE IF NOT EXISTS schools (
   city               VARCHAR(100) DEFAULT 'Kigali',
   phone              VARCHAR(30),
   address            TEXT,
-  -- Certificate text templates
   cert_line1         TEXT DEFAULT 'Has completed {class} at',
   cert_line2         TEXT DEFAULT 'in Academic year {year}',
   cert_purpose       TEXT DEFAULT 'This certificate is given for whichever purpose it may serve',
@@ -39,7 +38,7 @@ CREATE TABLE IF NOT EXISTS schools (
   updated_at         TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Certificate students (photo-based, legacy)
+-- Certificate students (photo-based, legacy certificate system)
 CREATE TABLE IF NOT EXISTS students (
   id           UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   school_id    UUID REFERENCES schools(id) ON DELETE CASCADE NOT NULL,
@@ -65,7 +64,7 @@ CREATE TABLE IF NOT EXISTS certificates (
   pdf_path     TEXT
 );
 
--- Staff accounts (all roles: admin/dos/teacher/secretary/finance)
+-- Staff accounts (admin / dos / teacher / secretary / finance)
 CREATE TABLE IF NOT EXISTS staff (
   id            UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   school_id     UUID REFERENCES schools(id) ON DELETE CASCADE NOT NULL,
@@ -83,7 +82,7 @@ CREATE TABLE IF NOT EXISTS staff (
   UNIQUE(school_id, username)
 );
 
--- Staff login sessions
+-- Staff login sessions (8-hour tokens)
 CREATE TABLE IF NOT EXISTS staff_sessions (
   id         UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   staff_id   UUID REFERENCES staff(id)   ON DELETE CASCADE NOT NULL,
@@ -104,20 +103,20 @@ CREATE TABLE IF NOT EXISTS academic_years (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Terms (Trimester 1/2/3 etc.)
+-- Terms: 1=Term1, 2=Term2, 3=Term3, 4=Annual(avg)
 CREATE TABLE IF NOT EXISTS terms (
   id               UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   school_id        UUID REFERENCES schools(id)        ON DELETE CASCADE NOT NULL,
   academic_year_id UUID REFERENCES academic_years(id) ON DELETE CASCADE,
-  name             VARCHAR(30) NOT NULL,
-  number           INT NOT NULL,
+  name             VARCHAR(50) NOT NULL,
+  number           INT NOT NULL CHECK (number BETWEEN 1 AND 4),
   start_date       DATE,
   end_date         DATE,
   is_current       BOOLEAN DEFAULT false,
   created_at       TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Classes (P1A, P2B, S3, etc.)
+-- Classes (P1A, P2B, S3A, etc.)
 CREATE TABLE IF NOT EXISTS classes (
   id               UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   school_id        UUID REFERENCES schools(id)        ON DELETE CASCADE NOT NULL,
@@ -127,8 +126,8 @@ CREATE TABLE IF NOT EXISTS classes (
   section          VARCHAR(5) DEFAULT 'A',
   capacity         INT DEFAULT 40,
   max_students     INT DEFAULT 50,
-  academic_year_id UUID REFERENCES academic_years(id),
-  class_teacher_id UUID REFERENCES staff(id) ON DELETE SET NULL,
+  academic_year_id UUID REFERENCES academic_years(id) ON DELETE SET NULL,
+  class_teacher_id UUID REFERENCES staff(id)          ON DELETE SET NULL,
   created_at       TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -144,7 +143,7 @@ CREATE TABLE IF NOT EXISTS subjects (
   created_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Class ↔ Subject assignments (with teacher)
+-- Class ↔ Subject ↔ Teacher assignments
 CREATE TABLE IF NOT EXISTS class_subjects (
   id         UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   class_id   UUID REFERENCES classes(id)  ON DELETE CASCADE NOT NULL,
@@ -153,7 +152,10 @@ CREATE TABLE IF NOT EXISTS class_subjects (
   UNIQUE(class_id, subject_id)
 );
 
--- Full student profiles (SMS students — richer than cert students)
+-- Full student profiles (SMS — richer than cert students)
+-- NOTE: two FK to classes — use explicit FK name in joins!
+--   current_class:  student_profiles_current_class_id_fkey
+--   previous_class: student_profiles_previous_class_id_fkey
 CREATE TABLE IF NOT EXISTS student_profiles (
   id                UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   school_id         UUID REFERENCES schools(id)   ON DELETE CASCADE NOT NULL,
@@ -171,15 +173,15 @@ CREATE TABLE IF NOT EXISTS student_profiles (
   address           TEXT,
   student_id        VARCHAR(30),
   admission_date    DATE DEFAULT CURRENT_DATE,
-  current_class_id  UUID REFERENCES classes(id) ON DELETE SET NULL,
-  previous_class_id UUID REFERENCES classes(id) ON DELETE SET NULL,
-  academic_year_id  UUID REFERENCES academic_years(id),
+  current_class_id  UUID REFERENCES classes(id) ON DELETE SET NULL,  -- FK: student_profiles_current_class_id_fkey
+  previous_class_id UUID REFERENCES classes(id) ON DELETE SET NULL,  -- FK: student_profiles_previous_class_id_fkey
+  academic_year_id  UUID REFERENCES academic_years(id) ON DELETE SET NULL,
   photo_url         TEXT,
   previous_marks    JSONB,
   fee_balance       DECIMAL(10,2) DEFAULT 0,
-  fee_status        VARCHAR(20) DEFAULT 'unpaid',
-  status            VARCHAR(20) DEFAULT 'active',
-  promotion_status  VARCHAR(20) DEFAULT 'active',
+  fee_status        VARCHAR(20)   DEFAULT 'unpaid',
+  status            VARCHAR(20)   DEFAULT 'active',
+  promotion_status  VARCHAR(20)   DEFAULT 'active',
   created_at        TIMESTAMPTZ DEFAULT NOW(),
   updated_at        TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(school_id, student_id)
@@ -193,7 +195,7 @@ CREATE TABLE IF NOT EXISTS marks (
   subject_id       UUID REFERENCES subjects(id)         ON DELETE CASCADE NOT NULL,
   class_id         UUID REFERENCES classes(id)          ON DELETE SET NULL,
   term_id          UUID REFERENCES terms(id)            ON DELETE SET NULL,
-  academic_year_id UUID REFERENCES academic_years(id),
+  academic_year_id UUID REFERENCES academic_years(id)   ON DELETE SET NULL,
   cat1             DECIMAL(5,2),
   cat2             DECIMAL(5,2),
   exam             DECIMAL(5,2),
@@ -207,14 +209,14 @@ CREATE TABLE IF NOT EXISTS marks (
   UNIQUE(student_id, subject_id, term_id)
 );
 
--- Report cards / bulletins
+-- Report cards / bulletins (term=4 → annual average)
 CREATE TABLE IF NOT EXISTS bulletins (
   id               UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   school_id        UUID REFERENCES schools(id)          ON DELETE CASCADE NOT NULL,
   student_id       UUID REFERENCES student_profiles(id) ON DELETE CASCADE NOT NULL,
-  term_id          UUID REFERENCES terms(id),
-  academic_year_id UUID REFERENCES academic_years(id),
-  class_id         UUID REFERENCES classes(id),
+  term_id          UUID REFERENCES terms(id)            ON DELETE SET NULL,
+  academic_year_id UUID REFERENCES academic_years(id)   ON DELETE SET NULL,
+  class_id         UUID REFERENCES classes(id)          ON DELETE SET NULL,
   total_marks      DECIMAL(6,2),
   max_possible     DECIMAL(6,2),
   percentage       DECIMAL(5,2),
@@ -233,13 +235,13 @@ CREATE TABLE IF NOT EXISTS bulletins (
   UNIQUE(student_id, term_id)
 );
 
--- Fee structure per class/level/term
+-- Fee structure per class level / term
 CREATE TABLE IF NOT EXISTS fee_structure (
   id               UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  school_id        UUID REFERENCES schools(id) ON DELETE CASCADE NOT NULL,
-  academic_year_id UUID REFERENCES academic_years(id),
+  school_id        UUID REFERENCES schools(id)        ON DELETE CASCADE NOT NULL,
+  academic_year_id UUID REFERENCES academic_years(id) ON DELETE SET NULL,
   class_level      VARCHAR(50),
-  term_id          UUID REFERENCES terms(id),
+  term_id          UUID REFERENCES terms(id)          ON DELETE SET NULL,
   fee_type         VARCHAR(100) NOT NULL,
   amount           DECIMAL(10,2) NOT NULL,
   is_mandatory     BOOLEAN DEFAULT true,
@@ -251,18 +253,34 @@ CREATE TABLE IF NOT EXISTS payments (
   id               UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   school_id        UUID REFERENCES schools(id)          ON DELETE CASCADE NOT NULL,
   student_id       UUID REFERENCES student_profiles(id) ON DELETE CASCADE NOT NULL,
-  term_id          UUID REFERENCES terms(id),
-  academic_year_id UUID REFERENCES academic_years(id),
+  term_id          UUID REFERENCES terms(id)            ON DELETE SET NULL,
+  academic_year_id UUID REFERENCES academic_years(id)   ON DELETE SET NULL,
   amount           DECIMAL(10,2) NOT NULL,
   payment_method   VARCHAR(30) DEFAULT 'cash',
   reference        VARCHAR(100),
   notes            TEXT,
   received_by      UUID REFERENCES staff(id) ON DELETE SET NULL,
   payment_date     TIMESTAMPTZ DEFAULT NOW(),
-  receipt_number   VARCHAR(50),
+  receipt_number   VARCHAR(50) UNIQUE,
   status           VARCHAR(20) DEFAULT 'confirmed',
   created_at       TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Auto-generate receipt numbers
+CREATE SEQUENCE IF NOT EXISTS receipt_seq START 1000 INCREMENT 1;
+CREATE OR REPLACE FUNCTION generate_receipt_number()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.receipt_number IS NULL THEN
+    NEW.receipt_number := 'RCP-' || LPAD(NEXTVAL('receipt_seq')::TEXT, 6, '0');
+  END IF;
+  RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS set_receipt_number ON payments;
+CREATE TRIGGER set_receipt_number
+  BEFORE INSERT ON payments
+  FOR EACH ROW EXECUTE FUNCTION generate_receipt_number();
 
 -- Student promotion history
 CREATE TABLE IF NOT EXISTS promotion_history (
@@ -271,8 +289,8 @@ CREATE TABLE IF NOT EXISTS promotion_history (
   student_id       UUID REFERENCES student_profiles(id) ON DELETE CASCADE NOT NULL,
   from_class_id    UUID REFERENCES classes(id)          ON DELETE SET NULL,
   to_class_id      UUID REFERENCES classes(id)          ON DELETE SET NULL,
-  academic_year_id UUID REFERENCES academic_years(id),
-  action           VARCHAR(20) NOT NULL,  -- 'promoted' | 'repeated' | 'transferred'
+  academic_year_id UUID REFERENCES academic_years(id)   ON DELETE SET NULL,
+  action           VARCHAR(20) NOT NULL,  -- 'promoted' | 'repeated' | 'graduated'
   final_percentage DECIMAL(5,2),
   rank_in_class    INT,
   done_by          UUID REFERENCES staff(id) ON DELETE SET NULL,
@@ -280,11 +298,11 @@ CREATE TABLE IF NOT EXISTS promotion_history (
   created_at       TIMESTAMPTZ DEFAULT NOW()
 );
 
--- SMS & email notifications
+-- SMS / Email notifications log
 CREATE TABLE IF NOT EXISTS notifications (
   id         UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  school_id  UUID REFERENCES schools(id) ON DELETE CASCADE NOT NULL,
-  type       VARCHAR(20) NOT NULL,   -- 'sms' | 'email'
+  school_id  UUID REFERENCES schools(id)          ON DELETE CASCADE NOT NULL,
+  type       VARCHAR(20) NOT NULL,
   recipient  VARCHAR(200) NOT NULL,
   subject    VARCHAR(200),
   message    TEXT NOT NULL,
@@ -295,17 +313,17 @@ CREATE TABLE IF NOT EXISTS notifications (
 
 -- Document folders (Secretary)
 CREATE TABLE IF NOT EXISTS document_folders (
-  id         UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  school_id  UUID REFERENCES schools(id) ON DELETE CASCADE NOT NULL,
-  name       VARCHAR(200) NOT NULL,
+  id          UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  school_id   UUID REFERENCES schools(id) ON DELETE CASCADE NOT NULL,
+  name        VARCHAR(200) NOT NULL,
   description TEXT,
-  color      VARCHAR(20) DEFAULT '#2563eb',
-  created_by UUID REFERENCES staff(id) ON DELETE SET NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
+  color       VARCHAR(20) DEFAULT '#2563eb',
+  created_by  UUID REFERENCES staff(id) ON DELETE SET NULL,
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
--- School documents (uploaded files)
+-- School documents
 CREATE TABLE IF NOT EXISTS school_documents (
   id          UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   school_id   UUID REFERENCES schools(id)          ON DELETE CASCADE NOT NULL,
@@ -325,65 +343,81 @@ CREATE TABLE IF NOT EXISTS school_documents (
 
 CREATE INDEX IF NOT EXISTS idx_schools_user_id        ON schools(user_id);
 CREATE INDEX IF NOT EXISTS idx_students_school_id     ON students(school_id);
-CREATE INDEX IF NOT EXISTS idx_students_photo_number  ON students(photo_number);
 CREATE INDEX IF NOT EXISTS idx_certs_school_id        ON certificates(school_id);
 CREATE INDEX IF NOT EXISTS idx_staff_school           ON staff(school_id);
 CREATE INDEX IF NOT EXISTS idx_staff_username         ON staff(username);
 CREATE INDEX IF NOT EXISTS idx_sessions_token         ON staff_sessions(token);
 CREATE INDEX IF NOT EXISTS idx_sessions_staff         ON staff_sessions(staff_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_expires       ON staff_sessions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_academic_years_school  ON academic_years(school_id);
+CREATE INDEX IF NOT EXISTS idx_terms_school           ON terms(school_id);
+CREATE INDEX IF NOT EXISTS idx_terms_year             ON terms(academic_year_id);
+CREATE INDEX IF NOT EXISTS idx_classes_school         ON classes(school_id);
+CREATE INDEX IF NOT EXISTS idx_classes_year           ON classes(academic_year_id);
+CREATE INDEX IF NOT EXISTS idx_class_subj_class       ON class_subjects(class_id);
+CREATE INDEX IF NOT EXISTS idx_class_subj_subject     ON class_subjects(subject_id);
+CREATE INDEX IF NOT EXISTS idx_class_subj_teacher     ON class_subjects(teacher_id);
 CREATE INDEX IF NOT EXISTS idx_sp_school              ON student_profiles(school_id);
-CREATE INDEX IF NOT EXISTS idx_sp_class               ON student_profiles(current_class_id);
+CREATE INDEX IF NOT EXISTS idx_sp_current_class       ON student_profiles(current_class_id);
 CREATE INDEX IF NOT EXISTS idx_sp_student_id          ON student_profiles(student_id);
+CREATE INDEX IF NOT EXISTS idx_sp_year                ON student_profiles(academic_year_id);
 CREATE INDEX IF NOT EXISTS idx_marks_student          ON marks(student_id);
 CREATE INDEX IF NOT EXISTS idx_marks_term             ON marks(term_id);
 CREATE INDEX IF NOT EXISTS idx_marks_class            ON marks(class_id);
+CREATE INDEX IF NOT EXISTS idx_marks_subject          ON marks(subject_id);
 CREATE INDEX IF NOT EXISTS idx_bulletins_student      ON bulletins(student_id);
 CREATE INDEX IF NOT EXISTS idx_bulletins_term         ON bulletins(term_id);
+CREATE INDEX IF NOT EXISTS idx_bulletins_class        ON bulletins(class_id);
 CREATE INDEX IF NOT EXISTS idx_payments_student       ON payments(student_id);
 CREATE INDEX IF NOT EXISTS idx_payments_school        ON payments(school_id);
+CREATE INDEX IF NOT EXISTS idx_payments_receipt       ON payments(receipt_number);
 CREATE INDEX IF NOT EXISTS idx_doc_folders_school     ON document_folders(school_id);
 CREATE INDEX IF NOT EXISTS idx_docs_folder            ON school_documents(folder_id);
 
 
 -- ================================================================
--- PART 3 — SAFE MIGRATIONS (add columns to existing tables)
+-- PART 3 — SAFE MIGRATIONS (existing databases)
 -- ================================================================
 
-ALTER TABLE schools ADD COLUMN IF NOT EXISTS phone   VARCHAR(30);
-ALTER TABLE schools ADD COLUMN IF NOT EXISTS address TEXT;
-ALTER TABLE schools ADD COLUMN IF NOT EXISTS city    VARCHAR(100) DEFAULT 'Kigali';
-ALTER TABLE schools ADD COLUMN IF NOT EXISTS cert_line1        TEXT DEFAULT 'Has completed {class} at';
-ALTER TABLE schools ADD COLUMN IF NOT EXISTS cert_line2        TEXT DEFAULT 'in Academic year {year}';
-ALTER TABLE schools ADD COLUMN IF NOT EXISTS cert_purpose      TEXT DEFAULT 'This certificate is given for whichever purpose it may serve';
-ALTER TABLE schools ADD COLUMN IF NOT EXISTS cert_done_text    TEXT DEFAULT 'Done at {city} on {date}';
+-- schools
+ALTER TABLE schools ADD COLUMN IF NOT EXISTS phone              VARCHAR(30);
+ALTER TABLE schools ADD COLUMN IF NOT EXISTS address            TEXT;
+ALTER TABLE schools ADD COLUMN IF NOT EXISTS city               VARCHAR(100) DEFAULT 'Kigali';
+ALTER TABLE schools ADD COLUMN IF NOT EXISTS cert_line1         TEXT DEFAULT 'Has completed {class} at';
+ALTER TABLE schools ADD COLUMN IF NOT EXISTS cert_line2         TEXT DEFAULT 'in Academic year {year}';
+ALTER TABLE schools ADD COLUMN IF NOT EXISTS cert_purpose       TEXT DEFAULT 'This certificate is given for whichever purpose it may serve';
+ALTER TABLE schools ADD COLUMN IF NOT EXISTS cert_done_text     TEXT DEFAULT 'Done at {city} on {date}';
 ALTER TABLE schools ADD COLUMN IF NOT EXISTS cert_template_url  TEXT;
 ALTER TABLE schools ADD COLUMN IF NOT EXISTS cert_template_mode VARCHAR(20) DEFAULT 'landscape';
 
+-- staff
 ALTER TABLE staff ADD COLUMN IF NOT EXISTS username      VARCHAR(50);
 ALTER TABLE staff ADD COLUMN IF NOT EXISTS password_hash TEXT;
 ALTER TABLE staff ADD COLUMN IF NOT EXISTS last_login    TIMESTAMPTZ;
 ALTER TABLE staff ADD COLUMN IF NOT EXISTS permissions   JSONB DEFAULT '{}';
 
-ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS previous_class_id UUID REFERENCES classes(id);
+-- classes
+ALTER TABLE classes ADD COLUMN IF NOT EXISTS level_order INT DEFAULT 1;
+ALTER TABLE classes ADD COLUMN IF NOT EXISTS capacity    INT DEFAULT 40;
+ALTER TABLE classes ADD COLUMN IF NOT EXISTS section     VARCHAR(5) DEFAULT 'A';
+
+-- student_profiles
+ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS previous_class_id UUID REFERENCES classes(id) ON DELETE SET NULL;
 ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS promotion_status  VARCHAR(20) DEFAULT 'active';
 ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS previous_marks    JSONB;
 ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS other_names       VARCHAR(100);
 ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS parent_phone2     VARCHAR(30);
 
-ALTER TABLE classes ADD COLUMN IF NOT EXISTS level_order INT DEFAULT 1;
-ALTER TABLE classes ADD COLUMN IF NOT EXISTS capacity    INT DEFAULT 40;
-ALTER TABLE classes ADD COLUMN IF NOT EXISTS section     VARCHAR(5) DEFAULT 'A';
-
--- Add UNIQUE constraint on staff(school_id, username) if not already present
+-- UNIQUE constraint on staff username per school
 DO $$
 BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint
-    WHERE conname = 'staff_school_id_username_key'
-  ) THEN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'staff_school_id_username_key') THEN
     ALTER TABLE staff ADD CONSTRAINT staff_school_id_username_key UNIQUE (school_id, username);
   END IF;
 END $$;
+
+-- Receipt sequence (safe if already exists)
+CREATE SEQUENCE IF NOT EXISTS receipt_seq START 1000 INCREMENT 1;
 
 
 -- ================================================================
@@ -410,7 +444,7 @@ ALTER TABLE notifications     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE document_folders  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE school_documents  ENABLE ROW LEVEL SECURITY;
 
--- Schools: authenticated owner only
+-- schools: owner only
 DROP POLICY IF EXISTS "schools_owner"       ON schools;
 DROP POLICY IF EXISTS "schools_select"      ON schools;
 DROP POLICY IF EXISTS "schools_insert"      ON schools;
@@ -422,11 +456,9 @@ DROP POLICY IF EXISTS "school_owner_update" ON schools;
 DROP POLICY IF EXISTS "school_owner_delete" ON schools;
 
 CREATE POLICY "schools_owner" ON schools
-  FOR ALL
-  USING     (auth.uid() = user_id)
-  WITH CHECK (auth.uid() = user_id);
+  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
--- All other tables: fully open (backend uses service_role key which bypasses RLS)
+-- All other tables: open (backend uses service_role which bypasses RLS)
 DO $$
 DECLARE tbl TEXT;
 BEGIN
@@ -437,10 +469,7 @@ BEGIN
     'promotion_history','notifications','document_folders','school_documents'
   ]) LOOP
     EXECUTE format('DROP POLICY IF EXISTS "open_%s" ON %I', tbl, tbl);
-    EXECUTE format(
-      'CREATE POLICY "open_%s" ON %I FOR ALL USING (true) WITH CHECK (true)',
-      tbl, tbl
-    );
+    EXECUTE format('CREATE POLICY "open_%s" ON %I FOR ALL USING (true) WITH CHECK (true)', tbl, tbl);
   END LOOP;
 END $$;
 
@@ -474,24 +503,15 @@ CREATE TRIGGER on_auth_user_created
 -- PART 6 — STORAGE BUCKETS
 -- ================================================================
 
-INSERT INTO storage.buckets (id, name, public)
-  VALUES ('student-photos', 'student-photos', true)
-  ON CONFLICT (id) DO UPDATE SET public = true;
-
-INSERT INTO storage.buckets (id, name, public)
-  VALUES ('assets', 'assets', true)
-  ON CONFLICT (id) DO UPDATE SET public = true;
-
-INSERT INTO storage.buckets (id, name, public)
-  VALUES ('documents', 'documents', true)
-  ON CONFLICT (id) DO UPDATE SET public = true;
+INSERT INTO storage.buckets (id, name, public) VALUES ('student-photos', 'student-photos', true) ON CONFLICT (id) DO UPDATE SET public = true;
+INSERT INTO storage.buckets (id, name, public) VALUES ('assets',         'assets',         true) ON CONFLICT (id) DO UPDATE SET public = true;
+INSERT INTO storage.buckets (id, name, public) VALUES ('documents',      'documents',      true) ON CONFLICT (id) DO UPDATE SET public = true;
 
 
 -- ================================================================
--- PART 7 — STORAGE POLICIES
+-- PART 7 — STORAGE POLICIES (open — backend controls access)
 -- ================================================================
 
--- Drop all old policies first
 DROP POLICY IF EXISTS "sp_read"       ON storage.objects;
 DROP POLICY IF EXISTS "sp_upload"     ON storage.objects;
 DROP POLICY IF EXISTS "sp_update"     ON storage.objects;
@@ -505,19 +525,14 @@ DROP POLICY IF EXISTS "docs_upload"   ON storage.objects;
 DROP POLICY IF EXISTS "docs_update"   ON storage.objects;
 DROP POLICY IF EXISTS "docs_delete"   ON storage.objects;
 
--- student-photos bucket
-CREATE POLICY "sp_read"   ON storage.objects FOR SELECT USING (bucket_id = 'student-photos');
-CREATE POLICY "sp_upload" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'student-photos');
-CREATE POLICY "sp_update" ON storage.objects FOR UPDATE USING (bucket_id = 'student-photos');
-CREATE POLICY "sp_delete" ON storage.objects FOR DELETE USING (bucket_id = 'student-photos');
-
--- assets bucket (logos, signatures, stamps)
+CREATE POLICY "sp_read"    ON storage.objects FOR SELECT USING (bucket_id = 'student-photos');
+CREATE POLICY "sp_upload"  ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'student-photos');
+CREATE POLICY "sp_update"  ON storage.objects FOR UPDATE USING (bucket_id = 'student-photos');
+CREATE POLICY "sp_delete"  ON storage.objects FOR DELETE USING (bucket_id = 'student-photos');
 CREATE POLICY "assets_read"   ON storage.objects FOR SELECT USING (bucket_id = 'assets');
 CREATE POLICY "assets_upload" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'assets');
 CREATE POLICY "assets_update" ON storage.objects FOR UPDATE USING (bucket_id = 'assets');
 CREATE POLICY "assets_delete" ON storage.objects FOR DELETE USING (bucket_id = 'assets');
-
--- documents bucket (school documents)
 CREATE POLICY "docs_read"   ON storage.objects FOR SELECT USING (bucket_id = 'documents');
 CREATE POLICY "docs_upload" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'documents');
 CREATE POLICY "docs_update" ON storage.objects FOR UPDATE USING (bucket_id = 'documents');
@@ -525,7 +540,7 @@ CREATE POLICY "docs_delete" ON storage.objects FOR DELETE USING (bucket_id = 'do
 
 
 -- ================================================================
--- DONE — Verify tables created
+-- DONE — List all tables
 -- ================================================================
 SELECT table_name
 FROM information_schema.tables
