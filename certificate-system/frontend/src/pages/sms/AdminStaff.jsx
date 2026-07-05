@@ -155,12 +155,12 @@ export default function AdminStaff() {
         </div>
       </div>
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-5 gap-3 mb-6">
+      {/* Summary cards — responsive grid */}
+      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-3 mb-6">
         {Object.entries(ROLES).map(([k,v])=>(
-          <div key={k} className={`card text-center py-4 border-0 ${ROLE_COLORS[k].replace('text-','border-').replace('bg-','bg-')}`}>
-            <p className={`text-2xl font-bold ${ROLE_COLORS[k].split(' ')[1]}`}>{byRole[k]?.length||0}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{v}</p>
+          <div key={k} className={`card text-center py-3 sm:py-4 border-0 ${ROLE_COLORS[k].replace('text-','border-').replace('bg-','bg-')}`}>
+            <p className={`text-xl sm:text-2xl font-bold ${ROLE_COLORS[k].split(' ')[1]}`}>{byRole[k]?.length||0}</p>
+            <p className="text-xs text-gray-500 mt-0.5 leading-tight">{v}</p>
           </div>
         ))}
       </div>
