@@ -100,7 +100,24 @@ app.use((err, req, res, next) => {
   res.status(500).json({ success: false, error: err.message });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, '0.0.0.0', async () => {
   console.log(`✅ Server running on port ${PORT}`);
   console.log(`   Health: http://localhost:${PORT}/api/health`);
+
+  // Verify Supabase connection + key tables exist
+  try {
+    const { data, error } = await require('./supabase').supabase
+      .from('schools').select('count').limit(1);
+    if (error) console.error('⚠️  Supabase check failed:', error.message);
+    else console.log('✅ Supabase connected');
+
+    // Check if staff table has username column (DB migration needed)
+    const { error: staffErr } = await require('./supabase').supabase
+      .from('staff').select('username').limit(1);
+    if (staffErr?.message?.includes('username')) {
+      console.warn('⚠️  staff.username column missing — run database.sql Step 1 migration');
+    }
+  } catch (e) {
+    console.error('⚠️  Startup check error:', e.message);
+  }
 });

@@ -5,7 +5,7 @@ import axios from 'axios';
 
 const API = axios.create({
   baseURL: import.meta.env.VITE_API_URL || (typeof window!=='undefined'&&window.location.hostname!=='localhost'?'https://photographicsoftware-1.onrender.com/api':'/api'),
-  timeout: 15000,
+  timeout: 45000, // Render free tier can take 30s+ to wake up
 });
 API.interceptors.request.use(cfg => {
   const t = localStorage.getItem('cert_token') || localStorage.getItem('staff_token');
@@ -107,9 +107,22 @@ export default function AdminStaff() {
 
   const loadStaff = async () => {
     setLoading(true);
-    try { const r = await API.get('/sms/admin/staff'); setStaff(r.data.data||[]); }
-    catch { toast.error('Failed to load staff'); }
-    finally { setLoading(false); }
+    try {
+      const r = await API.get('/sms/admin/staff');
+      setStaff(r.data.data||[]);
+    } catch (err) {
+      const msg = err.response?.data?.error || err.message || 'Network error';
+      if (err.response?.status === 401) {
+        toast.error('Session expired. Please sign in again.');
+      } else if (err.response?.status === 403) {
+        toast.error('Access denied — Admin role required');
+      } else if (err.code === 'ECONNABORTED' || msg.includes('timeout')) {
+        toast.error('Server is waking up (Render free tier). Please wait 30s and retry.');
+      } else {
+        toast.error(`Failed to load staff: ${msg}`);
+      }
+      console.error('loadStaff error:', err.response?.status, msg);
+    } finally { setLoading(false); }
   };
 
   const handleDeactivate = async (id) => {
@@ -133,7 +146,13 @@ export default function AdminStaff() {
           <h1 className="text-2xl font-bold text-gray-900">Staff Management</h1>
           <p className="text-gray-500 mt-0.5">Create accounts for teachers, secretaries, finance, DoS</p>
         </div>
-        <button onClick={()=>setModal('new')} className="btn-primary"><UserPlus className="w-4 h-4"/> Add Staff</button>
+        <div className="flex gap-2">
+          <button onClick={loadStaff} disabled={loading}
+            className="btn-secondary text-sm">
+            {loading ? '⟳ Loading...' : '↺ Refresh'}
+          </button>
+          <button onClick={()=>setModal('new')} className="btn-primary"><UserPlus className="w-4 h-4"/> Add Staff</button>
+        </div>
       </div>
 
       {/* Summary cards */}
