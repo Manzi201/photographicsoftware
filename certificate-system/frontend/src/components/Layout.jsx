@@ -14,23 +14,17 @@ import toast from 'react-hot-toast';
 const NAV_BY_ROLE = {
 
   // ── ADMIN ──────────────────────────────────────────────────
+  // Admin only manages staff & school settings — academics/finance belong to other roles
   admin: [
     { section: 'Overview' },
-    { to: '/sms/dashboard',     icon: Home,          label: 'Dashboard' },
+    { to: '/sms/dashboard', icon: Home,       label: 'Dashboard' },
 
-    { section: 'People' },
-    { to: '/sms/admin',         icon: Shield,        label: 'Staff Management' },
-    { to: '/sms/students',      icon: Users,         label: 'Students' },
+    { section: 'Management' },
+    { to: '/sms/admin',     icon: Shield,     label: 'Staff Management' },
 
-    { section: 'Academics' },
-    { to: '/sms/marks',         icon: BookOpen,      label: 'Marks & Grades' },
-    { to: '/sms/bulletins',     icon: FileText,      label: 'Bulletins' },
-    { to: '/sms/promotion',     icon: TrendingUp,    label: 'Promotion' },
-
-    { section: 'Administration' },
-    { to: '/sms/finance',       icon: CreditCard,    label: 'Finance' },
-    { to: '/sms/notifications', icon: Bell,          label: 'Notifications' },
-    { to: '/settings',          icon: Settings,      label: 'Settings' },
+    { section: 'School' },
+    { to: '/settings',      icon: Settings,   label: 'School Settings' },
+    { to: '/profile',       icon: UserCircle, label: 'School Profile' },
   ],
 
   // ── SECRETARY ──────────────────────────────────────────────

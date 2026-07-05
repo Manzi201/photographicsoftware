@@ -54,16 +54,19 @@ app.use('/api/staff-auth', staffAuthRoutes);  // Staff login (teacher/secretary/
 // Root — show API info instead of 404
 app.get('/', (req, res) => {
   res.json({
-    name: 'Certificate System API',
-    version: '1.0.0',
+    name: 'School Management System API',
+    version: '2.0.0',
     status: 'running',
+    supabase_configured: !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY),
     endpoints: {
-      health:    'GET /api/health',
-      auth:      'POST /api/auth/register | /api/auth/login | /api/auth/me',
-      students:  'GET|POST /api/students',
-      certs:     'GET /api/certificates/batch | /api/certificates/student/:id',
-      templates: 'GET /api/templates',
-      settings:  'GET|POST /api/settings',
+      health:     'GET /api/health',
+      auth:       'POST /api/auth/register | /api/auth/login | /api/auth/me',
+      staff_auth: 'POST /api/staff-auth/login | GET /api/staff-auth/me',
+      students:   'GET|POST /api/students',
+      certs:      'GET /api/certificates/batch | /api/certificates/student/:id',
+      templates:  'GET /api/templates',
+      settings:   'GET|POST /api/settings',
+      sms:        'GET /api/sms/students | /api/sms/marks | ...',
     }
   });
 });
