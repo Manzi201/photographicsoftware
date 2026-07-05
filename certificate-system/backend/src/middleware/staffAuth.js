@@ -1,63 +1,77 @@
 const { supabase } = require('../supabase');
 
-/**
- * Middleware: verifies staff session token (not Supabase auth)
- * Used for: teachers, secretary, finance, DoS logins
- * Also accepts Supabase JWT (for school admin/owner)
- */
 module.exports = async function requireStaffAuth(req, res, next) {
   const header = req.headers.authorization;
   if (!header?.startsWith('Bearer ')) {
-    return res.status(401).json({ success: false, error: 'Unauthorized — no token' });
+    return res.status(401).json({ success: false, error: 'Unauthorized — no token provided' });
   }
   const token = header.replace('Bearer ', '').trim();
+  if (!token) return res.status(401).json({ success: false, error: 'Unauthorized — empty token' });
 
-  // Try staff session token first
-  let session = null;
+  // ── Try 1: Staff session token ─────────────────────────────
   try {
-    const { data } = await supabase
+    const { data: session, error: sesErr } = await supabase
       .from('staff_sessions')
       .select('*, staff:staff(*), school:schools(*)')
       .eq('token', token)
       .gt('expires_at', new Date().toISOString())
-      .single();
-    session = data;
-  } catch { /* table may not exist yet */ }
+      .maybeSingle();
 
-  if (session?.staff) {
-    req.staff    = session.staff;
-    req.school   = session.school;
-    req.schoolId = session.staff.school_id;
-    req.role     = session.staff.role;
-    req.user     = { id: session.staff.id }; // compatibility
-    return next();
+    if (!sesErr && session?.staff) {
+      req.staff    = session.staff;
+      req.school   = session.school;
+      req.schoolId = session.staff.school_id;
+      req.role     = session.staff.role;
+      req.user     = { id: session.staff.id };
+      return next();
+    }
+  } catch (e) {
+    // staff_sessions table may not exist — fall through to Supabase JWT
   }
 
-  // Fall back to Supabase JWT (school admin/owner)
+  // ── Try 2: Supabase JWT (school admin/owner) ───────────────
   try {
-    const { data: { user }, error } = await supabase.auth.getUser(token);
-    if (error || !user) return res.status(401).json({ success: false, error: 'Invalid token' });
+    const { data: authData, error: authErr } = await supabase.auth.getUser(token);
+    if (authErr || !authData?.user) {
+      return res.status(401).json({ success: false, error: 'Invalid or expired token. Please sign in again.' });
+    }
+    const user = authData.user;
 
-    const { data: school } = await supabase.from('schools').select('*').eq('user_id', user.id).single();
-    if (!school) return res.status(403).json({ success: false, error: 'School not found' });
+    const { data: school, error: schoolErr } = await supabase
+      .from('schools').select('*').eq('user_id', user.id).single();
 
-    // School owner = admin role
+    if (schoolErr || !school) {
+      return res.status(403).json({ success: false, error: 'School not found for this account.' });
+    }
+
     req.user     = user;
     req.school   = school;
     req.schoolId = school.id;
     req.role     = 'admin';
-    req.staff    = { id: null, role: 'admin', full_name: 'Administrator', school_id: school.id };
+    req.staff    = {
+      id:        null,
+      role:      'admin',
+      full_name: 'Administrator',
+      school_id: school.id,
+    };
     return next();
-  } catch {
-    return res.status(401).json({ success: false, error: 'Invalid token' });
+  } catch (e) {
+    console.error('staffAuth JWT error:', e.message);
+    return res.status(401).json({ success: false, error: 'Authentication failed: ' + e.message });
   }
 };
 
-// Permission checker helper
+// ── Role guard ─────────────────────────────────────────────────
 function requireRole(...roles) {
   return (req, res, next) => {
+    if (!req.role) {
+      return res.status(401).json({ success: false, error: 'Not authenticated' });
+    }
     if (req.role === 'admin' || roles.includes(req.role)) return next();
-    return res.status(403).json({ success: false, error: `Access denied. Required: ${roles.join(' or ')}` });
+    return res.status(403).json({
+      success: false,
+      error: `Access denied. Your role "${req.role}" cannot access this. Required: ${roles.join(' or ')}`
+    });
   };
 }
 
