@@ -75,7 +75,7 @@ const NAV_BY_ROLE = {
     { to: '/sms/marks',     icon: BookOpen,   label: 'Marks & Grades' },
     { to: '/sms/bulletins', icon: FileText,   label: 'Bulletins' },
     { to: '/sms/promotion', icon: TrendingUp, label: 'Promotion' },
-    { to: '/classes',       icon: Layers,     label: 'Classes' },
+    { to: '/sms/classes',   icon: Layers,     label: 'Classes & Years' },
   ],
 };
 

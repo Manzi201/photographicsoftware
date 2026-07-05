@@ -25,19 +25,24 @@ router.put   ('/students/:id',    students.updateStudent);
 router.delete('/students/:id',    students.deleteStudent);
 
 // ── Academic ──────────────────────────────────────────────────
-router.get ('/academic-years',        academic.getAcademicYears);
-router.post('/academic-years',        academic.createAcademicYear);
-router.get ('/terms',                 academic.getTerms);
-router.post('/terms',                 academic.createTerm);
-router.get ('/classes',               academic.getClasses);
-router.post('/classes',               academic.createClass);
-router.delete('/classes/:id',         academic.deleteClass);
-router.get ('/subjects',              academic.getSubjects);
-router.post('/subjects',              academic.createSubject);
-router.delete('/subjects/:id',        academic.deleteSubject);
-router.get ('/staff',                 academic.getStaff);
-router.post('/staff',                 academic.createStaff);
-router.put ('/staff/:id',             academic.updateStaff);
+router.get   ('/academic-years',        academic.getAcademicYears);
+router.post  ('/academic-years',        academic.createAcademicYear);
+router.put   ('/academic-years/:id',    academic.updateAcademicYear);
+router.delete('/academic-years/:id',    academic.deleteAcademicYear);
+router.get   ('/terms',                 academic.getTerms);
+router.post  ('/terms',                 academic.createTerm);
+router.put   ('/terms/:id',             academic.updateTerm);
+router.delete('/terms/:id',             academic.deleteTerm);
+router.get   ('/classes',               academic.getClasses);
+router.post  ('/classes',               academic.createClass);
+router.put   ('/classes/:id',           academic.updateClass);
+router.delete('/classes/:id',           academic.deleteClass);
+router.get   ('/subjects',              academic.getSubjects);
+router.post  ('/subjects',              academic.createSubject);
+router.delete('/subjects/:id',          academic.deleteSubject);
+router.get   ('/staff',                 academic.getStaff);
+router.post  ('/staff',                 academic.createStaff);
+router.put   ('/staff/:id',             academic.updateStaff);
 
 // ── Marks ─────────────────────────────────────────────────────
 router.get ('/marks',                 marks.getMarks);

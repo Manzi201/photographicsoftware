@@ -64,7 +64,10 @@ const SMS_URL = (() => {
 
 const sms = axios.create({ baseURL: SMS_URL, timeout: 30000 });
 sms.interceptors.request.use(config => {
-  const token = localStorage.getItem('cert_token');
+  // Use staff_token if logged in as staff, otherwise use supabase token
+  const staffToken = localStorage.getItem('staff_token');
+  const certToken  = localStorage.getItem('cert_token');
+  const token = staffToken || certToken;
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
@@ -80,20 +83,33 @@ export const updateSmsStudent     = (id, d)  => sms.put(`/students/${id}`, d);
 export const deleteSmsStudent     = (id)     => sms.delete(`/students/${id}`);
 export const getSmsStudentStats   = ()       => sms.get('/students/stats');
 
-// ── Academic ──────────────────────────────────────────────────
-export const getAcademicYears    = ()    => sms.get('/academic-years');
-export const createAcademicYear  = (d)   => sms.post('/academic-years', d);
-export const getTerms            = (p)   => sms.get('/terms', { params: p });
-export const createTerm          = (d)   => sms.post('/terms', d);
-export const getSmsClasses       = (p)   => sms.get('/classes', { params: p });
-export const createSmsClass      = (d)   => sms.post('/classes', d);
-export const deleteSmsClass      = (id)  => sms.delete(`/classes/${id}`);
-export const getSmsSubjects      = (p)   => sms.get('/subjects', { params: p });
-export const createSmsSubject    = (d)   => sms.post('/subjects', d);
-export const deleteSmsSubject    = (id)  => sms.delete(`/subjects/${id}`);
-export const getStaff            = ()    => sms.get('/staff');
-export const createStaff         = (d)   => sms.post('/staff', d);
-export const updateStaff         = (id,d)=> sms.put(`/staff/${id}`, d);
+// ── Academic Years ────────────────────────────────────────────
+export const getAcademicYears    = ()       => sms.get('/academic-years');
+export const createAcademicYear  = (d)      => sms.post('/academic-years', d);
+export const updateAcademicYear  = (id, d)  => sms.put(`/academic-years/${id}`, d);
+export const deleteAcademicYear  = (id)     => sms.delete(`/academic-years/${id}`);
+
+// ── Terms ─────────────────────────────────────────────────────
+export const getTerms    = (p)      => sms.get('/terms', { params: p });
+export const createTerm  = (d)      => sms.post('/terms', d);
+export const updateTerm  = (id, d)  => sms.put(`/terms/${id}`, d);
+export const deleteTerm  = (id)     => sms.delete(`/terms/${id}`);
+
+// ── Classes ───────────────────────────────────────────────────
+export const getSmsClasses   = (p)      => sms.get('/classes', { params: p });
+export const createSmsClass  = (d)      => sms.post('/classes', d);
+export const updateSmsClass  = (id, d)  => sms.put(`/classes/${id}`, d);
+export const deleteSmsClass  = (id)     => sms.delete(`/classes/${id}`);
+
+// ── Subjects ──────────────────────────────────────────────────
+export const getSmsSubjects  = (p)      => sms.get('/subjects', { params: p });
+export const createSmsSubject= (d)      => sms.post('/subjects', d);
+export const deleteSmsSubject= (id)     => sms.delete(`/subjects/${id}`);
+
+// ── Staff list ────────────────────────────────────────────────
+export const getStaff   = ()       => sms.get('/staff');
+export const createStaff= (d)      => sms.post('/staff', d);
+export const updateStaff= (id, d)  => sms.put(`/staff/${id}`, d);
 
 // ── Marks ─────────────────────────────────────────────────────
 export const getMarks         = (p)  => sms.get('/marks', { params: p });
