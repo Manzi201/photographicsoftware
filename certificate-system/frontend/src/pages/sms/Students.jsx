@@ -75,13 +75,19 @@ function StudentModal({ student, classes, years, onSave, onClose }) {
               <option value="">— Select Class —</option>
               {(classes||[]).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
+            {(classes||[]).length === 0 && (
+              <p className="text-xs text-amber-600 mt-1">⚠ No classes found. Create classes in Classes &amp; Years first.</p>
+            )}
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Academic Year</label>
             <select className="select-field" value={form.academic_year_id||''} onChange={f('academic_year_id')}>
               <option value="">— Select Year —</option>
-              {(years||[]).map(y => <option key={y.id} value={y.id}>{y.name}</option>)}
+              {(years||[]).map(y => <option key={y.id} value={y.id}>{y.name}{y.is_current?' (current)':''}</option>)}
             </select>
+            {(years||[]).length === 0 && (
+              <p className="text-xs text-amber-600 mt-1">⚠ No academic years found.</p>
+            )}
           </div>
 
           <div className="col-span-2 border-t border-gray-100 pt-3">
@@ -124,12 +130,29 @@ export default function SmsStudents() {
   const loadAll = async () => {
     setLoading(true);
     try {
-      const [sRes, cRes, yRes] = await Promise.all([getSmsStudents(), getSmsClasses(), getAcademicYears()]);
+      const [sRes, cRes, yRes] = await Promise.all([
+        getSmsStudents(),
+        getSmsClasses(),
+        getAcademicYears(),
+      ]);
       setStudents(sRes.data.data || []);
       setClasses(cRes.data.data  || []);
       setYears(yRes.data.data    || []);
-    } catch (e) { toast.error('Failed to load'); }
-    finally { setLoading(false); }
+    } catch (e) {
+      const msg = e.response?.data?.error || e.message || 'Network error';
+      const isAuth = e.response?.status === 401 || e.response?.status === 403;
+      if (isAuth) {
+        toast.error('Session expired — please sign in again');
+      } else if (e.code === 'ECONNABORTED') {
+        toast.error('Server is starting up (Render). Retrying in 10s…', { duration: 10000 });
+        setTimeout(() => loadAll(), 10000);
+      } else {
+        toast.error(`Failed to load: ${msg}`);
+        console.error('Students loadAll error:', e.response?.status, msg);
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDelete = async (id) => {
@@ -153,9 +176,14 @@ export default function SmsStudents() {
           <h1 className="text-2xl font-bold text-gray-900">Student Registration</h1>
           <p className="text-gray-500 mt-0.5">{students.length} students registered</p>
         </div>
-        <button onClick={() => setModal('add')} className="btn-primary">
-          <UserPlus className="w-4 h-4"/> Register Student
-        </button>
+      <div className="flex gap-2">
+          <button onClick={loadAll} disabled={loading} className="btn-secondary text-sm">
+            {loading ? '⟳' : '↺ Refresh'}
+          </button>
+          <button onClick={() => setModal('add')} className="btn-primary">
+            <UserPlus className="w-4 h-4"/> Register Student
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -169,6 +197,11 @@ export default function SmsStudents() {
           <option value="">All Classes</option>
           {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
+        {classes.length === 0 && !loading && (
+          <span className="text-xs text-amber-600 flex items-center gap-1">
+            ⚠ No classes — <button onClick={loadAll} className="underline hover:text-amber-800">retry</button>
+          </span>
+        )}
       </div>
 
       {/* Table */}
