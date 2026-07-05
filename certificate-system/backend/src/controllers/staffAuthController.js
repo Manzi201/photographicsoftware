@@ -1,8 +1,11 @@
 const { supabase } = require('../supabase');
 const crypto = require('crypto');
 
-function hashPassword(password, salt) {
-  return crypto.createHmac('sha256', salt || 'schoolms_salt').update(password).digest('hex');
+// ── FIXED salt — do NOT use school_id as salt (it causes hash mismatches) ──
+const FIXED_SALT = 'schoolms_v2_salt_2024';
+
+function hashPassword(password) {
+  return crypto.createHmac('sha256', FIXED_SALT).update(password).digest('hex');
 }
 function generateToken() {
   return crypto.randomBytes(32).toString('hex');
@@ -36,15 +39,22 @@ exports.login = async (req, res) => {
       return res.status(401).json({ success: false, error: 'Username not found or account inactive' });
     }
 
-    // Verify password hash
-    const hash = hashPassword(password, staffMember.school_id);
-    if (hash !== staffMember.password_hash) {
+    // Verify password — try new fixed-salt hash first, then legacy school_id salt
+    const newHash    = hashPassword(password);
+    const legacyHash = crypto.createHmac('sha256', staffMember.school_id || 'schoolms_salt').update(password).digest('hex');
+
+    if (newHash !== staffMember.password_hash && legacyHash !== staffMember.password_hash) {
       return res.status(401).json({ success: false, error: 'Incorrect password' });
+    }
+
+    // If legacy hash matched, migrate to new hash silently
+    if (legacyHash === staffMember.password_hash && newHash !== staffMember.password_hash) {
+      supabase.from('staff').update({ password_hash: newHash }).eq('id', staffMember.id).then(() => {});
     }
 
     const school = staffMember.school;
 
-    // Create session token — ignore if staff_sessions table missing
+    // Create session token
     const token = generateToken();
     const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000);
     try {
@@ -55,16 +65,14 @@ exports.login = async (req, res) => {
         expires_at: expiresAt.toISOString(),
       }]);
     } catch (sessErr) {
-      // staff_sessions table may not exist yet — login still works
-      console.warn('staff_sessions insert failed (table may not exist):', sessErr.message);
+      console.warn('staff_sessions insert failed:', sessErr.message);
     }
 
     // Update last login (non-blocking)
     supabase.from('staff').update({ last_login: new Date().toISOString() }).eq('id', staffMember.id).then(() => {});
 
-    // Return without sensitive data
     const { password_hash, ...safeStaff } = staffMember;
-    delete safeStaff.school; // already in school field
+    delete safeStaff.school;
 
     res.json({
       success:    true,
@@ -106,11 +114,14 @@ exports.changePassword = async (req, res) => {
       .select('password_hash,school_id').eq('id', req.staff.id).single();
     if (!st) return res.status(404).json({ success: false, error: 'Staff not found' });
 
-    const currentHash = hashPassword(current_password, st.school_id);
-    if (currentHash !== st.password_hash) {
+    // Accept both new fixed-salt hash and legacy school_id salt
+    const currentNewHash    = hashPassword(current_password);
+    const currentLegacyHash = crypto.createHmac('sha256', st.school_id || 'schoolms_salt').update(current_password).digest('hex');
+
+    if (currentNewHash !== st.password_hash && currentLegacyHash !== st.password_hash) {
       return res.status(400).json({ success: false, error: 'Current password is incorrect' });
     }
-    const newHash = hashPassword(new_password, st.school_id);
+    const newHash = hashPassword(new_password);
     await supabase.from('staff').update({ password_hash: newHash }).eq('id', req.staff.id);
     res.json({ success: true, message: 'Password updated' });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
