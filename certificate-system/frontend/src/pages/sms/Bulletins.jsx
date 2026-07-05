@@ -1,13 +1,53 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, Download, Users, Star, RefreshCw } from 'lucide-react';
+import { FileText, Download, Users, Star, RefreshCw, Printer } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { getSmsClasses, getTerms, getAcademicYears, getSmsStudents, getBulletins, generateBulletin, generateClassBulletins, downloadBlob } from '../../api';
+import axios from 'axios';
+import { getSmsClasses, getTerms, getAcademicYears, getSmsStudents, getBulletins, downloadBlob } from '../../api';
+
+// ── Axios instance with auth + blob support ───────────────────
+const SMS = axios.create({
+  baseURL: import.meta.env.VITE_API_URL?.replace('/api', '/api/sms') ||
+    (typeof window !== 'undefined' && window.location.hostname !== 'localhost'
+      ? 'https://photographicsoftware-1.onrender.com/api/sms' : '/api/sms'),
+  timeout: 120000, // 2 min — PDF generation takes time
+});
+SMS.interceptors.request.use(cfg => {
+  const t = localStorage.getItem('staff_token') || localStorage.getItem('cert_token');
+  if (t) cfg.headers.Authorization = `Bearer ${t}`;
+  return cfg;
+});
+
+async function fetchPDF(endpoint, body) {
+  const res = await SMS.post(endpoint, body, { responseType: 'arraybuffer' });
+  // Verify it's actually a PDF (starts with %PDF)
+  const bytes = new Uint8Array(res.data).slice(0, 4);
+  const header = String.fromCharCode(...bytes);
+  if (header !== '%PDF') {
+    // It's an error response encoded as arraybuffer
+    const text = new TextDecoder().decode(res.data);
+    let msg = 'Server error';
+    try { msg = JSON.parse(text)?.error || text; } catch {}
+    throw new Error(msg);
+  }
+  return new Blob([res.data], { type: 'application/pdf' });
+}
+
+function openAndPrint(blob) {
+  const url = URL.createObjectURL(blob);
+  const win = window.open(url, '_blank');
+  if (win) {
+    win.addEventListener('load', () => { win.focus(); win.print(); });
+  } else {
+    toast.error('Pop-up blocked — allow pop-ups and try again');
+  }
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
 
 const TERM_COLORS = {
-  1: 'bg-blue-100 text-blue-700 border-blue-200',
-  2: 'bg-green-100 text-green-700 border-green-200',
-  3: 'bg-purple-100 text-purple-700 border-purple-200',
-  4: 'bg-amber-100 text-amber-700 border-amber-200',
+  1: 'border-blue-300 text-blue-700 bg-blue-50',
+  2: 'border-green-300 text-green-700 bg-green-50',
+  3: 'border-purple-300 text-purple-700 bg-purple-50',
+  4: 'border-amber-300 text-amber-700 bg-amber-50',
 };
 
 export default function SmsBulletins() {
@@ -19,8 +59,8 @@ export default function SmsBulletins() {
   const [selClass,  setSelClass]  = useState('');
   const [selTerm,   setSelTerm]   = useState('');
   const [selYear,   setSelYear]   = useState('');
-  const [genAll,    setGenAll]    = useState(false);
-  const [genOne,    setGenOne]    = useState('');
+  const [genAll,    setGenAll]    = useState('');   // '' | 'download' | 'print'
+  const [genOne,    setGenOne]    = useState('');   // studentId_action
   const [remarks,   setRemarks]   = useState({ teacher: '', head: '', conduct: 'Good' });
 
   useEffect(() => {
@@ -51,41 +91,49 @@ export default function SmsBulletins() {
   const selectedTerm = terms.find(t => t.id === selTerm);
   const isAnnual = selectedTerm?.number === 4;
 
-  const handleGenerateAll = async () => {
+  const handleGenerateAll = async (action = 'download') => {
     if (!selClass || !selTerm || !selYear) { toast.error('Select class, term and year'); return; }
-    setGenAll(true);
+    setGenAll(action);
     try {
-      const res = await generateClassBulletins({
-        term_id: selTerm, class_id: selClass,
-        academic_year_id: selYear, ...remarks,
-        teacher_remarks: remarks.teacher, head_remarks: remarks.head,
+      const blob = await fetchPDF('/bulletins/generate-class', {
+        term_id: selTerm, class_id: selClass, academic_year_id: selYear,
+        teacher_remarks: remarks.teacher, head_remarks: remarks.head, conduct: remarks.conduct,
       });
       const cls = classes.find(c => c.id === selClass);
       const trm = terms.find(t => t.id === selTerm);
-      downloadBlob(new Blob([res.data], { type: 'application/pdf' }),
-        `${cls?.name || 'class'}_${trm?.name || 'term'}_bulletins.pdf`);
-      toast.success('✅ All bulletins downloaded!');
+      const fname = `${cls?.name || 'class'}_${trm?.name || 'term'}_bulletins.pdf`;
+      if (action === 'print') {
+        openAndPrint(blob);
+      } else {
+        downloadBlob(blob, fname);
+        toast.success(`✅ ${students.length} bulletins downloaded!`);
+      }
       getBulletins({ class_id: selClass, term_id: selTerm }).then(r => setBulletins(r.data.data || []));
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to generate');
-    } finally { setGenAll(false); }
+      toast.error(err.message || 'Failed to generate bulletins', { duration: 6000 });
+      console.error('generateAll error:', err);
+    } finally { setGenAll(''); }
   };
 
-  const handleGenerateOne = async (student) => {
+  const handleGenerateOne = async (student, action = 'download') => {
     if (!selTerm || !selYear) { toast.error('Select term and year first'); return; }
-    setGenOne(student.id);
+    setGenOne(student.id + '_' + action);
     try {
-      const res = await generateBulletin({
+      const blob = await fetchPDF('/bulletins/generate', {
         student_id: student.id, term_id: selTerm,
         class_id: selClass, academic_year_id: selYear,
-        teacher_remarks: remarks.teacher, head_remarks: remarks.head,
-        conduct: remarks.conduct,
+        teacher_remarks: remarks.teacher, head_remarks: remarks.head, conduct: remarks.conduct,
       });
-      downloadBlob(new Blob([res.data], { type: 'application/pdf' }),
-        `${student.student_id || student.id}_bulletin.pdf`);
-      toast.success('✅ Bulletin downloaded!');
-    } catch { toast.error('Failed to generate'); }
-    finally { setGenOne(''); }
+      if (action === 'print') {
+        openAndPrint(blob);
+      } else {
+        downloadBlob(blob, `${student.student_id || student.id}_bulletin.pdf`);
+        toast.success('✅ Bulletin downloaded!');
+      }
+    } catch (err) {
+      toast.error(err.message || 'Failed to generate', { duration: 6000 });
+      console.error('generateOne error:', err);
+    } finally { setGenOne(''); }
   };
 
   // Group terms by year for display
@@ -180,14 +228,22 @@ export default function SmsBulletins() {
         </div>
       </div>
 
-      {/* ── Generate all button ───────────────────────────────── */}
+      {/* ── Generate all buttons ──────────────────────────── */}
       {selClass && selTerm && selYear && (
-        <button onClick={handleGenerateAll} disabled={genAll}
-          className="w-full btn-primary py-3 mb-5 justify-center text-sm">
-          {genAll
-            ? <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/> Generating PDFs…</>
-            : <><Users className="w-4 h-4"/> Download All {students.length} Bulletins — {selectedTerm?.name}</>}
-        </button>
+        <div className="flex gap-3 mb-5">
+          <button onClick={() => handleGenerateAll('download')} disabled={!!genAll}
+            className="btn-primary flex-1 justify-center py-3 text-sm">
+            {genAll === 'download'
+              ? <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/> Generating…</>
+              : <><Download className="w-4 h-4"/> Download All {students.length} Bulletins</>}
+          </button>
+          <button onClick={() => handleGenerateAll('print')} disabled={!!genAll}
+            className="btn-secondary flex-1 justify-center py-3 text-sm">
+            {genAll === 'print'
+              ? <><span className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"/> Preparing…</>
+              : <><Printer className="w-4 h-4"/> Print All {students.length}</>}
+          </button>
+        </div>
       )}
 
       {/* ── Students list ─────────────────────────────────────── */}
@@ -206,7 +262,6 @@ export default function SmsBulletins() {
           <div className="divide-y divide-gray-50">
             {students.map(st => {
               const bulletin = bulletins.find(b => b.student_id === st.id);
-              const isGen = genOne === st.id;
               return (
                 <div key={st.id} className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50">
                   <div className="w-9 h-11 rounded-lg overflow-hidden bg-gray-100 border shrink-0">
@@ -224,13 +279,24 @@ export default function SmsBulletins() {
                       </p>
                     </div>
                   )}
-                  <button onClick={() => handleGenerateOne(st)}
-                    disabled={!selTerm || !selYear || isGen}
-                    className="btn-secondary text-xs py-1.5 shrink-0">
-                    {isGen
-                      ? <span className="w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"/>
-                      : <><Download className="w-3.5 h-3.5"/> PDF</>}
-                  </button>
+                  <div className="flex gap-1.5 shrink-0">
+                    <button onClick={() => handleGenerateOne(st, 'download')}
+                      disabled={!selTerm || !selYear || !!genOne}
+                      title="Download PDF"
+                      className="p-2 rounded-xl border border-gray-200 text-blue-600 hover:bg-blue-50 disabled:opacity-40 transition-colors">
+                      {genOne === st.id + '_download'
+                        ? <span className="w-3.5 h-3.5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin block"/>
+                        : <Download className="w-3.5 h-3.5"/>}
+                    </button>
+                    <button onClick={() => handleGenerateOne(st, 'print')}
+                      disabled={!selTerm || !selYear || !!genOne}
+                      title="Print"
+                      className="p-2 rounded-xl border border-gray-200 text-green-600 hover:bg-green-50 disabled:opacity-40 transition-colors">
+                      {genOne === st.id + '_print'
+                        ? <span className="w-3.5 h-3.5 border-2 border-green-400 border-t-transparent rounded-full animate-spin block"/>
+                        : <Printer className="w-3.5 h-3.5"/>}
+                    </button>
+                  </div>
                 </div>
               );
             })}
