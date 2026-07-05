@@ -114,3 +114,19 @@ exports.deleteStudent = async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 };
+
+// GET /api/sms/students/stats
+exports.getStats = async (req, res) => {
+  try {
+    const { data: students } = await supabase.from('student_profiles')
+      .select('id,gender,status,fee_status')
+      .eq('school_id', req.schoolId).eq('status','active');
+    const total     = students?.length || 0;
+    const boys      = students?.filter(s=>s.gender==='M').length || 0;
+    const girls     = students?.filter(s=>s.gender==='F').length || 0;
+    const feesPaid  = students?.filter(s=>s.fee_status==='paid').length || 0;
+    const feesPartial = students?.filter(s=>s.fee_status==='partial').length || 0;
+    const feesUnpaid  = students?.filter(s=>s.fee_status==='unpaid').length || 0;
+    res.json({ success:true, data:{ total, boys, girls, feesPaid, feesPartial, feesUnpaid } });
+  } catch (err) { res.status(500).json({ success:false, error:err.message }); }
+};
