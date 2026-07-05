@@ -70,13 +70,26 @@ sms.interceptors.request.use(config => {
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
-// Retry once on timeout (Render cold start)
+// Auto-logout on 401, retry once on timeout/503
 sms.interceptors.response.use(
   r => r,
   async err => {
+    // Expired/invalid token → clear session and redirect to login
+    if (err.response?.status === 401) {
+      localStorage.removeItem('staff_token');
+      localStorage.removeItem('staff_data');
+      localStorage.removeItem('staff_school');
+      // Only redirect if we're not already on login
+      if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+        window.location.href = '/login';
+      }
+      return Promise.reject(err);
+    }
+    // Retry once on timeout or 503 (Render cold start)
     if ((err.code === 'ECONNABORTED' || err.response?.status === 503) && !err.config._retry) {
       err.config._retry = true;
       err.config.timeout = 60000;
+      await new Promise(r => setTimeout(r, 3000)); // wait 3s before retry
       return sms(err.config);
     }
     return Promise.reject(err);
