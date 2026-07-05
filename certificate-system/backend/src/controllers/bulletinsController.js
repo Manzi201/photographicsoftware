@@ -79,7 +79,7 @@ async function generateBulletinPDF(student, marks, subjects, classInfo, termInfo
   let snSz = 18; while (B.widthOfTextAtSize(sn, snSz) > W-180 && snSz > 10) snSz--;
   const snW = B.widthOfTextAtSize(sn, snSz);
   page.drawText(sn, { x:(W-snW)/2, y:H-46, size:snSz, font:B, color:rgb(1,1,1) });
-  const rptTitle = 'SCHOOL REPORT CARD';
+  const rptTitle = bulletinMeta.is_annual ? 'ANNUAL REPORT CARD' : 'SCHOOL REPORT CARD';
   const rtW = SB.widthOfTextAtSize(rptTitle, 11);
   page.drawText(rptTitle, { x:(W-rtW)/2, y:H-62, size:11, font:SB, color:gold });
   const termStr = `${termInfo?.name || ''} — ${yearInfo?.name || ''}`;
@@ -228,30 +228,75 @@ exports.getBulletins = async (req, res) => {
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 };
 
+// ── Helper: compute marks for Annual (average of T1+T2+T3) ───
+async function computeAnnualMarks(studentId, classId, schoolId, academicYearId) {
+  // Get the 3 term IDs for this year
+  const { data: allTerms } = await supabase.from('terms')
+    .select('id,number').eq('academic_year_id', academicYearId).eq('school_id', schoolId)
+    .in('number', [1, 2, 3]);
+
+  if (!allTerms?.length) return [];
+
+  // Get marks for each term
+  const allMarks = await Promise.all(allTerms.map(t =>
+    supabase.from('marks').select('*, subject:subjects(*)')
+      .eq('student_id', studentId).eq('term_id', t.id)
+  ));
+
+  // Build averaged marks per subject
+  const subjectMap = {};
+  allMarks.forEach(({ data: mks }) => {
+    (mks || []).forEach(m => {
+      if (!subjectMap[m.subject_id]) subjectMap[m.subject_id] = { ...m, _count: 0, _totalSum: 0 };
+      if (m.total != null) {
+        subjectMap[m.subject_id]._totalSum += m.total;
+        subjectMap[m.subject_id]._count    += 1;
+      }
+    });
+  });
+
+  return Object.values(subjectMap).map(m => ({
+    ...m,
+    cat1: null, cat2: null, exam: null,
+    total: m._count > 0 ? parseFloat((m._totalSum / m._count).toFixed(2)) : null,
+  }));
+}
+
 // POST /api/sms/bulletins/generate — generate PDF for one student
 exports.generateOne = async (req, res) => {
   try {
     const { student_id, term_id, class_id, academic_year_id, teacher_remarks, head_remarks, conduct, days_present, days_absent } = req.body;
 
-    // Fetch all needed data
-    const [{ data: student }, { data: marks }, { data: classSubs }, { data: termInfo }, { data: yearInfo }, { data: classInfo }] = await Promise.all([
+    // Get term info to check if Annual
+    const { data: termInfo } = await supabase.from('terms').select('*').eq('id', term_id).single();
+    const isAnnual = termInfo?.number === 4;
+
+    const [{ data: student }, { data: classSubs }, { data: yearInfo }, { data: classInfo }] = await Promise.all([
       supabase.from('student_profiles').select('*').eq('id', student_id).single(),
-      supabase.from('marks').select('*, subject:subjects(*)').eq('student_id', student_id).eq('term_id', term_id),
       supabase.from('class_subjects').select('*, subject:subjects(*)').eq('class_id', class_id),
-      supabase.from('terms').select('*').eq('id', term_id).single(),
       supabase.from('academic_years').select('*').eq('id', academic_year_id).single(),
       supabase.from('classes').select('*').eq('id', class_id).single(),
     ]);
 
     const subjects = (classSubs || []).map(cs => cs.subject);
 
-    // Calculate totals for ranking
+    // Get marks — averaged if Annual
+    let marks;
+    if (isAnnual) {
+      marks = await computeAnnualMarks(student_id, class_id, req.schoolId, academic_year_id);
+    } else {
+      const { data: m } = await supabase.from('marks').select('*, subject:subjects(*)')
+        .eq('student_id', student_id).eq('term_id', term_id);
+      marks = m || [];
+    }
+
+    // Calculate totals
     const { data: allBulletins } = await supabase.from('bulletins')
       .select('student_id, percentage').eq('term_id', term_id).eq('class_id', class_id);
 
     let totalWeighted = 0, totalMaxW = 0;
     subjects.forEach(sub => {
-      const m = (marks || []).find(mk => mk.subject_id === sub.id);
+      const m = marks.find(mk => mk.subject_id === sub.id);
       if (m?.total != null) {
         totalWeighted += m.total * (sub.coefficient || 1);
         totalMaxW     += (sub.max_marks || 100) * (sub.coefficient || 1);
@@ -259,7 +304,6 @@ exports.generateOne = async (req, res) => {
     });
     const pct = totalMaxW > 0 ? (totalWeighted / totalMaxW) * 100 : 0;
 
-    // Simple rank calculation
     const peers = [...(allBulletins || []), { student_id, percentage: pct }]
       .sort((a, b) => (b.percentage || 0) - (a.percentage || 0));
     const rank = peers.findIndex(p => p.student_id === student_id) + 1;
@@ -268,13 +312,13 @@ exports.generateOne = async (req, res) => {
       percentage: pct, rank_in_class: rank, class_size: peers.length,
       teacher_remarks, head_remarks, conduct: conduct || 'Good',
       days_present: parseInt(days_present || 0), days_absent: parseInt(days_absent || 0),
+      is_annual: isAnnual,
     };
 
     const pdfBytes = await generateBulletinPDF(
-      student, marks || [], subjects, classInfo, termInfo, yearInfo, req.school, bulletinMeta
+      student, marks, subjects, classInfo, termInfo, yearInfo, req.school, bulletinMeta
     );
 
-    // Save bulletin record
     await supabase.from('bulletins').upsert([{
       school_id: req.schoolId, student_id, term_id, class_id, academic_year_id,
       total_marks: totalWeighted, max_possible: totalMaxW,
@@ -299,54 +343,66 @@ exports.generateClass = async (req, res) => {
   try {
     const { term_id, class_id, academic_year_id, conduct, teacher_remarks, head_remarks } = req.body;
 
+    const { data: termInfo } = await supabase.from('terms').select('*').eq('id', term_id).single();
+    const isAnnual = termInfo?.number === 4;
+
     const { data: students } = await supabase.from('student_profiles')
       .select('*').eq('current_class_id', class_id).eq('status', 'active').eq('school_id', req.schoolId);
 
     if (!students?.length) return res.status(404).json({ success: false, error: 'No students in class' });
 
-    const [{ data: classSubs }, { data: termInfo }, { data: yearInfo }, { data: classInfo }, { data: allMarks }] = await Promise.all([
+    const [{ data: classSubs }, { data: yearInfo }, { data: classInfo }] = await Promise.all([
       supabase.from('class_subjects').select('*, subject:subjects(*)').eq('class_id', class_id),
-      supabase.from('terms').select('*').eq('id', term_id).single(),
       supabase.from('academic_years').select('*').eq('id', academic_year_id).single(),
       supabase.from('classes').select('*').eq('id', class_id).single(),
-      supabase.from('marks').select('*').eq('class_id', class_id).eq('term_id', term_id),
     ]);
     const subjects = (classSubs || []).map(cs => cs.subject);
 
+    // Get marks per student
+    let allMarksMap = {};
+    if (isAnnual) {
+      for (const st of students) {
+        allMarksMap[st.id] = await computeAnnualMarks(st.id, class_id, req.schoolId, academic_year_id);
+      }
+    } else {
+      const { data: allMarks } = await supabase.from('marks').select('*').eq('class_id', class_id).eq('term_id', term_id);
+      students.forEach(st => { allMarksMap[st.id] = (allMarks || []).filter(m => m.student_id === st.id); });
+    }
+
     // Calculate percentages for ranking
     const studentPcts = students.map(st => {
+      const stMarks = allMarksMap[st.id] || [];
       let tw = 0, tmx = 0;
       subjects.forEach(sub => {
-        const m = (allMarks || []).find(mk => mk.student_id === st.id && mk.subject_id === sub.id);
-        if (m?.total != null) { tw += m.total * (sub.coefficient || 1); tmx += (sub.max_marks || 100) * (sub.coefficient || 1); }
+        const m = stMarks.find(mk => mk.subject_id === sub.id);
+        if (m?.total != null) { tw += m.total * (sub.coefficient||1); tmx += (sub.max_marks||100) * (sub.coefficient||1); }
       });
-      return { student: st, pct: tmx > 0 ? (tw / tmx) * 100 : 0, total: tw, maxTotal: tmx };
-    }).sort((a, b) => b.pct - a.pct);
-    studentPcts.forEach((sp, i) => { sp.rank = i + 1; });
+      return { student: st, pct: tmx > 0 ? (tw/tmx)*100 : 0, total: tw, maxTotal: tmx };
+    }).sort((a,b) => b.pct - a.pct);
+    studentPcts.forEach((sp,i) => { sp.rank = i+1; });
 
     const merged = await PDFDocument.create();
     for (const sp of studentPcts) {
-      const stMarks = (allMarks || []).filter(m => m.student_id === sp.student.id);
       const meta = {
         percentage: sp.pct, rank_in_class: sp.rank, class_size: students.length,
-        teacher_remarks, head_remarks, conduct: conduct || 'Good', days_present: 0, days_absent: 0,
+        teacher_remarks, head_remarks, conduct: conduct||'Good', days_present:0, days_absent:0, is_annual: isAnnual,
       };
-      const bytes = await generateBulletinPDF(sp.student, stMarks, subjects, classInfo, termInfo, yearInfo, req.school, meta);
+      const bytes = await generateBulletinPDF(sp.student, allMarksMap[sp.student.id]||[], subjects, classInfo, termInfo, yearInfo, req.school, meta);
       const bDoc = await PDFDocument.load(bytes);
-      const [pg] = await merged.copyPages(bDoc, [0]);
+      const [pg] = await merged.copyPages(bDoc,[0]);
       merged.addPage(pg);
 
       await supabase.from('bulletins').upsert([{
-        school_id: req.schoolId, student_id: sp.student.id, term_id, class_id, academic_year_id,
-        total_marks: sp.total, max_possible: sp.maxTotal, percentage: sp.pct,
-        rank_in_class: sp.rank, class_size: students.length,
-        grade: sp.pct >= 80 ? 'A1' : sp.pct >= 70 ? 'B2' : sp.pct >= 60 ? 'C3' : sp.pct >= 50 ? 'D4' : 'F',
+        school_id:req.schoolId, student_id:sp.student.id, term_id, class_id, academic_year_id,
+        total_marks:sp.total, max_possible:sp.maxTotal, percentage:sp.pct,
+        rank_in_class:sp.rank, class_size:students.length,
+        grade: sp.pct>=80?'A1':sp.pct>=70?'B2':sp.pct>=60?'C3':sp.pct>=50?'D4':'F',
         conduct, teacher_remarks, head_remarks, generated_at: new Date().toISOString(),
-      }], { onConflict: 'student_id,term_id' });
+      }],{onConflict:'student_id,term_id'});
     }
 
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${classInfo?.name||'class'}_bulletins_${termInfo?.name||''}.pdf"`);
+    res.setHeader('Content-Type','application/pdf');
+    res.setHeader('Content-Disposition',`attachment; filename="${classInfo?.name||'class'}_${isAnnual?'annual':termInfo?.name||''}_bulletins.pdf"`);
     res.send(Buffer.from(await merged.save()));
   } catch (err) {
     console.error('generateClass error:', err);

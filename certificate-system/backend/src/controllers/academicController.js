@@ -213,3 +213,34 @@ exports.updateStaff = async (req, res) => {
     res.json({ success: true, data });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 };
+
+// ══ CLASS-SUBJECTS ════════════════════════════════════════════
+exports.getClassSubjects = async (req, res) => {
+  try {
+    const { class_id } = req.query;
+    let q = supabase.from('class_subjects').select('*, subject:subjects(*), teacher:staff(id,full_name)');
+    if (class_id) q = q.eq('class_id', class_id);
+    const { data, error } = await q;
+    if (error) throw error;
+    res.json({ success: true, data });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+};
+
+exports.assignSubject = async (req, res) => {
+  try {
+    const { class_id, subject_id, teacher_id } = req.body;
+    if (!class_id || !subject_id) return res.status(400).json({ success: false, error: 'class_id and subject_id required' });
+    const { data, error } = await supabase.from('class_subjects')
+      .upsert([{ class_id, subject_id, teacher_id: teacher_id || null }], { onConflict: 'class_id,subject_id' })
+      .select('*, subject:subjects(*), teacher:staff(id,full_name)').single();
+    if (error) throw error;
+    res.status(201).json({ success: true, data });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+};
+
+exports.unassignSubject = async (req, res) => {
+  try {
+    await supabase.from('class_subjects').delete().eq('id', req.params.id);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+};
