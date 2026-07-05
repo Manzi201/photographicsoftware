@@ -30,9 +30,13 @@ export default function Login() {
         try {
           await login(form.identifier, form.password);
           toast.success('Welcome!');
-          navigate('/sms/dashboard');
+          window.location.href = '/sms/dashboard';
           return;
-        } catch {}
+        } catch (adminErr) {
+          // If it looks like a real email but failed — show error, don't fall through to staff
+          toast.error('Invalid email or password');
+          return;
+        }
       }
 
       // ── Try 2: Staff login (username or email + password) ──
@@ -42,18 +46,22 @@ export default function Login() {
           password: form.password,
         }, { timeout: 45000 });
         const { token, staff, school } = res.data;
+        // Save session to localStorage BEFORE navigating
         localStorage.setItem('staff_token',  token);
         localStorage.setItem('staff_data',   JSON.stringify(staff));
         localStorage.setItem('staff_school', JSON.stringify(school));
         toast.success(`Welcome, ${staff.full_name}!`);
-        navigate('/sms/dashboard');
+        // Use window.location so ProtectedRoute reads fresh localStorage
+        window.location.href = '/sms/dashboard';
         return;
       } catch (staffErr) {
-        // If it was a timeout, inform user
         if (staffErr.code === 'ECONNABORTED') {
           toast.error('Server is starting up, please wait 30s and retry.', { duration: 6000 });
           return;
         }
+        // Show specific error from backend if available
+        const msg = staffErr.response?.data?.error;
+        if (msg) { toast.error(msg); return; }
       }
 
       // ── Both failed ──
