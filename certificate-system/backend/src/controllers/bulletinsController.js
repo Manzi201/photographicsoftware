@@ -79,23 +79,27 @@ async function generateBulletinPDF(student, marks, subjects, classInfo, termInfo
 
   // Left: Republic + School info
   const sn = school.school_name || 'My School';
-  const cityAddr = school.address || school.city || 'Kigali';
+  const cityAddr = [school.address, school.city].filter(Boolean).join(' — ') || 'Kigali';
+  const phone    = school.phone || '';
   page.drawText('REPUBLIC OF RWANDA', { x:ML, y:H-18, size:8, font:B, color:NAVY });
-  page.drawText(sn, { x:ML, y:H-30, size:8, font:B, color:BLACK });
-  page.drawText(cityAddr, { x:ML, y:H-41, size:7, font:R, color:BLACK });
-  if (school.phone) page.drawText(school.phone, { x:ML, y:H-52, size:7, font:R, color:BLACK });
+  page.drawText(sn, { x:ML, y:H-30, size:9, font:B, color:BLACK });
+  page.drawText(cityAddr, { x:ML, y:H-42, size:7.5, font:R, color:BLACK });
+  if (phone) page.drawText(phone, { x:ML, y:H-54, size:7.5, font:R, color:BLACK });
 
-  // Center: Logo
-  const LOGO_X = (W - 60) / 2, LOGO_Y = H - HDR_H + 10;
+  // Center: Logo — bigger and centered
+  const LOGO_SIZE = 70;
+  const LOGO_X = (W - LOGO_SIZE) / 2;
+  const LOGO_Y = H - HDR_H + 10;
   if (school.logo_url) {
     try {
       const buf = await fetchBuf(school.logo_url);
       const img = await embedImg(doc, buf);
-      if (img) page.drawImage(img, { x: LOGO_X, y: LOGO_Y, width: 60, height: 66 });
+      if (img) page.drawImage(img, { x: LOGO_X, y: LOGO_Y, width: LOGO_SIZE, height: LOGO_SIZE });
     } catch {}
   } else {
-    page.drawRectangle({ x: LOGO_X, y: LOGO_Y, width: 60, height: 60, color: LGRAY });
-    drawCentered(page, sn.substring(0,2).toUpperCase(), B, 20, NAVY, LOGO_X, 60, LOGO_Y+22);
+    // Draw initial circle as fallback
+    page.drawRectangle({ x: LOGO_X, y: LOGO_Y, width: LOGO_SIZE, height: LOGO_SIZE, color: LGRAY, borderColor: NAVY, borderWidth: 1 });
+    drawCentered(page, sn.substring(0, 2).toUpperCase(), B, 24, NAVY, LOGO_X, LOGO_SIZE, LOGO_Y + 22);
   }
 
   // Right: Ministry + Year + Term
@@ -361,6 +365,11 @@ exports.generateOne = async (req, res) => {
     const { student_id, term_id, class_id, academic_year_id, teacher_remarks, head_remarks, conduct, days_present, days_absent } = req.body;
     const { data: termInfo } = await supabase.from('terms').select('*').eq('id', term_id).single();
     const isAnnual = termInfo?.number === 4;
+
+    // Always re-fetch full school data to get latest logo, phone, address
+    const { data: schoolFull } = await supabase.from('schools').select('*').eq('id', req.schoolId).single();
+    const school = schoolFull || req.school;
+
     const [{ data: student }, { data: classSubs }, { data: yearInfo }, { data: classInfo }] = await Promise.all([
       supabase.from('student_profiles').select('*').eq('id', student_id).single(),
       supabase.from('class_subjects').select('*, subject:subjects(*)').eq('class_id', class_id),
@@ -385,7 +394,7 @@ exports.generateOne = async (req, res) => {
     const peers = [...(allBulletins||[]), { student_id, percentage: pct }].sort((a,b)=>(b.percentage||0)-(a.percentage||0));
     const rank = peers.findIndex(p => p.student_id === student_id) + 1;
     const bulletinMeta = { percentage:pct, rank_in_class:rank, class_size:peers.length, teacher_remarks, head_remarks, conduct:conduct||'Good', days_present:parseInt(days_present||0), days_absent:parseInt(days_absent||0), is_annual:isAnnual };
-    const pdfBytes = await generateBulletinPDF(student, marks, subjects, classInfo, termInfo, yearInfo, req.school, bulletinMeta);
+    const pdfBytes = await generateBulletinPDF(student, marks, subjects, classInfo, termInfo, yearInfo, school, bulletinMeta);
     await supabase.from('bulletins').upsert([{ school_id:req.schoolId, student_id, term_id, class_id, academic_year_id, total_marks:tw, max_possible:tmx, percentage:pct, rank_in_class:rank, class_size:peers.length, grade:pct>=80?'A1':pct>=70?'B2':pct>=60?'C3':pct>=50?'D4':'F', conduct, teacher_remarks, head_remarks, days_present:parseInt(days_present||0), days_absent:parseInt(days_absent||0), generated_at:new Date().toISOString(), generated_by:req.staff?.id||null }], { onConflict:'student_id,term_id' });
     res.setHeader('Content-Type','application/pdf');
     res.setHeader('Content-Disposition',`attachment; filename="${student.student_id||student_id}_bulletin.pdf"`);
@@ -398,6 +407,11 @@ exports.generateClass = async (req, res) => {
     const { term_id, class_id, academic_year_id, conduct, teacher_remarks, head_remarks } = req.body;
     const { data: termInfo } = await supabase.from('terms').select('*').eq('id', term_id).single();
     const isAnnual = termInfo?.number === 4;
+
+    // Always re-fetch full school data to get latest logo, phone, address
+    const { data: schoolFull } = await supabase.from('schools').select('*').eq('id', req.schoolId).single();
+    const school = schoolFull || req.school;
+
     const { data: students } = await supabase.from('student_profiles').select('*').eq('current_class_id', class_id).eq('status','active').eq('school_id', req.schoolId);
     if (!students?.length) return res.status(404).json({ success:false, error:'No students in class' });
     const [{ data: classSubs }, { data: yearInfo }, { data: classInfo }] = await Promise.all([
@@ -422,7 +436,7 @@ exports.generateClass = async (req, res) => {
     const merged = await PDFDocument.create();
     for (const sp of studentPcts) {
       const meta = { percentage:sp.pct, rank_in_class:sp.rank, class_size:students.length, teacher_remarks, head_remarks, conduct:conduct||'Good', days_present:0, days_absent:0, is_annual:isAnnual };
-      const bytes = await generateBulletinPDF(sp.student, allMarksMap[sp.student.id]||[], subjects, classInfo, termInfo, yearInfo, req.school, meta);
+      const bytes = await generateBulletinPDF(sp.student, allMarksMap[sp.student.id]||[], subjects, classInfo, termInfo, yearInfo, school, meta);
       const bDoc = await PDFDocument.load(bytes);
       const [pg] = await merged.copyPages(bDoc,[0]);
       merged.addPage(pg);
