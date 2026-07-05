@@ -83,4 +83,14 @@ router.get('/excel/students', requireRole('admin','secretary','finance'), excel.
 router.get('/excel/marks',    requireRole('admin','dos','secretary'),     excel.exportMarks);
 router.get('/excel/finance',  requireRole('admin','finance'),             excel.exportFinance);
 
+// ── Documents (Secretary + Admin) ─────────────────────────────
+const docs = require('../controllers/documentsController');
+router.get   ('/documents/folders',      requireRole('admin','secretary'), docs.getFolders);
+router.post  ('/documents/folders',      requireRole('admin','secretary'), docs.createFolder);
+router.put   ('/documents/folders/:id',  requireRole('admin','secretary'), docs.updateFolder);
+router.delete('/documents/folders/:id',  requireRole('admin','secretary'), docs.deleteFolder);
+router.get   ('/documents',              requireRole('admin','secretary'), docs.getDocuments);
+router.post  ('/documents',              requireRole('admin','secretary'), docs.uploadDocument);
+router.delete('/documents/:id',          requireRole('admin','secretary'), docs.deleteDocument);
+
 module.exports = router;

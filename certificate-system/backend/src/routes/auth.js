@@ -60,7 +60,40 @@ router.post('/register', async (req, res) => {
 
     if (schoolError) {
       console.error('School insert error:', schoolError.message);
-      // Still return success — the trigger might have beaten us to it
+    }
+  }
+
+  // Step 3: Auto-create admin staff account for this school owner
+  // Get the school ID (just created or existing)
+  const { data: schoolRow } = await supabase
+    .from('schools').select('id').eq('user_id', userId).single();
+
+  if (schoolRow?.id) {
+    const crypto = require('crypto');
+    const defaultUsername = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+    const passwordHash = crypto.createHmac('sha256', schoolRow.id).update('admin123').digest('hex');
+
+    // Check if admin staff already exists
+    const { data: existingAdmin } = await supabase
+      .from('staff').select('id').eq('school_id', schoolRow.id).eq('role', 'admin').single();
+
+    if (!existingAdmin) {
+      const { error: staffErr } = await supabase.from('staff').insert([{
+        school_id:     schoolRow.id,
+        user_id:       userId,
+        full_name:     school_name.trim() + ' Admin',
+        email:         email,
+        role:          'admin',
+        username:      defaultUsername,
+        password_hash: passwordHash,
+        is_active:     true,
+        permissions:   {
+          can_manage_staff: true, can_manage_classes: true,
+          can_enter_marks: true, can_print_bulletins: true,
+          can_manage_finance: true, can_register_students: true, can_promote: true
+        },
+      }]);
+      if (staffErr) console.error('Admin staff insert error:', staffErr.message);
     }
   }
 
@@ -68,6 +101,9 @@ router.post('/register', async (req, res) => {
     success: true,
     message: 'Account created successfully',
     user: { id: userId, email: data.user.email },
+    default_staff_username: email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, ''),
+    default_staff_password: 'admin123',
+    note: 'Change your staff password after first login at /staff-login',
   });
 });
 

@@ -22,6 +22,7 @@ import SmsFinance       from './pages/sms/Finance';
 import SmsNotifications from './pages/sms/Notifications';
 import AdminStaff       from './pages/sms/AdminStaff';
 import Promotion        from './pages/sms/Promotion';
+import Documents        from './pages/sms/Documents';
 import StaffLogin       from './pages/StaffLogin';
 import RoleDashboard    from './pages/sms/dashboards/RoleDashboard';
 
@@ -77,6 +78,7 @@ function AppRoutes() {
           <Route path="sms/finance"       element={<SmsFinance />} />
           <Route path="sms/notifications" element={<SmsNotifications />} />
           <Route path="sms/promotion"     element={<Promotion />} />
+          <Route path="sms/documents"     element={<Documents />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, Upload, Search, Award,
   Printer, Settings, GraduationCap, Menu, X,
   LogOut, ChevronDown, BookOpen, UserCircle, School,
-  FileText, CreditCard, Bell, Shield, TrendingUp
+  FileText, CreditCard, Bell, Shield, TrendingUp, Folder
 } from 'lucide-react';import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 
@@ -44,6 +44,8 @@ const NAV_BY_ROLE = {
     { to: '/templates/S6',        icon: GraduationCap,   label: 'S6' },
     { section: 'Report Cards' },
     { to: '/sms/bulletins',       icon: FileText,        label: 'Print Bulletins' },
+    { section: 'Documents' },
+    { to: '/sms/documents',       icon: Folder,          label: 'School Documents' },
   ],
 
   // ── TEACHER ────────────────────────────────────────────────

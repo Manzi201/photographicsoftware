@@ -405,6 +405,17 @@ export default function Register() {
                 ))}
               </div>
 
+              {/* Admin credentials box */}
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 text-left">
+                <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-2">🔑 Your Staff Login Credentials</p>
+                <p className="text-xs text-blue-600 mb-2">Use these to login at <strong>/staff-login</strong> or share with staff:</p>
+                <div className="bg-white rounded-lg p-3 space-y-1 border border-blue-100">
+                  <p className="text-sm"><span className="text-gray-500 text-xs">Username:</span> <span className="font-mono font-bold text-blue-900">{form.email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g,'')}</span></p>
+                  <p className="text-sm"><span className="text-gray-500 text-xs">Password:</span> <span className="font-mono font-bold text-amber-700">admin123</span></p>
+                  <p className="text-xs text-red-500 mt-1">⚠️ Change this password after first login!</p>
+                </div>
+              </div>
+
               <button onClick={() => navigate('/')}
                 className="w-full flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 text-white font-semibold py-3 rounded-xl transition-colors shadow-sm text-sm">
                 <GraduationCap className="w-4 h-4" /> Go to Dashboard
