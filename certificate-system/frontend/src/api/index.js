@@ -64,7 +64,10 @@ const SMS_URL = (() => {
 
 const sms = axios.create({ baseURL: SMS_URL, timeout: 30000 });
 sms.interceptors.request.use(config => {
-  const token = localStorage.getItem('cert_token');
+  // Use staff_token if logged in as staff, otherwise use supabase token
+  const staffToken = localStorage.getItem('staff_token');
+  const certToken  = localStorage.getItem('cert_token');
+  const token = staffToken || certToken;
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });

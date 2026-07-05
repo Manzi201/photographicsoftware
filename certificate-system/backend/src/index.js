@@ -54,8 +54,8 @@ app.use('/api/staff-auth', staffAuthRoutes);  // Staff login (teacher/secretary/
 // Root — show API info instead of 404
 app.get('/', (req, res) => {
   res.json({
-    name: 'Certificate System API',
-    version: '1.0.0',
+    name: 'School Management System API',
+    version: '2.0.0',
     status: 'running',
     endpoints: {
       health:    'GET /api/health',

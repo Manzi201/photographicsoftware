@@ -28,6 +28,8 @@ import RoleDashboard    from './pages/sms/dashboards/RoleDashboard';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
+  // Also allow staff who logged in via staff-auth (they have staff_token but no Supabase user)
+  const hasStaffSession = !!localStorage.getItem('staff_token');
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -38,13 +40,14 @@ function ProtectedRoute({ children }) {
       </div>
     );
   }
-  return user ? children : <Navigate to="/login" replace />;
+  return (user || hasStaffSession) ? children : <Navigate to="/login" replace />;
 }
 
 function PublicRoute({ children }) {
   const { user, loading } = useAuth();
+  const hasStaffSession = !!localStorage.getItem('staff_token');
   if (loading) return null;
-  return !user ? children : <Navigate to="/" replace />;
+  return (!user && !hasStaffSession) ? children : <Navigate to="/" replace />;
 }
 
 function AppRoutes() {
