@@ -52,8 +52,8 @@ export default function AdminDashboard() {
     // Just load staff count for the summary card
     import('../../../api').then(({ default: api }) =>
       api.get('/sms/admin/staff')
-        .then(r => setStaffCount((r.data?.data || []).length))
-        .catch(() => setStaffCount(0))
+        .then(r => setStaffCount((r.data?.data || []).length + 1)) // +1 for school owner
+        .catch(() => setStaffCount(1))  // at minimum the owner themselves
         .finally(() => setLoading(false))
     );
   }, []);
