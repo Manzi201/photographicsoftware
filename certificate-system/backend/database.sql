@@ -137,7 +137,9 @@ CREATE TABLE IF NOT EXISTS subjects (
   school_id     UUID REFERENCES schools(id) ON DELETE CASCADE NOT NULL,
   name          VARCHAR(100) NOT NULL,
   code          VARCHAR(20),
-  max_marks     INT DEFAULT 100,
+  max_marks     INT DEFAULT 100,   -- total = max_test + max_exam
+  max_test      INT DEFAULT 0,     -- max marks for TEST (CAT)
+  max_exam      INT DEFAULT 0,     -- max marks for EXAM (0 = test only)
   passing_marks INT DEFAULT 50,
   coefficient   INT DEFAULT 1,
   created_at    TIMESTAMPTZ DEFAULT NOW()
@@ -402,6 +404,10 @@ CREATE INDEX IF NOT EXISTS idx_staff_staff_id ON staff(staff_id);
 ALTER TABLE classes ADD COLUMN IF NOT EXISTS level_order INT DEFAULT 1;
 ALTER TABLE classes ADD COLUMN IF NOT EXISTS capacity    INT DEFAULT 40;
 ALTER TABLE classes ADD COLUMN IF NOT EXISTS section     VARCHAR(5) DEFAULT 'A';
+
+-- subjects: add separate max marks for TEST and EXAM
+ALTER TABLE subjects ADD COLUMN IF NOT EXISTS max_test   INT DEFAULT 0;
+ALTER TABLE subjects ADD COLUMN IF NOT EXISTS max_exam   INT DEFAULT 0;
 
 -- student_profiles
 ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS previous_class_id UUID REFERENCES classes(id) ON DELETE SET NULL;

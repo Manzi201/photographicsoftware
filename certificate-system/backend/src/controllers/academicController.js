@@ -173,8 +173,16 @@ exports.getSubjects = async (req, res) => {
 
 exports.createSubject = async (req, res) => {
   try {
+    const { name, code, max_test, max_exam, passing_marks, coefficient } = req.body;
+    if (!name) return res.status(400).json({ success:false, error:'name required' });
+    const mTest = parseInt(max_test)||0;
+    const mExam = parseInt(max_exam)||0;
+    const max_marks = mTest + mExam || 100;
     const { data, error } = await supabase.from('subjects').insert([{
-      school_id: req.schoolId, ...req.body
+      school_id: req.schoolId, name, code: code||null,
+      max_marks, max_test: mTest, max_exam: mExam,
+      passing_marks: parseInt(passing_marks)||50,
+      coefficient: parseInt(coefficient)||1,
     }]).select().single();
     if (error) throw error;
     res.status(201).json({ success: true, data });
@@ -183,9 +191,13 @@ exports.createSubject = async (req, res) => {
 
 exports.updateSubject = async (req, res) => {
   try {
-    const { name, code, max_marks, passing_marks, coefficient } = req.body;
+    const { name, code, max_test, max_exam, passing_marks, coefficient } = req.body;
+    const mTest = parseInt(max_test)||0;
+    const mExam = parseInt(max_exam)||0;
+    const max_marks = mTest + mExam || 100;
     const { data, error } = await supabase.from('subjects')
-      .update({ name, code: code||null, max_marks: max_marks||100, passing_marks: passing_marks||50, coefficient: coefficient||1 })
+      .update({ name, code: code||null, max_marks, max_test: mTest, max_exam: mExam,
+        passing_marks: parseInt(passing_marks)||50, coefficient: parseInt(coefficient)||1 })
       .eq('id', req.params.id).eq('school_id', req.schoolId)
       .select().single();
     if (error) throw error;

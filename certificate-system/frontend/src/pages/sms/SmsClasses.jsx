@@ -226,62 +226,89 @@ function SubjectModal({ subject, onSave, onClose }) {
   const [form, setForm] = useState({
     name:          subject?.name          || '',
     code:          subject?.code          || '',
-    max_marks:     subject?.max_marks     || 100,
+    max_test:      subject?.max_test      ?? 0,
+    max_exam:      subject?.max_exam      ?? 0,
     passing_marks: subject?.passing_marks || 50,
     coefficient:   subject?.coefficient   || 1,
   });
   const [loading, setLoading] = useState(false);
   const f = k => e => setForm(p => ({ ...p, [k]: e.target.value }));
+  const maxTotal = parseInt(form.max_test||0) + parseInt(form.max_exam||0);
+  const examOnly = parseInt(form.max_exam||0) === 0;
+
   const save = async () => {
     if (!form.name.trim()) { toast.error('Subject name required'); return; }
+    if (maxTotal <= 0) { toast.error('Enter max marks for TEST or EXAM'); return; }
     setLoading(true);
     try {
-      if (subject?.id) {
-        await updateSmsSubject(subject.id, form);
-        toast.success('Subject updated!');
-      } else {
-        await createSmsSubject(form);
-        toast.success('Subject created!');
-      }
+      if (subject?.id) { await updateSmsSubject(subject.id, form); toast.success('Subject updated!'); }
+      else             { await createSmsSubject(form);             toast.success('Subject created!'); }
       onSave();
     } catch(err){ toast.error(err.response?.data?.error || 'Error'); }
     finally { setLoading(false); }
   };
+
   return (
     <Modal title={subject?.id ? 'Edit Subject' : 'New Subject'} onClose={onClose}>
-      <div className="p-6 grid grid-cols-2 gap-3">
-        <div className="col-span-2">
-          <label className="block text-xs font-semibold text-gray-600 mb-1">Subject Name *</label>
-          <input className="input-field" value={form.name} onChange={f('name')} placeholder="e.g. Mathematics" autoFocus/>
+      <div className="p-6 space-y-4">
+        <div className="grid grid-cols-2 gap-3">
+          <div className="col-span-2">
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Subject Name *</label>
+            <input className="input-field" value={form.name} onChange={f('name')} placeholder="e.g. Mathematics" autoFocus/>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Short Code</label>
+            <input className="input-field" value={form.code} onChange={f('code')} placeholder="e.g. MATH"/>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Coefficient</label>
+            <input type="number" className="input-field" value={form.coefficient} onChange={f('coefficient')} min={1} max={10}/>
+          </div>
         </div>
-        <div>
-          <label className="block text-xs font-semibold text-gray-600 mb-1">Short Code</label>
-          <input className="input-field" value={form.code} onChange={f('code')} placeholder="e.g. MATH"/>
+
+        {/* Max marks section */}
+        <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 space-y-3">
+          <p className="text-xs font-bold text-blue-700 uppercase tracking-wide">Max Marks Configuration</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">TEST Max Marks *</label>
+              <input type="number" className="input-field" value={form.max_test} onChange={f('max_test')} min={0} placeholder="e.g. 60"/>
+              <p className="text-xs text-gray-400 mt-0.5">CAT / Continuous Assessment</p>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">EXAM Max Marks</label>
+              <input type="number" className="input-field" value={form.max_exam} onChange={f('max_exam')} min={0} placeholder="0 = Test only"/>
+              <p className="text-xs text-gray-400 mt-0.5">0 = no exam, TEST only</p>
+            </div>
+          </div>
+          {/* Live preview */}
+          <div className={`rounded-xl p-3 text-sm flex items-center gap-4 flex-wrap
+            ${maxTotal > 0 ? 'bg-white border border-blue-200' : 'bg-gray-50 border border-gray-200'}`}>
+            <div className="flex items-center gap-2">
+              <span className="text-gray-500 text-xs">TEST:</span>
+              <span className="font-bold text-blue-700">{form.max_test || 0}</span>
+            </div>
+            {parseInt(form.max_exam||0) > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="text-gray-500 text-xs">EXAM:</span>
+                <span className="font-bold text-green-700">{form.max_exam}</span>
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <span className="text-gray-500 text-xs">TOTAL:</span>
+              <span className="font-bold text-gray-900">{maxTotal}</span>
+            </div>
+            {parseInt(form.max_exam||0) === 0 && maxTotal > 0 && (
+              <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-semibold">
+                TEST only — no exam
+              </span>
+            )}
+          </div>
         </div>
-        <div>
-          <label className="block text-xs font-semibold text-gray-600 mb-1">Coefficient</label>
-          <input type="number" className="input-field" value={form.coefficient} onChange={f('coefficient')} min={1} max={10}/>
-          <p className="text-xs text-gray-400 mt-0.5">Weight in overall average</p>
-        </div>
-        <div>
-          <label className="block text-xs font-semibold text-gray-600 mb-1">Max Marks (Total)</label>
-          <input type="number" className="input-field" value={form.max_marks} onChange={f('max_marks')} min={1}/>
-          <p className="text-xs text-gray-400 mt-0.5">TEST + EX combined max</p>
-        </div>
+
         <div>
           <label className="block text-xs font-semibold text-gray-600 mb-1">Pass Mark</label>
           <input type="number" className="input-field" value={form.passing_marks} onChange={f('passing_marks')} min={0}/>
-        </div>
-        {/* Preview */}
-        <div className="col-span-2 bg-gray-50 border border-gray-100 rounded-xl p-3">
-          <p className="text-xs font-semibold text-gray-500 mb-1">Preview in report card:</p>
-          <div className="flex gap-4 text-xs text-gray-700">
-            <span><strong>{form.name || 'Subject'}</strong></span>
-            <span>Max: <strong>{form.max_marks}</strong></span>
-            <span>Coef: <strong>×{form.coefficient}</strong></span>
-            <span>TEST max: <strong>{Math.round(form.max_marks / 2)}</strong></span>
-            <span>EX max: <strong>{form.max_marks - Math.round(form.max_marks / 2)}</strong></span>
-          </div>
         </div>
       </div>
       <div className="flex gap-3 px-6 py-4 border-t">
@@ -564,7 +591,7 @@ export default function SmsClasses() {
               <div className="rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
                 <table className="w-full text-sm">
                   <thead><tr className="bg-gray-50 border-b border-gray-100">
-                    {['Subject','Code','Coefficient','Max Marks','Pass Mark','Actions'].map(h=><th key={h} className="text-left py-2.5 px-4 text-xs font-semibold text-gray-400">{h}</th>)}
+                    {['Subject','Code','Coefficient','Max TEST','Max EXAM','Total','Pass Mark','Actions'].map(h=><th key={h} className="text-left py-2.5 px-4 text-xs font-semibold text-gray-400">{h}</th>)}
                   </tr></thead>
                   <tbody>
                     {subjects.map((s,i)=>(
@@ -572,7 +599,9 @@ export default function SmsClasses() {
                         <td className="py-3 px-4 font-semibold text-gray-900">{s.name}</td>
                         <td className="py-3 px-4 font-mono text-xs text-blue-600">{s.code||'—'}</td>
                         <td className="py-3 px-4"><span className="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-0.5 rounded-full">×{s.coefficient||1}</span></td>
-                        <td className="py-3 px-4 text-gray-600">{s.max_marks||100}</td>
+                        <td className="py-3 px-4 text-gray-600 font-semibold text-blue-700">{s.max_test||0}</td>
+                        <td className="py-3 px-4 text-gray-600 font-semibold text-green-700">{s.max_exam||0}</td>
+                        <td className="py-3 px-4 font-bold text-gray-900">{(s.max_test||0)+(s.max_exam||0)||s.max_marks||0}</td>
                         <td className="py-3 px-4 text-gray-600">{s.passing_marks||50}</td>
                         <td className="py-3 px-4 flex items-center gap-1">
                           <button onClick={()=>setSubjectModal(s)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg" title="Edit"><Edit2 className="w-3.5 h-3.5"/></button>

@@ -178,9 +178,11 @@ async function drawBulletinColumn(page, doc, ox, fonts, student, marks, subjects
   subjects.forEach((sub,idx)=>{
     const m=marks.find(mk=>mk.subject_id===sub.id);
     const bg=idx%2===0?WHITE:LGRAY;
-    const mx=sub.max_marks||100, mxT=mx/2, mxE=mx/2;
+    const mx=sub.max_marks||100;
+    const mxT=sub.max_test||Math.round(mx/2);
+    const mxE=sub.max_exam||Math.round(mx/2);
     const opT=m?.cat1!=null?parseFloat(m.cat1):null;
-    const opE=m?.exam!=null?parseFloat(m.exam):null;
+    const opE=(mxE>0&&m?.exam!=null)?parseFloat(m.exam):null;
     const opTo=m?.total!=null?parseFloat(m.total):null;
     gmT+=mxT; gmE+=mxE; gmTo+=mx;
     if(opT!=null)goT+=opT; if(opE!=null)goE+=opE; if(opTo!=null)goTo+=opTo;

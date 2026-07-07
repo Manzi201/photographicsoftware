@@ -116,7 +116,7 @@ export default function SmsMarks() {
       const md = {};
       stList.forEach(st => {
         const m = mList.find(x => x.student_id === st.id);
-        md[st.id] = { cat1: m?.cat1 ?? '', cat2: m?.cat2 ?? '', exam: m?.exam ?? '' };
+        md[st.id] = { cat1: m?.cat1 ?? '', exam: m?.exam ?? '' };
       });
       setMarksData(md);
     } catch { toast.error('Failed to load marks'); }
@@ -131,13 +131,10 @@ export default function SmsMarks() {
     setSaving(true);
     try {
       const cls   = classes.find(c => c.id === selClass);
-      const sub   = subjects.find(s => s.id === selSubj);
-      const maxM  = sub?.max_marks || 100;
       const marks = students.map(st => ({
         student_id: st.id,
         cat1: parseFloat(marksData[st.id]?.cat1 || 0),
-        cat2: parseFloat(marksData[st.id]?.cat2 || 0),
-        exam: parseFloat(marksData[st.id]?.exam || 0),
+        exam: examEnabled ? parseFloat(marksData[st.id]?.exam || 0) : 0,
       }));
       await bulkUpsertMarks({
         marks, subject_id: selSubj, term_id: selTerm,
@@ -150,10 +147,10 @@ export default function SmsMarks() {
   };
 
   const sub = subjects.find(s => s.id === selSubj);
-  // Max per section: cat1 = TEST max, cat2+exam = EX max
-  const maxTest = sub ? Math.round((sub.max_marks || 100) / 2) : 0;
-  const maxEx   = sub ? (sub.max_marks || 100) - maxTest : 0;
-  const maxTot  = sub?.max_marks || 100;
+  const maxTest = sub ? (sub.max_test || 0) : 0;
+  const maxExam = sub ? (sub.max_exam || 0) : 0;
+  const maxTot  = maxTest + maxExam || sub?.max_marks || 0;
+  const examEnabled = maxExam > 0; // false = TEST only subject
 
   // Terms filtered — exclude Annual (number=4)
   const entryTerms = allTerms.filter(t => t.number !== 4);
@@ -244,18 +241,25 @@ export default function SmsMarks() {
               <span className="text-gray-500">TEST max:</span>
               <span className="font-bold text-blue-700 ml-1">{maxTest}</span>
             </div>
-            <div className="bg-blue-50 border border-blue-100 rounded-xl px-3 py-2 text-xs">
-              <span className="text-gray-500">EX max:</span>
-              <span className="font-bold text-blue-700 ml-1">{maxEx}</span>
-            </div>
-            <div className="bg-blue-50 border border-blue-100 rounded-xl px-3 py-2 text-xs">
+            {examEnabled && (
+              <div className="bg-green-50 border border-green-100 rounded-xl px-3 py-2 text-xs">
+                <span className="text-gray-500">EXAM max:</span>
+                <span className="font-bold text-green-700 ml-1">{maxExam}</span>
+              </div>
+            )}
+            <div className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs">
               <span className="text-gray-500">TOTAL max:</span>
-              <span className="font-bold text-blue-700 ml-1">{maxTot}</span>
+              <span className="font-bold text-gray-900 ml-1">{maxTot}</span>
             </div>
             <div className="bg-purple-50 border border-purple-100 rounded-xl px-3 py-2 text-xs">
               <span className="text-gray-500">Coefficient:</span>
               <span className="font-bold text-purple-700 ml-1">×{sub.coefficient || 1}</span>
             </div>
+            {!examEnabled && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs font-semibold text-amber-700">
+                TEST only — no exam
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -286,28 +290,32 @@ export default function SmsMarks() {
                   <th className="py-2 px-3 text-left w-8">#</th>
                   <th className="py-2 px-3 text-left">ID</th>
                   <th className="py-2 px-3 text-left">Student Name</th>
-                  {/* MAX POINT columns (readonly) */}
+                  {/* MAX POINT */}
                   <th className="py-2 px-2 text-center border-l border-blue-700">
                     <div className="text-[10px] text-blue-300">MAX POINT</div>
                     <div>TEST</div>
                   </th>
-                  <th className="py-2 px-2 text-center">
-                    <div className="text-[10px] text-blue-300 invisible">MAX</div>
-                    <div>EX</div>
-                  </th>
+                  {examEnabled && (
+                    <th className="py-2 px-2 text-center">
+                      <div className="text-[10px] text-blue-300 invisible">MAX</div>
+                      <div>EXAM</div>
+                    </th>
+                  )}
                   <th className="py-2 px-2 text-center">
                     <div className="text-[10px] text-blue-300 invisible">MAX</div>
                     <div>TOT</div>
                   </th>
-                  {/* O.P (obtained points) columns (editable) */}
+                  {/* O.P */}
                   <th className="py-2 px-2 text-center border-l border-blue-700">
                     <div className="text-[10px] text-green-300">O.P</div>
                     <div>TEST</div>
                   </th>
-                  <th className="py-2 px-2 text-center">
-                    <div className="text-[10px] text-green-300 invisible">O.P</div>
-                    <div>EX</div>
-                  </th>
+                  {examEnabled && (
+                    <th className="py-2 px-2 text-center">
+                      <div className="text-[10px] text-green-300 invisible">O.P</div>
+                      <div>EXAM</div>
+                    </th>
+                  )}
                   <th className="py-2 px-2 text-center font-bold">TOT</th>
                   <th className="py-2 px-2 text-center">%</th>
                   <th className="py-2 px-2 text-center">Grade</th>
@@ -317,21 +325,19 @@ export default function SmsMarks() {
                 {students.map((st, i) => {
                   const m    = marksData[st.id] || {};
                   const cat1 = parseFloat(m.cat1 || 0);
-                  const cat2 = parseFloat(m.cat2 || 0);
-                  const exam = parseFloat(m.exam || 0);
-                  const tot  = cat1 + cat2 + exam;
-                  const pct  = sub ? Math.min(100, (tot / (sub.max_marks || 100)) * 100) : 0;
+                  const exam = examEnabled ? parseFloat(m.exam || 0) : 0;
+                  const tot  = cat1 + exam;
+                  const pct  = maxTot > 0 ? Math.min(100, (tot / maxTot) * 100) : 0;
                   const grd  = pct >= 80 ? 'A1' : pct >= 70 ? 'B2' : pct >= 60 ? 'C3' : pct >= 50 ? 'D4' : pct >= 40 ? 'E5' : 'F';
-                  const opEx = cat2 + exam; // EX = cat2 + exam combined
 
                   return (
-                    <tr key={st.id} className={`border-b ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50/30`}>
-                      <td className="py-2 px-3 text-gray-400 text-xs">{i + 1}</td>
+                    <tr key={st.id} className={`border-b ${i%2===0?'bg-white':'bg-gray-50'} hover:bg-blue-50/30`}>
+                      <td className="py-2 px-3 text-gray-400 text-xs">{i+1}</td>
                       <td className="py-2 px-3 font-mono text-xs text-blue-600">{st.student_id}</td>
                       <td className="py-2 px-3 font-medium text-gray-900">{st.first_name} {st.last_name}</td>
-                      {/* MAX points — readonly display */}
+                      {/* MAX columns (readonly) */}
                       <td className="py-2 px-2 text-center text-xs text-gray-400 border-l border-gray-100">{maxTest}</td>
-                      <td className="py-2 px-2 text-center text-xs text-gray-400">{maxEx}</td>
+                      {examEnabled && <td className="py-2 px-2 text-center text-xs text-gray-400">{maxExam}</td>}
                       <td className="py-2 px-2 text-center text-xs text-gray-400">{maxTot}</td>
                       {/* O.P — editable */}
                       <td className="py-2 px-1 border-l border-gray-100">
@@ -339,19 +345,18 @@ export default function SmsMarks() {
                           className="w-14 border border-gray-200 rounded-lg px-1.5 py-1 text-xs text-center focus:ring-2 focus:ring-blue-400 focus:outline-none"
                           value={m.cat1 ?? ''} onChange={e => setMark(st.id, 'cat1', e.target.value)}/>
                       </td>
-                      <td className="py-2 px-1">
-                        <input type="number" min="0" max={maxEx} step="0.5"
-                          className="w-14 border border-gray-200 rounded-lg px-1.5 py-1 text-xs text-center focus:ring-2 focus:ring-blue-400 focus:outline-none"
-                          value={m.exam ?? ''} onChange={e => setMark(st.id, 'exam', e.target.value)}/>
-                      </td>
+                      {examEnabled && (
+                        <td className="py-2 px-1">
+                          <input type="number" min="0" max={maxExam} step="0.5"
+                            className="w-14 border border-gray-200 rounded-lg px-1.5 py-1 text-xs text-center focus:ring-2 focus:ring-blue-400 focus:outline-none"
+                            value={m.exam ?? ''} onChange={e => setMark(st.id, 'exam', e.target.value)}/>
+                        </td>
+                      )}
                       <td className="py-2 px-2 text-center font-bold text-gray-800 text-xs">{tot.toFixed(1)}</td>
                       <td className="py-2 px-2 text-center text-xs text-gray-500">{pct.toFixed(1)}%</td>
                       <td className="py-2 px-2 text-center">
                         <span className={`text-xs font-bold px-1.5 py-0.5 rounded
-                          ${grd === 'A1' ? 'bg-green-100 text-green-700' :
-                            grd === 'F'  ? 'bg-red-100 text-red-700' :
-                            grd === 'E5' ? 'bg-orange-100 text-orange-700' :
-                                           'bg-blue-100 text-blue-700'}`}>
+                          ${grd==='A1'?'bg-green-100 text-green-700':grd==='F'?'bg-red-100 text-red-700':grd==='E5'?'bg-orange-100 text-orange-700':'bg-blue-100 text-blue-700'}`}>
                           {grd}
                         </span>
                       </td>
