@@ -1,7 +1,21 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Save, RefreshCw, BookOpen, Info } from 'lucide-react';
+import { Save, RefreshCw, BookOpen, Info, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
+import axios from 'axios';
 import { getSmsClasses, getTerms, getSmsSubjects, getSmsStudents, getMarks, bulkUpsertMarks } from '../../api';
+
+// Shared SMS axios
+const SMS = axios.create({
+  baseURL: import.meta.env.VITE_API_URL?.replace('/api','/api/sms') ||
+    (typeof window!=='undefined'&&window.location.hostname!=='localhost'
+      ?'https://photographicsoftware-1.onrender.com/api/sms':'/api/sms'),
+  timeout:60000,
+});
+SMS.interceptors.request.use(cfg=>{
+  const t=localStorage.getItem('staff_token')||localStorage.getItem('cert_token');
+  if(t) cfg.headers.Authorization=`Bearer ${t}`;
+  return cfg;
+});
 
 // ── Get current session info ─────────────────────────────────
 function getSession() {
@@ -27,7 +41,27 @@ export default function SmsMarks() {
   const [selSubj,   setSelSubj]   = useState('');
   const [loading,   setLoading]   = useState(false);
   const [saving,    setSaving]    = useState(false);
+  const [dlExcel,   setDlExcel]   = useState(false);
   const [noAssignment, setNoAssignment] = useState(false);
+
+  const handleExcelDownload = async () => {
+    if (!selClass || !selTerm) { toast.error('Select class and term first'); return; }
+    setDlExcel(true);
+    try {
+      const cls = classes.find(c=>c.id===selClass);
+      const trm = allTerms.find(t=>t.id===selTerm);
+      const res = await SMS.get('/excel/class-report', {
+        params:{ class_id:selClass, term_id:selTerm, academic_year_id: cls?.academic_year_id||'' },
+        responseType:'blob',
+      });
+      const url=URL.createObjectURL(new Blob([res.data],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+      const a=document.createElement('a'); a.href=url;
+      a.download=`${cls?.name||'class'}_${trm?.name||'term'}_marks.xlsx`;
+      document.body.appendChild(a); a.click(); URL.revokeObjectURL(url); document.body.removeChild(a);
+      toast.success('Excel downloaded!');
+    } catch(err){ toast.error(err.response?.data?.error||'Download failed'); }
+    finally{ setDlExcel(false); }
+  };
 
   // Load classes and terms on mount
   useEffect(() => {
@@ -126,7 +160,7 @@ export default function SmsMarks() {
 
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto">
-      <div className="mb-5 flex items-center justify-between flex-wrap gap-3">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <BookOpen className="w-6 h-6 text-blue-600"/> Marks Entry
@@ -135,14 +169,25 @@ export default function SmsMarks() {
             {isTeacher ? 'Enter marks for your assigned subjects only' : 'Enter marks per subject per term'}
           </p>
         </div>
-        {isTeacher && (
-          <div className="flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2 text-xs text-blue-700">
-            <Info className="w-3.5 h-3.5 shrink-0"/>
-            {noAssignment
-              ? 'No subjects assigned to you yet — showing all. Ask Director of Studies to assign your subjects.'
-              : 'You see only subjects assigned to you by the Director of Studies'}
-          </div>
-        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          {selClass && selTerm && (
+            <button onClick={handleExcelDownload} disabled={dlExcel}
+              className="btn-secondary text-sm flex items-center gap-1.5">
+              {dlExcel
+                ? <span className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"/>
+                : <Download className="w-4 h-4 text-green-600"/>}
+              Download Excel (Pivot)
+            </button>
+          )}
+          {isTeacher && (
+            <div className="flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2 text-xs text-blue-700">
+              <Info className="w-3.5 h-3.5 shrink-0"/>
+              {noAssignment
+                ? 'No subjects assigned to you yet — showing all. Ask Director of Studies to assign your subjects.'
+                : 'You see only subjects assigned to you by the Director of Studies'}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Selectors ─────────────────────────────────────────── */}

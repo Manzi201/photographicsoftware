@@ -88,9 +88,9 @@ router.post('/promotion/apply',     requireRole('admin','dos'), promotion.applyP
 router.get ('/promotion/history',   requireRole('admin','dos'), promotion.getHistory);
 
 // ── Excel Export ──────────────────────────────────────────────
-router.get('/excel/students', requireRole('admin','secretary','finance'), excel.exportStudents);
-router.get('/excel/marks',    requireRole('admin','dos','secretary'),     excel.exportMarks);
-router.get('/excel/finance',  requireRole('admin','finance'),             excel.exportFinance);
+router.get('/excel/students',     requireRole('admin','secretary','finance'), excel.exportStudents);
+router.get('/excel/finance',      requireRole('admin','finance'),             excel.exportFinance);
+router.get('/excel/class-report', requireRole('admin','dos','secretary','teacher'), excel.exportClassReport);
 
 // ── Documents (Secretary + Admin) ─────────────────────────────
 const docs = require('../controllers/documentsController');
