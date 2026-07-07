@@ -22,22 +22,33 @@ const ROLE_CODE = {
   finance:   'FIN',
 };
 
-// Generate staff ID: SCHOOLCODE/ROLECODE/SEQ  e.g. ELA/TCH/001
+// Generate random alphanumeric suffix — 4 chars (digits + uppercase letters)
+// e.g. "543C", "A7X2", "9BK1"
+function randomSuffix() {
+  const chars = '0123456789ABCDEFGHJKLMNPQRSTUVWXYZ'; // no I/O to avoid confusion
+  let result = '';
+  for (let i = 0; i < 4; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
+// Generate staff ID: SCHOOLCODE/ROLECODE/RANDOM  e.g. ELA/TCH/543C
 async function generateStaffId(schoolId, schoolName, role) {
-  // School code = first 3 letters of school name (uppercase, no spaces)
   const schoolCode = (schoolName || 'SCH')
     .replace(/[^A-Za-z]/g, '').substring(0, 3).toUpperCase() || 'SCH';
   const roleCode   = ROLE_CODE[role] || 'STF';
 
-  // Count existing staff of this role in school
-  const { count } = await supabase
-    .from('staff')
-    .select('*', { count: 'exact', head: true })
-    .eq('school_id', schoolId)
-    .eq('role', role);
-
-  const seq = String((count || 0) + 1).padStart(3, '0');
-  return `${schoolCode}/${roleCode}/${seq}`;
+  // Generate unique random suffix (retry until unique)
+  for (let tries = 0; tries < 20; tries++) {
+    const suffix   = randomSuffix();
+    const staff_id = `${schoolCode}/${roleCode}/${suffix}`;
+    const { data: exists } = await supabase
+      .from('staff').select('id').eq('staff_id', staff_id).maybeSingle();
+    if (!exists) return staff_id;
+  }
+  // Fallback: timestamp-based
+  return `${schoolCode}/${roleCode}/${Date.now().toString(36).toUpperCase().slice(-4)}`;
 }
 
 // GET /api/sms/admin/staff
@@ -70,19 +81,7 @@ exports.createStaff = async (req, res) => {
     const schoolName = req.school?.school_name || '';
 
     // Generate unique staff_id
-    let staff_id = await generateStaffId(schoolId, schoolName, role);
-
-    // Ensure uniqueness (retry if collision)
-    let tries = 0;
-    while (tries < 10) {
-      const { data: exists } = await supabase
-        .from('staff').select('id').eq('staff_id', staff_id).eq('school_id', schoolId).maybeSingle();
-      if (!exists) break;
-      tries++;
-      const schoolCode = (schoolName || 'SCH').replace(/[^A-Za-z]/g,'').substring(0,3).toUpperCase() || 'SCH';
-      const roleCode   = ROLE_CODE[role] || 'STF';
-      staff_id = `${schoolCode}/${roleCode}/${String(Date.now()).slice(-3)}`;
-    }
+    const staff_id = await generateStaffId(schoolId, schoolName, role);
 
     const password_hash = hashPassword(password);
 
