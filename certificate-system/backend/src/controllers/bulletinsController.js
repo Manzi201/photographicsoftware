@@ -8,6 +8,30 @@ const http  = require('http');
 
 const FONTS_DIR = path.join(__dirname, '..', 'fonts');
 
+// ── A4 LANDSCAPE ─────────────────────────────────────────────
+const PAGE_W = 841.89;
+const PAGE_H = 595.28;
+const COL_W  = 400;
+const GAP    = 21.89;   // PAGE_W - 2*COL_W - 2*10 margin
+const LEFT_X = 10;
+const RIGHT_X = LEFT_X + COL_W + GAP;
+
+// ── Colors ────────────────────────────────────────────────────
+const NAVY  = rgb(0.04, 0.14, 0.40);
+const BLUE  = rgb(0.10, 0.35, 0.75);
+const WHITE = rgb(1, 1, 1);
+const BLACK = rgb(0.05, 0.05, 0.05);
+const LGRAY = rgb(0.93, 0.94, 0.97);
+const MGRAY = rgb(0.70, 0.70, 0.75);
+
+// ── Table column widths (within each 400pt bulletin) ─────────
+const SUBJ_W = 100;
+const COL_MW = 38;   // 6 mark columns × 38 = 228
+const RANK_W = COL_W - SUBJ_W - COL_MW * 6; // 72
+const ROW_H  = 14;
+const HDR_H  = 16;
+
+// ── Utilities ─────────────────────────────────────────────────
 function fetchBuf(url) {
   return new Promise((resolve, reject) => {
     const mod = url.startsWith('https') ? https : http;
@@ -23,306 +47,225 @@ async function embedImg(doc, buf) {
   try { return await doc.embedPng(buf); } catch {}
   return null;
 }
-
-// ── Grade helpers ─────────────────────────────────────────────
-function grade(pct) {
-  if (pct >= 80) return 'A1';
-  if (pct >= 70) return 'B2';
-  if (pct >= 60) return 'C3';
-  if (pct >= 50) return 'D4';
-  if (pct >= 40) return 'E5';
-  return 'F';
+function fmtNum(n) {
+  if (n == null) return '—';
+  const f = parseFloat(n);
+  return isNaN(f) ? '—' : String(parseFloat(f.toFixed(1)));
 }
-
-// ── Draw centered text helper ─────────────────────────────────
 function drawCentered(page, text, font, size, color, x, width, y) {
-  const tw = font.widthOfTextAtSize(text, size);
-  page.drawText(text, { x: x + (width - tw) / 2, y, size, font, color });
+  const tw = font.widthOfTextAtSize(String(text), size);
+  page.drawText(String(text), { x: x + (width - tw) / 2, y, size, font, color });
 }
-
-// ── Draw bordered cell ────────────────────────────────────────
 function drawCell(page, x, y, w, h, bgColor) {
   if (bgColor) page.drawRectangle({ x, y, width: w, height: h, color: bgColor });
-  page.drawRectangle({ x, y, width: w, height: h, borderColor: rgb(0.2, 0.2, 0.4), borderWidth: 0.5 });
+  page.drawRectangle({ x, y, width: w, height: h, borderColor: NAVY, borderWidth: 0.4 });
 }
-
-// ════════════════════════════════════════════════════════════════
-// GENERATE BULLETIN PDF — Rwandan school report card format
-// ════════════════════════════════════════════════════════════════
-async function generateBulletinPDF(student, marks, subjects, classInfo, termInfo, yearInfo, school, meta) {
-  const doc = await PDFDocument.create();
-  doc.registerFontkit(fontkit);
-
-  const loadFont = async (name) => {
+function clip(text, font, size, maxW) {
+  let t = String(text || '');
+  while (t.length > 1 && font.widthOfTextAtSize(t, size) > maxW) t = t.slice(0, -1);
+  return t;
+}
+async function loadFonts(doc) {
+  const load = async (name) => {
     try { return await doc.embedFont(fs.readFileSync(path.join(FONTS_DIR, name))); } catch {}
     return await doc.embedFont(StandardFonts.Helvetica);
   };
-  const B  = await loadFont('Montserrat-Bold.ttf');
-  const R  = await loadFont('Montserrat-Regular.ttf');
-  const SB = await loadFont('Montserrat-SemiBold.ttf');
-
-  const page = doc.addPage([595.28, 841.89]); // A4
-  const W = 595.28, H = 841.89;
-  const NAVY  = rgb(0.04, 0.14, 0.40);
-  const WHITE = rgb(1, 1, 1);
-  const BLACK = rgb(0.05, 0.05, 0.05);
-  const LGRAY = rgb(0.93, 0.94, 0.97);
-  const MGRAY = rgb(0.75, 0.75, 0.80);
-
-  const ML = 20, MR = 20; // margins
-  const CW = W - ML - MR;  // content width
-
-  // ── TOP HEADER (3 columns) ───────────────────────────────────
-  const HDR_H = 90;
-  page.drawRectangle({ x: 0, y: H - HDR_H, width: W, height: HDR_H, color: WHITE });
-  page.drawLine({ start:{x:0,y:H-HDR_H}, end:{x:W,y:H-HDR_H}, thickness:2, color:NAVY });
-
-  // Left: Republic + School info
-  const sn = school.school_name || 'My School';
-  const cityAddr = [school.address, school.city].filter(Boolean).join(' — ') || 'Kigali';
-  const phone    = school.phone || '';
-  page.drawText('REPUBLIC OF RWANDA', { x:ML, y:H-18, size:8, font:B, color:NAVY });
-  page.drawText(sn, { x:ML, y:H-30, size:9, font:B, color:BLACK });
-  page.drawText(cityAddr, { x:ML, y:H-42, size:7.5, font:R, color:BLACK });
-  if (phone) page.drawText(phone, { x:ML, y:H-54, size:7.5, font:R, color:BLACK });
-
-  // Center: Logo — bigger and centered
-  const LOGO_SIZE = 70;
-  const LOGO_X = (W - LOGO_SIZE) / 2;
-  const LOGO_Y = H - HDR_H + 10;
-  if (school.logo_url) {
-    try {
-      const buf = await fetchBuf(school.logo_url);
-      const img = await embedImg(doc, buf);
-      if (img) page.drawImage(img, { x: LOGO_X, y: LOGO_Y, width: LOGO_SIZE, height: LOGO_SIZE });
-    } catch {}
-  } else {
-    // Draw initial circle as fallback
-    page.drawRectangle({ x: LOGO_X, y: LOGO_Y, width: LOGO_SIZE, height: LOGO_SIZE, color: LGRAY, borderColor: NAVY, borderWidth: 1 });
-    drawCentered(page, sn.substring(0, 2).toUpperCase(), B, 24, NAVY, LOGO_X, LOGO_SIZE, LOGO_Y + 22);
-  }
-
-  // Right: Ministry + Year + Term
-  const RX = W - 190;
-  page.drawText('MINISTRY OF EDUCATION', { x: RX, y: H-18, size:8, font:B, color:NAVY });
-  page.drawText(`School Year: ${yearInfo?.name || ''}`, { x:RX, y:H-30, size:8, font:R, color:BLACK });
-  const termLabel = meta.is_annual ? 'Annual Report' : (termInfo?.name || '');
-  const tlW = B.widthOfTextAtSize(termLabel, 10);
-  page.drawText(termLabel, { x: W - MR - tlW, y: H-46, size:10, font:B, color:NAVY });
-
-  // ── REPORT CARD TITLE BAR ────────────────────────────────────
-  const TITLE_Y = H - HDR_H - 22;
-  page.drawRectangle({ x: ML, y: TITLE_Y, width: CW, height: 20, color: NAVY });
-  const title = meta.is_annual ? 'ANNUAL REPORT CARD' : 'REPORT CARD';
-  drawCentered(page, title, B, 12, WHITE, ML, CW, TITLE_Y + 5);
-
-  // ── STUDENT INFO ROW ─────────────────────────────────────────
-  const INFO_Y = TITLE_Y - 70;
-  page.drawRectangle({ x:ML, y:INFO_Y, width:CW, height:68, color:WHITE });
-  page.drawRectangle({ x:ML, y:INFO_Y, width:CW, height:68, borderColor:NAVY, borderWidth:0.8 });
-
-  // Photo box left
-  const PH_W = 52, PH_H = 64;
-  page.drawRectangle({ x:ML+4, y:INFO_Y+2, width:PH_W, height:PH_H, color:LGRAY });
-  if (student.photo_url) {
-    try {
-      const buf = await fetchBuf(student.photo_url);
-      const img = await embedImg(doc, buf);
-      if (img) page.drawImage(img, { x:ML+4, y:INFO_Y+2, width:PH_W, height:PH_H });
-    } catch {}
-  }
-
-  // Student fields
-  const IFX = ML + PH_W + 10;
-  const IFY = INFO_Y + 54;
-  const labelW = 95;
-  const fieldRows = [
-    ['STUDENT NAME:', `${student.last_name?.toUpperCase() || ''} ${student.first_name || ''}`],
-    ['BORN:', student.date_of_birth ? `${student.date_of_birth}` : 'at'],
-    ['ID NO.:', student.student_id || '—'],
-  ];
-  fieldRows.forEach(([lbl, val], i) => {
-    page.drawText(lbl, { x:IFX, y:IFY - i*18, size:8, font:R, color:MGRAY });
-    page.drawText(val, { x:IFX+labelW, y:IFY - i*18, size:9, font:B, color:BLACK });
-  });
-
-  // Right column
-  const RCX = W/2 + 20;
-  const rightRows = [
-    ['CLASS:', classInfo?.name || '—'],
-    ['NO. OF STUDENTS:', String(meta.class_size || '—')],
-    ['CONDUCT:', `${meta.conduct || 'Good'}`],
-  ];
-  rightRows.forEach(([lbl, val], i) => {
-    page.drawText(lbl, { x:RCX, y:IFY - i*18, size:8, font:R, color:MGRAY });
-    page.drawText(val, { x:RCX+120, y:IFY - i*18, size:9, font:B, color:BLACK });
-  });
-
-  // ── MARKS TABLE ──────────────────────────────────────────────
-  // Columns: SUBJECTS | MAX POINT(TEST/EX/TOT) | O.P(TEST/EX/TOT) | RANK
-  const TBL_Y = INFO_Y - 2;      // top of table
-  const ROW_H = 16;
-
-  // Column x positions & widths
-  const C_SUBJ  = ML,           C_SUBJ_W  = 130;
-  const C_MTEST = ML+130,       C_COL_W   = 38;
-  const C_MEX   = ML+130+38;
-  const C_MTOT  = ML+130+76;
-  const C_OTEST = ML+130+114;
-  const C_OEX   = ML+130+152;
-  const C_OTOT  = ML+130+190;
-  const C_RANK  = ML+130+228,   C_RANK_W  = CW - 130 - 228;
-
-  // Group headers
-  const GHY = TBL_Y - ROW_H;
-  drawCell(page, C_SUBJ,  GHY, C_SUBJ_W, ROW_H, NAVY);
-  drawCell(page, C_MTEST, GHY, C_COL_W*3, ROW_H, NAVY);
-  drawCell(page, C_OTEST, GHY, C_COL_W*3, ROW_H, NAVY);
-  drawCell(page, C_RANK,  GHY, C_RANK_W, ROW_H, NAVY);
-  drawCentered(page,'SUBJECTS', B, 8, WHITE, C_SUBJ,  C_SUBJ_W,  GHY+4);
-  drawCentered(page,'MAX POINT',B, 8, WHITE, C_MTEST, C_COL_W*3, GHY+4);
-  drawCentered(page,'O.P',      B, 8, WHITE, C_OTEST, C_COL_W*3, GHY+4);
-  drawCentered(page,'RANK',     B, 8, WHITE, C_RANK,  C_RANK_W,  GHY+4);
-
-  // Sub-headers
-  const SHY = GHY - ROW_H;
-  const subCols = [
-    [C_SUBJ,'',C_SUBJ_W],[C_MTEST,'TEST',C_COL_W],[C_MEX,'EX',C_COL_W],[C_MTOT,'TOT',C_COL_W],
-    [C_OTEST,'TEST',C_COL_W],[C_OEX,'EX',C_COL_W],[C_OTOT,'TOT',C_COL_W],[C_RANK,'',C_RANK_W],
-  ];
-  subCols.forEach(([x,lbl,w]) => {
-    drawCell(page, x, SHY, w, ROW_H, LGRAY);
-    if (lbl) drawCentered(page, lbl, B, 7, NAVY, x, w, SHY+4);
-  });
-
-  // Subject rows
-  let rowY = SHY - ROW_H;
-  let grandTotalPts = 0, grandMaxPts = 0;
-  let grandTestMax = 0, grandExMax = 0;
-  let grandTestOp  = 0, grandExOp  = 0;
-
-  // Build per-subject rank (by subject total across class)
-  const subjectRanks = {};
-
-  subjects.forEach((sub, idx) => {
-    const m    = marks.find(mk => mk.subject_id === sub.id);
-    const bg   = idx % 2 === 0 ? WHITE : LGRAY;
-    const coef = sub.coefficient || 1;
-    const maxM = sub.max_marks || 100;
-    // Split max: TEST = half, EX = other half (or use cat marks directly)
-    const maxTest = m?.cat1 != null ? maxM / 2 : maxM / 2;
-    const maxEx   = m?.cat2 != null ? maxM / 2 : maxM / 2;
-    const opTest  = m?.cat1 ?? null;
-    const opEx    = m?.cat2 != null ? (parseFloat(m.cat2||0) + parseFloat(m.exam||0)) : (m?.exam ?? null);
-    const opTot   = m?.total ?? null;
-
-    // Accumulate grand totals
-    grandTestMax += maxTest * coef;
-    grandExMax   += maxEx   * coef;
-    if (opTest != null) grandTestOp += parseFloat(opTest) * coef;
-    if (opEx   != null) grandExOp   += parseFloat(opEx)   * coef;
-    if (opTot  != null) { grandTotalPts += opTot * coef; grandMaxPts += maxM * coef; }
-
-    // Subject rank placeholder (rank in class for this subject)
-    const subRank = subjectRanks[sub.id] || '—';
-
-    [C_SUBJ,C_MTEST,C_MEX,C_MTOT,C_OTEST,C_OEX,C_OTOT,C_RANK].forEach((x,ci) => {
-      drawCell(page, x, rowY, ci===0?C_SUBJ_W:ci===7?C_RANK_W:C_COL_W, ROW_H, bg);
-    });
-
-    page.drawText(sub.name.toUpperCase(), { x:C_SUBJ+3, y:rowY+4, size:7.5, font:R, color:BLACK });
-    const fmtNum = n => n != null ? String(parseFloat(n.toFixed(1))) : '—';
-    drawCentered(page, fmtNum(maxTest), R, 8, BLACK, C_MTEST, C_COL_W, rowY+4);
-    drawCentered(page, fmtNum(maxEx),   R, 8, BLACK, C_MEX,   C_COL_W, rowY+4);
-    drawCentered(page, fmtNum(maxM),    R, 8, BLACK, C_MTOT,  C_COL_W, rowY+4);
-    drawCentered(page, fmtNum(opTest),  R, 8, BLACK, C_OTEST, C_COL_W, rowY+4);
-    drawCentered(page, fmtNum(opEx),    R, 8, BLACK, C_OEX,   C_COL_W, rowY+4);
-    drawCentered(page, fmtNum(opTot),   SB,8, BLACK, C_OTOT,  C_COL_W, rowY+4);
-    drawCentered(page, String(subRank), R, 8, BLACK, C_RANK,  C_RANK_W,rowY+4);
-    rowY -= ROW_H;
-  });
-
-  // TOTAL row
-  drawCell(page, C_SUBJ,  rowY, C_SUBJ_W,  ROW_H, NAVY);
-  [C_MTEST,C_MEX,C_MTOT,C_OTEST,C_OEX,C_OTOT,C_RANK].forEach((x,ci) => {
-    drawCell(page, x, rowY, ci===6?C_RANK_W:C_COL_W, ROW_H, NAVY);
-  });
-  page.drawText('TOTAL', { x:C_SUBJ+3, y:rowY+4, size:8, font:B, color:WHITE });
-  const fmt = n => String(parseFloat(n.toFixed(1)));
-  drawCentered(page,fmt(grandTestMax),B,8,WHITE,C_MTEST,C_COL_W,rowY+4);
-  drawCentered(page,fmt(grandExMax),  B,8,WHITE,C_MEX,  C_COL_W,rowY+4);
-  drawCentered(page,fmt(grandMaxPts), B,8,WHITE,C_MTOT, C_COL_W,rowY+4);
-  drawCentered(page,fmt(grandTestOp), B,8,WHITE,C_OTEST,C_COL_W,rowY+4);
-  drawCentered(page,fmt(grandExOp),   B,8,WHITE,C_OEX,  C_COL_W,rowY+4);
-  drawCentered(page,fmt(grandTotalPts),B,8,WHITE,C_OTOT, C_COL_W,rowY+4);
-  rowY -= ROW_H;
-
-  // ── AVERAGE + RANK BAR ───────────────────────────────────────
-  rowY -= 4;
-  const avgPct = grandMaxPts > 0 ? (grandTotalPts / grandMaxPts * 100) : (meta.percentage || 0);
-  const rankStr = meta.rank_in_class ? `${meta.rank_in_class} out of ${meta.class_size}` : '—';
-
-  page.drawRectangle({ x:ML, y:rowY-ROW_H, width:CW/2-4, height:ROW_H, color:LGRAY, borderColor:NAVY, borderWidth:0.6 });
-  page.drawRectangle({ x:ML+CW/2+4, y:rowY-ROW_H, width:CW/2-4, height:ROW_H, color:LGRAY, borderColor:NAVY, borderWidth:0.6 });
-  page.drawText('AVERAGE:', { x:ML+8, y:rowY-ROW_H+5, size:9, font:B, color:NAVY });
-  page.drawText(`${avgPct.toFixed(1)}%`, { x:ML+80, y:rowY-ROW_H+5, size:11, font:B, color:NAVY });
-  page.drawText('RANK:', { x:ML+CW/2+12, y:rowY-ROW_H+5, size:9, font:B, color:NAVY });
-  page.drawText(rankStr, { x:ML+CW/2+60, y:rowY-ROW_H+5, size:11, font:B, color:NAVY });
-  rowY -= (ROW_H + 10);
-
-  // ── OBSERVATIONS + SIGNATURES ────────────────────────────────
-  const OBS_H = 80;
-  const OBS_W = CW * 0.55;
-  const SIG_W = CW - OBS_W - 4;
-  const SIG_X = ML + OBS_W + 4;
-
-  // Observations box
-  page.drawRectangle({ x:ML, y:rowY-OBS_H, width:OBS_W, height:OBS_H, color:WHITE, borderColor:NAVY, borderWidth:0.6 });
-  drawCentered(page, 'OBSERVATIONS', B, 8, NAVY, ML, OBS_W, rowY-12);
-  // Lines for writing
-  for (let i = 1; i <= 3; i++) {
-    page.drawLine({ start:{x:ML+8, y:rowY-12-i*16}, end:{x:ML+OBS_W-8, y:rowY-12-i*16}, thickness:0.4, color:MGRAY });
-  }
-  if (meta.teacher_remarks) {
-    page.drawText(meta.teacher_remarks, { x:ML+8, y:rowY-26, size:8, font:R, color:BLACK, maxWidth:OBS_W-16 });
-  }
-
-  // Signatures box
-  page.drawRectangle({ x:SIG_X, y:rowY-OBS_H, width:SIG_W, height:OBS_H, color:WHITE, borderColor:NAVY, borderWidth:0.6 });
-  const SIG_MID = rowY - OBS_H/2 - 2;
-
-  // Teacher signature
-  page.drawText('TEACHER SIGNATURE', { x:SIG_X+8, y:rowY-14, size:7.5, font:B, color:NAVY });
-  page.drawLine({ start:{x:SIG_X+8,y:rowY-28}, end:{x:SIG_X+SIG_W-40,y:rowY-28}, thickness:0.5, color:MGRAY });
-  page.drawText('Date: ___________', { x:SIG_X+SIG_W-80, y:rowY-28, size:7, font:R, color:MGRAY });
-  if (school.signature_url) {
-    try {
-      const buf = await fetchBuf(school.signature_url);
-      const img = await embedImg(doc, buf);
-      if (img) page.drawImage(img, { x:SIG_X+8, y:rowY-40, width:70, height:18, opacity:0.8 });
-    } catch {}
-  }
-
-  // Divider
-  page.drawLine({ start:{x:SIG_X+8,y:SIG_MID}, end:{x:SIG_X+SIG_W-8,y:SIG_MID}, thickness:0.4, color:MGRAY });
-
-  // Parent signature
-  page.drawText('PARENT SIGNATURE', { x:SIG_X+8, y:SIG_MID-12, size:7.5, font:B, color:NAVY });
-  page.drawLine({ start:{x:SIG_X+8,y:SIG_MID-26}, end:{x:SIG_X+SIG_W-40,y:SIG_MID-26}, thickness:0.5, color:MGRAY });
-  page.drawText('Date: ___________', { x:SIG_X+SIG_W-80, y:SIG_MID-26, size:7, font:R, color:MGRAY });
-
-  // ── FOOTER ───────────────────────────────────────────────────
-  page.drawLine({ start:{x:ML,y:28}, end:{x:W-MR,y:28}, thickness:0.8, color:NAVY });
-  const footerText = school.cert_purpose || 'EDUCATION FOR LIFE';
-  drawCentered(page, `— ${footerText} —`, R, 8, NAVY, ML, CW, 14);
-
-  return await doc.save();
+  return {
+    B:  await load('Montserrat-Bold.ttf'),
+    R:  await load('Montserrat-Regular.ttf'),
+    SB: await load('Montserrat-SemiBold.ttf'),
+  };
 }
 
+// ════════════════════════════════════════════════════════════
+// DRAW ONE BULLETIN COLUMN  (ox = left edge of this column)
+// ════════════════════════════════════════════════════════════
+async function drawBulletinColumn(page, doc, ox, fonts, student, marks, subjects, classInfo, termInfo, yearInfo, school, meta) {
+  const { B, R, SB } = fonts;
+  let cy = PAGE_H - 8;
 
-// ════════════════════════════════════════════════════════════════
+  // ── Header ──────────────────────────────────────────────
+  const HDR_TOTAL = 76;
+  const HDR_BOT   = cy - HDR_TOTAL;
+  const leftW = Math.floor(COL_W * 0.38);
+  const sn   = school.school_name || 'My School';
+  const addr = [school.address, school.city].filter(Boolean).join(', ') || '';
+  const ph   = school.phone || '';
+
+  page.drawText('REPUBLIC OF RWANDA', { x: ox+2, y: cy-10, size:6.5, font:B, color:NAVY });
+  page.drawText(clip(sn, B, 7.5, leftW-4),   { x:ox+2, y:cy-20, size:7.5, font:B, color:BLACK });
+  page.drawText(clip(addr||' ', R, 6.5, leftW-4), { x:ox+2, y:cy-30, size:6.5, font:R, color:BLACK });
+  if (ph) page.drawText(ph, { x:ox+2, y:cy-40, size:6.5, font:R, color:BLACK });
+
+  // Logo — centered
+  const LS=62, LX=ox+(COL_W-LS)/2, LY=HDR_BOT+(HDR_TOTAL-LS)/2;
+  if (school.logo_url) {
+    try {
+      const buf=await fetchBuf(school.logo_url); const img=await embedImg(doc,buf);
+      if(img) page.drawImage(img,{x:LX,y:LY,width:LS,height:LS});
+    } catch {}
+  } else {
+    page.drawRectangle({x:LX,y:LY,width:LS,height:LS,color:LGRAY,borderColor:NAVY,borderWidth:1});
+    const ini = sn.split(' ').map(w=>w[0]).slice(0,3).join('').toUpperCase();
+    drawCentered(page,ini,B,16,NAVY,LX,LS,LY+LS/2-8);
+  }
+
+  // Right col
+  const RX = ox+COL_W-leftW;
+  page.drawText('MINISTRY OF EDUCATION', { x:RX, y:cy-10, size:6.5, font:B, color:NAVY });
+  page.drawText(`School Year: ${yearInfo?.name||''}`, { x:RX, y:cy-22, size:7, font:R, color:BLACK });
+  const tLabel = meta.is_annual ? 'ANNUAL REPORT' : (termInfo?.name||'');
+  page.drawText(clip(tLabel,B,9,leftW-2), { x:RX, y:cy-36, size:9, font:B, color:BLUE });
+
+  cy = HDR_BOT - 1;
+  page.drawLine({start:{x:ox,y:cy},end:{x:ox+COL_W,y:cy},thickness:1.2,color:NAVY});
+  cy -= 1;
+
+  // ── Title bar ─────────────────────────────────────────────
+  const TITLE_H=16;
+  page.drawRectangle({x:ox,y:cy-TITLE_H,width:COL_W,height:TITLE_H,color:NAVY});
+  drawCentered(page, meta.is_annual?'ANNUAL REPORT CARD':'REPORT CARD', B,10,WHITE,ox,COL_W,cy-TITLE_H+4);
+  cy -= TITLE_H;
+
+  // ── Student info ──────────────────────────────────────────
+  const INFO_H=48;
+  page.drawRectangle({x:ox,y:cy-INFO_H,width:COL_W,height:INFO_H,color:WHITE,borderColor:NAVY,borderWidth:0.6});
+  const LBL=MGRAY, VAL=BLACK, lsz=6.5, vsz=7.5;
+  const hW=COL_W/2, tW=COL_W/3;
+  const fullName=`${(student.last_name||'').toUpperCase()} ${student.first_name||''}`.trim();
+
+  page.drawText('Student Name:', {x:ox+3,y:cy-11,size:lsz,font:R,color:LBL});
+  page.drawText(clip(fullName,B,vsz,hW-72), {x:ox+72,y:cy-11,size:vsz,font:B,color:VAL});
+  page.drawText('Class:', {x:ox+hW+3,y:cy-11,size:lsz,font:R,color:LBL});
+  page.drawText(clip(classInfo?.name||'—',B,vsz,hW-32), {x:ox+hW+30,y:cy-11,size:vsz,font:B,color:VAL});
+
+  page.drawText('Born:', {x:ox+3,y:cy-24,size:lsz,font:R,color:LBL});
+  page.drawText(clip(student.date_of_birth||'—',R,vsz,tW-28), {x:ox+26,y:cy-24,size:vsz,font:R,color:VAL});
+  page.drawText('N. Students:', {x:ox+tW+2,y:cy-24,size:lsz,font:R,color:LBL});
+  page.drawText(String(meta.class_size||'—'), {x:ox+tW+52,y:cy-24,size:vsz,font:B,color:VAL});
+  page.drawText('Conduct:', {x:ox+tW*2+2,y:cy-24,size:lsz,font:R,color:LBL});
+  page.drawText(clip(`${meta.conduct||'Good'} / 40`,B,vsz,tW-44), {x:ox+tW*2+40,y:cy-24,size:vsz,font:B,color:VAL});
+
+  page.drawText('ID No.:', {x:ox+3,y:cy-37,size:lsz,font:R,color:LBL});
+  page.drawText(clip(student.student_id||'—',R,vsz,hW-32), {x:ox+32,y:cy-37,size:vsz,font:R,color:VAL});
+  cy -= INFO_H;
+
+  // ── Marks table ──────────────────────────────────────────
+  const cSubj=ox, cMT=ox+SUBJ_W, cME=cMT+COL_MW, cMTo=cME+COL_MW;
+  const cOT=cMTo+COL_MW, cOE=cOT+COL_MW, cOTo=cOE+COL_MW, cRk=cOTo+COL_MW;
+
+  // Header row 1
+  drawCell(page,cSubj,cy-HDR_H,SUBJ_W,    HDR_H,NAVY);
+  drawCell(page,cMT,  cy-HDR_H,COL_MW*3,  HDR_H,NAVY);
+  drawCell(page,cOT,  cy-HDR_H,COL_MW*3,  HDR_H,NAVY);
+  drawCell(page,cRk,  cy-HDR_H,RANK_W,     HDR_H,NAVY);
+  drawCentered(page,'SUBJECTS', B,7,WHITE,cSubj,SUBJ_W,    cy-HDR_H+5);
+  drawCentered(page,'MAX POINT',B,7,WHITE,cMT,  COL_MW*3,  cy-HDR_H+5);
+  drawCentered(page,'O.P',      B,7,WHITE,cOT,  COL_MW*3,  cy-HDR_H+5);
+  drawCentered(page,'RANK',     B,7,WHITE,cRk,  RANK_W,     cy-HDR_H+5);
+  cy -= HDR_H;
+
+  // Header row 2
+  [[cSubj,''],[cMT,'TEST'],[cME,'EX'],[cMTo,'TOT'],[cOT,'TEST'],[cOE,'EX'],[cOTo,'TOT'],[cRk,'']].forEach(([x,lbl],i)=>{
+    const w=i===0?SUBJ_W:i===7?RANK_W:COL_MW;
+    drawCell(page,x,cy-HDR_H,w,HDR_H,LGRAY);
+    if(lbl) drawCentered(page,lbl,B,7,NAVY,x,w,cy-HDR_H+5);
+  });
+  cy -= HDR_H;
+
+  // Data rows
+  let gmT=0,gmE=0,gmTo=0,goT=0,goE=0,goTo=0;
+  subjects.forEach((sub,idx)=>{
+    const m=marks.find(mk=>mk.subject_id===sub.id);
+    const bg=idx%2===0?WHITE:LGRAY;
+    const mx=sub.max_marks||100, mxT=mx/2, mxE=mx/2;
+    const opT=m?.cat1!=null?parseFloat(m.cat1):null;
+    const opE=m?.exam!=null?parseFloat(m.exam):null;
+    const opTo=m?.total!=null?parseFloat(m.total):null;
+    gmT+=mxT; gmE+=mxE; gmTo+=mx;
+    if(opT!=null)goT+=opT; if(opE!=null)goE+=opE; if(opTo!=null)goTo+=opTo;
+
+    [[cSubj,SUBJ_W],[cMT,COL_MW],[cME,COL_MW],[cMTo,COL_MW],[cOT,COL_MW],[cOE,COL_MW],[cOTo,COL_MW],[cRk,RANK_W]].forEach(([x,w])=>drawCell(page,x,cy-ROW_H,w,ROW_H,bg));
+    page.drawText(clip((sub.name||'').toUpperCase(),R,7,SUBJ_W-4),{x:cSubj+3,y:cy-ROW_H+4,size:7,font:R,color:BLACK});
+    drawCentered(page,fmtNum(mxT),R,7,BLACK,cMT,COL_MW,cy-ROW_H+4);
+    drawCentered(page,fmtNum(mxE),R,7,BLACK,cME,COL_MW,cy-ROW_H+4);
+    drawCentered(page,fmtNum(mx), R,7,BLACK,cMTo,COL_MW,cy-ROW_H+4);
+    drawCentered(page,fmtNum(opT),R,7,BLACK,cOT,COL_MW,cy-ROW_H+4);
+    drawCentered(page,fmtNum(opE),R,7,BLACK,cOE,COL_MW,cy-ROW_H+4);
+    drawCentered(page,fmtNum(opTo),SB,7,BLACK,cOTo,COL_MW,cy-ROW_H+4);
+    drawCentered(page,meta.rank_in_class?String(meta.rank_in_class):'—',R,7,BLACK,cRk,RANK_W,cy-ROW_H+4);
+    cy -= ROW_H;
+  });
+
+  // Total row
+  [[cSubj,SUBJ_W],[cMT,COL_MW],[cME,COL_MW],[cMTo,COL_MW],[cOT,COL_MW],[cOE,COL_MW],[cOTo,COL_MW],[cRk,RANK_W]].forEach(([x,w])=>drawCell(page,x,cy-ROW_H,w,ROW_H,NAVY));
+  page.drawText('Total',{x:cSubj+3,y:cy-ROW_H+4,size:7,font:B,color:WHITE});
+  [  [cMT,fmtNum(gmT)],[cME,fmtNum(gmE)],[cMTo,fmtNum(gmTo)],
+     [cOT,fmtNum(goT)],[cOE,fmtNum(goE)],[cOTo,fmtNum(goTo)] ].forEach(([x,v])=>drawCentered(page,v,B,7,WHITE,x,COL_MW,cy-ROW_H+4));
+  cy -= ROW_H;
+
+  // Average + Rank
+  cy -= 3;
+  const AVG_H=18, hCW=COL_W/2-2;
+  page.drawRectangle({x:ox,y:cy-AVG_H,width:hCW,height:AVG_H,color:LGRAY,borderColor:NAVY,borderWidth:0.6});
+  const avgPct=gmTo>0?(goTo/gmTo*100):(meta.percentage||0);
+  page.drawText('Average',{x:ox+5,y:cy-AVG_H+6,size:7.5,font:B,color:NAVY});
+  page.drawText(`${avgPct.toFixed(1)}%`,{x:ox+B.widthOfTextAtSize('Average',7.5)+10,y:cy-AVG_H+5,size:11,font:B,color:NAVY});
+
+  const rkX=ox+hCW+4;
+  page.drawRectangle({x:rkX,y:cy-AVG_H,width:hCW,height:AVG_H,color:LGRAY,borderColor:NAVY,borderWidth:0.6});
+  const rkStr=meta.rank_in_class?`${meta.rank_in_class} out of ${meta.class_size}`:'—';
+  page.drawText('Rank',{x:rkX+5,y:cy-AVG_H+6,size:7.5,font:B,color:NAVY});
+  page.drawText(clip(rkStr,B,10,hCW-B.widthOfTextAtSize('Rank',7.5)-14),{x:rkX+B.widthOfTextAtSize('Rank',7.5)+10,y:cy-AVG_H+5,size:10,font:B,color:NAVY});
+  cy -= (AVG_H+4);
+
+  // ── Bottom: Observations + Signatures ───────────────────
+  const botH=Math.max(55, cy-16);
+  page.drawRectangle({x:ox,y:cy-botH,width:COL_W,height:botH,color:WHITE,borderColor:NAVY,borderWidth:0.7});
+  const obsW=Math.floor(COL_W*0.52), sigW=COL_W-obsW;
+  page.drawRectangle({x:ox,y:cy-botH,width:obsW,height:botH,color:WHITE,borderColor:NAVY,borderWidth:0.5});
+  drawCentered(page,'Observations',B,8,NAVY,ox,obsW,cy-12);
+  for(let i=1;i<=3;i++){
+    const ly=cy-12-i*((botH-14)/4);
+    page.drawLine({start:{x:ox+6,y:ly},end:{x:ox+obsW-6,y:ly},thickness:0.4,color:MGRAY});
+  }
+
+  const sX=ox+obsW, mid=cy-botH/2;
+  page.drawText('Teacher Signature',{x:sX+5,y:cy-12,size:7,font:B,color:NAVY});
+  page.drawLine({start:{x:sX+5,y:cy-24},end:{x:sX+sigW-40,y:cy-24},thickness:0.5,color:MGRAY});
+  page.drawText('Date: ________',{x:sX+sigW-60,y:cy-24,size:6.5,font:R,color:MGRAY});
+  page.drawLine({start:{x:sX+5,y:mid},end:{x:sX+sigW-5,y:mid},thickness:0.5,color:MGRAY});
+  page.drawText('Parent Signature',{x:sX+5,y:mid-12,size:7,font:B,color:NAVY});
+  page.drawLine({start:{x:sX+5,y:mid-24},end:{x:sX+sigW-40,y:mid-24},thickness:0.5,color:MGRAY});
+  page.drawText('Date: ________',{x:sX+sigW-60,y:mid-24,size:6.5,font:R,color:MGRAY});
+}
+
+// ════════════════════════════════════════════════════════════
+// ANNUAL MARKS HELPER
+// ════════════════════════════════════════════════════════════
+async function computeAnnualMarks(studentId, classId, schoolId, academicYearId) {
+  const { data: allTerms } = await supabase.from('terms')
+    .select('id,number').eq('academic_year_id', academicYearId).eq('school_id', schoolId).in('number',[1,2,3]);
+  if (!allTerms?.length) return [];
+  const allMarks = await Promise.all(allTerms.map(t =>
+    supabase.from('marks').select('*, subject:subjects(*)').eq('student_id', studentId).eq('term_id', t.id)
+  ));
+  const sm = {};
+  allMarks.forEach(({ data: mks }) => {
+    (mks||[]).forEach(m => {
+      if (!sm[m.subject_id]) sm[m.subject_id] = { ...m, _c:0, _s:0 };
+      if (m.total!=null) { sm[m.subject_id]._s += m.total; sm[m.subject_id]._c += 1; }
+    });
+  });
+  return Object.values(sm).map(m => ({
+    ...m, cat1:null, cat2:null, exam:null,
+    total: m._c > 0 ? parseFloat((m._s/m._c).toFixed(2)) : null,
+  }));
+}
+
+// ════════════════════════════════════════════════════════════
 // CONTROLLERS
-// ════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════
 
 exports.getBulletins = async (req, res) => {
   try {
@@ -339,63 +282,49 @@ exports.getBulletins = async (req, res) => {
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 };
 
-async function computeAnnualMarks(studentId, classId, schoolId, academicYearId) {
-  const { data: allTerms } = await supabase.from('terms')
-    .select('id,number').eq('academic_year_id', academicYearId).eq('school_id', schoolId)
-    .in('number', [1, 2, 3]);
-  if (!allTerms?.length) return [];
-  const allMarks = await Promise.all(allTerms.map(t =>
-    supabase.from('marks').select('*, subject:subjects(*)').eq('student_id', studentId).eq('term_id', t.id)
-  ));
-  const subjectMap = {};
-  allMarks.forEach(({ data: mks }) => {
-    (mks || []).forEach(m => {
-      if (!subjectMap[m.subject_id]) subjectMap[m.subject_id] = { ...m, _count: 0, _totalSum: 0 };
-      if (m.total != null) { subjectMap[m.subject_id]._totalSum += m.total; subjectMap[m.subject_id]._count += 1; }
-    });
-  });
-  return Object.values(subjectMap).map(m => ({
-    ...m, cat1: null, cat2: null, exam: null,
-    total: m._count > 0 ? parseFloat((m._totalSum / m._count).toFixed(2)) : null,
-  }));
-}
-
 exports.generateOne = async (req, res) => {
   try {
     const { student_id, term_id, class_id, academic_year_id, teacher_remarks, head_remarks, conduct, days_present, days_absent } = req.body;
     const { data: termInfo } = await supabase.from('terms').select('*').eq('id', term_id).single();
     const isAnnual = termInfo?.number === 4;
-
-    // Always re-fetch full school data to get latest logo, phone, address
     const { data: schoolFull } = await supabase.from('schools').select('*').eq('id', req.schoolId).single();
     const school = schoolFull || req.school;
-
     const [{ data: student }, { data: classSubs }, { data: yearInfo }, { data: classInfo }] = await Promise.all([
       supabase.from('student_profiles').select('*').eq('id', student_id).single(),
       supabase.from('class_subjects').select('*, subject:subjects(*)').eq('class_id', class_id),
       supabase.from('academic_years').select('*').eq('id', academic_year_id).single(),
       supabase.from('classes').select('*').eq('id', class_id).single(),
     ]);
-    const subjects = (classSubs || []).map(cs => cs.subject);
+    const subjects = (classSubs||[]).map(cs=>cs.subject);
     let marks;
-    if (isAnnual) {
-      marks = await computeAnnualMarks(student_id, class_id, req.schoolId, academic_year_id);
-    } else {
-      const { data: m } = await supabase.from('marks').select('*, subject:subjects(*)').eq('student_id', student_id).eq('term_id', term_id);
+    if (isAnnual) { marks = await computeAnnualMarks(student_id, class_id, req.schoolId, academic_year_id); }
+    else {
+      const { data: m } = await supabase.from('marks').select('*, subject:subjects(*)')
+        .eq('student_id', student_id).eq('term_id', term_id);
       marks = m || [];
     }
-    const { data: allBulletins } = await supabase.from('bulletins').select('student_id,percentage').eq('term_id', term_id).eq('class_id', class_id);
-    let tw = 0, tmx = 0;
-    subjects.forEach(sub => {
-      const m = marks.find(mk => mk.subject_id === sub.id);
-      if (m?.total != null) { tw += m.total * (sub.coefficient||1); tmx += (sub.max_marks||100) * (sub.coefficient||1); }
-    });
-    const pct = tmx > 0 ? (tw / tmx) * 100 : 0;
-    const peers = [...(allBulletins||[]), { student_id, percentage: pct }].sort((a,b)=>(b.percentage||0)-(a.percentage||0));
-    const rank = peers.findIndex(p => p.student_id === student_id) + 1;
-    const bulletinMeta = { percentage:pct, rank_in_class:rank, class_size:peers.length, teacher_remarks, head_remarks, conduct:conduct||'Good', days_present:parseInt(days_present||0), days_absent:parseInt(days_absent||0), is_annual:isAnnual };
-    const pdfBytes = await generateBulletinPDF(student, marks, subjects, classInfo, termInfo, yearInfo, school, bulletinMeta);
-    await supabase.from('bulletins').upsert([{ school_id:req.schoolId, student_id, term_id, class_id, academic_year_id, total_marks:tw, max_possible:tmx, percentage:pct, rank_in_class:rank, class_size:peers.length, grade:pct>=80?'A1':pct>=70?'B2':pct>=60?'C3':pct>=50?'D4':'F', conduct, teacher_remarks, head_remarks, days_present:parseInt(days_present||0), days_absent:parseInt(days_absent||0), generated_at:new Date().toISOString(), generated_by:req.staff?.id||null }], { onConflict:'student_id,term_id' });
+    const { data: allB } = await supabase.from('bulletins').select('student_id,percentage').eq('term_id', term_id).eq('class_id', class_id);
+    let tw=0,tmx=0;
+    subjects.forEach(sub => { const m=marks.find(mk=>mk.subject_id===sub.id); if(m?.total!=null){tw+=m.total*(sub.coefficient||1);tmx+=(sub.max_marks||100)*(sub.coefficient||1);} });
+    const pct = tmx>0?(tw/tmx)*100:0;
+    const peers = [...(allB||[]),{student_id,percentage:pct}].sort((a,b)=>(b.percentage||0)-(a.percentage||0));
+    const rank = peers.findIndex(p=>p.student_id===student_id)+1;
+    const meta = { percentage:pct, rank_in_class:rank, class_size:peers.length, teacher_remarks, head_remarks, conduct:conduct||'Good', days_present:parseInt(days_present||0), days_absent:parseInt(days_absent||0), is_annual:isAnnual };
+
+    const doc = await PDFDocument.create(); doc.registerFontkit(fontkit);
+    const fonts = await loadFonts(doc);
+    const page = doc.addPage([PAGE_W, PAGE_H]);
+    await drawBulletinColumn(page, doc, LEFT_X, fonts, student, marks, subjects, classInfo, termInfo, yearInfo, school, meta);
+    const pdfBytes = await doc.save();
+
+    await supabase.from('bulletins').upsert([{
+      school_id:req.schoolId, student_id, term_id, class_id, academic_year_id,
+      total_marks:tw, max_possible:tmx, percentage:pct, rank_in_class:rank, class_size:peers.length,
+      grade:pct>=80?'A1':pct>=70?'B2':pct>=60?'C3':pct>=50?'D4':'F',
+      conduct, teacher_remarks, head_remarks, days_present:parseInt(days_present||0), days_absent:parseInt(days_absent||0),
+      generated_at:new Date().toISOString(), generated_by:req.staff?.id||null,
+    }],{onConflict:'student_id,term_id'});
+
     res.setHeader('Content-Type','application/pdf');
     res.setHeader('Content-Disposition',`attachment; filename="${student.student_id||student_id}_bulletin.pdf"`);
     res.send(Buffer.from(pdfBytes));
@@ -407,19 +336,25 @@ exports.generateClass = async (req, res) => {
     const { term_id, class_id, academic_year_id, conduct, teacher_remarks, head_remarks } = req.body;
     const { data: termInfo } = await supabase.from('terms').select('*').eq('id', term_id).single();
     const isAnnual = termInfo?.number === 4;
-
-    // Always re-fetch full school data to get latest logo, phone, address
     const { data: schoolFull } = await supabase.from('schools').select('*').eq('id', req.schoolId).single();
     const school = schoolFull || req.school;
+    const { data: rawStudents } = await supabase.from('student_profiles')
+      .select('*').eq('current_class_id', class_id).eq('status','active').eq('school_id',req.schoolId);
+    if (!rawStudents?.length) return res.status(404).json({ success:false, error:'No students in class' });
 
-    const { data: students } = await supabase.from('student_profiles').select('*').eq('current_class_id', class_id).eq('status','active').eq('school_id', req.schoolId);
-    if (!students?.length) return res.status(404).json({ success:false, error:'No students in class' });
-    const [{ data: classSubs }, { data: yearInfo }, { data: classInfo }] = await Promise.all([
+    // ── Sort alphabetically by last_name then first_name ──
+    const students = [...rawStudents].sort((a,b) => {
+      const ln=(a.last_name||'').toLowerCase().localeCompare((b.last_name||'').toLowerCase());
+      return ln!==0?ln:(a.first_name||'').toLowerCase().localeCompare((b.first_name||'').toLowerCase());
+    });
+
+    const [{ data: classSubs },{ data: yearInfo },{ data: classInfo }] = await Promise.all([
       supabase.from('class_subjects').select('*, subject:subjects(*)').eq('class_id', class_id),
       supabase.from('academic_years').select('*').eq('id', academic_year_id).single(),
       supabase.from('classes').select('*').eq('id', class_id).single(),
     ]);
     const subjects = (classSubs||[]).map(cs=>cs.subject);
+
     let allMarksMap = {};
     if (isAnnual) {
       for (const st of students) allMarksMap[st.id] = await computeAnnualMarks(st.id, class_id, req.schoolId, academic_year_id);
@@ -427,21 +362,54 @@ exports.generateClass = async (req, res) => {
       const { data: allMarks } = await supabase.from('marks').select('*').eq('class_id', class_id).eq('term_id', term_id);
       students.forEach(st => { allMarksMap[st.id] = (allMarks||[]).filter(m=>m.student_id===st.id); });
     }
-    const studentPcts = students.map(st => {
-      const sm = allMarksMap[st.id]||[]; let tw=0,tmx=0;
+
+    // Compute percentages for ranking
+    const stats = students.map(st => {
+      const sm=allMarksMap[st.id]||[]; let tw=0,tmx=0;
       subjects.forEach(sub => { const m=sm.find(mk=>mk.subject_id===sub.id); if(m?.total!=null){tw+=m.total*(sub.coefficient||1);tmx+=(sub.max_marks||100)*(sub.coefficient||1);} });
       return { student:st, pct:tmx>0?(tw/tmx)*100:0, total:tw, maxTotal:tmx };
-    }).sort((a,b)=>b.pct-a.pct);
-    studentPcts.forEach((sp,i)=>{ sp.rank=i+1; });
-    const merged = await PDFDocument.create();
-    for (const sp of studentPcts) {
-      const meta = { percentage:sp.pct, rank_in_class:sp.rank, class_size:students.length, teacher_remarks, head_remarks, conduct:conduct||'Good', days_present:0, days_absent:0, is_annual:isAnnual };
-      const bytes = await generateBulletinPDF(sp.student, allMarksMap[sp.student.id]||[], subjects, classInfo, termInfo, yearInfo, school, meta);
-      const bDoc = await PDFDocument.load(bytes);
-      const [pg] = await merged.copyPages(bDoc,[0]);
-      merged.addPage(pg);
-      await supabase.from('bulletins').upsert([{ school_id:req.schoolId, student_id:sp.student.id, term_id, class_id, academic_year_id, total_marks:sp.total, max_possible:sp.maxTotal, percentage:sp.pct, rank_in_class:sp.rank, class_size:students.length, grade:sp.pct>=80?'A1':sp.pct>=70?'B2':sp.pct>=60?'C3':sp.pct>=50?'D4':'F', conduct, teacher_remarks, head_remarks, generated_at:new Date().toISOString() }],{onConflict:'student_id,term_id'});
+    });
+    const ranked=[...stats].sort((a,b)=>b.pct-a.pct);
+    ranked.forEach((s,i)=>{ s.rank=i+1; });
+    const rankMap={};
+    ranked.forEach(s=>{ rankMap[s.student.id]=s.rank; });
+
+    const merged = await PDFDocument.create(); merged.registerFontkit(fontkit);
+    const fonts = await loadFonts(merged);
+
+    // 2 bulletins per A4 landscape page
+    for (let i=0; i<students.length; i+=2) {
+      const pg = merged.addPage([PAGE_W, PAGE_H]);
+      // Vertical divider line between two bulletins
+      pg.drawLine({ start:{x:PAGE_W/2,y:10}, end:{x:PAGE_W/2,y:PAGE_H-10}, thickness:0.5, color:MGRAY });
+
+      for (let side=0; side<2; side++) {
+        const st = students[i+side];
+        if (!st) break;
+        const sp = stats.find(s=>s.student.id===st.id);
+        const m = {
+          percentage:sp.pct, rank_in_class:rankMap[st.id], class_size:students.length,
+          teacher_remarks, head_remarks, conduct:conduct||'Good',
+          days_present:0, days_absent:0, is_annual:isAnnual,
+        };
+        await drawBulletinColumn(pg, merged, side===0?LEFT_X:RIGHT_X, fonts, st, allMarksMap[st.id]||[], subjects, classInfo, termInfo, yearInfo, school, m);
+      }
+
+      // Save bulletins
+      for (let side=0; side<2; side++) {
+        const st = students[i+side];
+        if (!st) break;
+        const sp = stats.find(s=>s.student.id===st.id);
+        await supabase.from('bulletins').upsert([{
+          school_id:req.schoolId, student_id:st.id, term_id, class_id, academic_year_id,
+          total_marks:sp.total, max_possible:sp.maxTotal, percentage:sp.pct,
+          rank_in_class:rankMap[st.id], class_size:students.length,
+          grade:sp.pct>=80?'A1':sp.pct>=70?'B2':sp.pct>=60?'C3':sp.pct>=50?'D4':'F',
+          conduct, teacher_remarks, head_remarks, generated_at:new Date().toISOString(),
+        }],{onConflict:'student_id,term_id'});
+      }
     }
+
     res.setHeader('Content-Type','application/pdf');
     res.setHeader('Content-Disposition',`attachment; filename="${classInfo?.name||'class'}_${isAnnual?'annual':termInfo?.name||''}_bulletins.pdf"`);
     res.send(Buffer.from(await merged.save()));
