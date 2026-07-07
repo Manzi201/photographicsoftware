@@ -55,7 +55,7 @@ app.use('/api/staff-auth', staffAuthRoutes);  // Staff login (teacher/secretary/
 app.get('/', (req, res) => {
   res.json({
     name: 'School Management System API',
-    version: '2.0.0',
+    version: '3.0.0',
     status: 'running',
     supabase_configured: !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY),
     endpoints: {
