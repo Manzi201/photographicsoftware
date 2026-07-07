@@ -219,31 +219,27 @@ async function drawBulletinColumn(page, doc, ox, fonts, student, marks, subjects
   page.drawText(clip(rkStr,B,10,hCW-B.widthOfTextAtSize('Rank',7.5)-14),{x:rkX+B.widthOfTextAtSize('Rank',7.5)+10,y:cy-AVG_H+5,size:10,font:B,color:NAVY});
   cy -= (AVG_H+4);
 
-  // ── Bottom: Observations + Signatures ───────────────────
-  const botH = 55;  // fixed height — compact, matches reference image
-  const botY  = 12; // fixed from bottom of page
+  // ── Bottom: Observations + Signatures — directly below avg bar ──
+  const botH = 60;
+  const botY  = cy - botH;  // immediately after avg/rank, no gap
   page.drawRectangle({x:ox,y:botY,width:COL_W,height:botH,color:WHITE,borderColor:NAVY,borderWidth:0.7});
   const obsW=Math.floor(COL_W*0.52), sigW=COL_W-obsW;
   page.drawRectangle({x:ox,y:botY,width:obsW,height:botH,color:WHITE,borderColor:NAVY,borderWidth:0.5});
-  drawCentered(page,'Observations',B,8,NAVY,ox,obsW,botY+botH-12);
-  // 3 writing lines spaced evenly
-  const lineSpacing = (botH - 22) / 3;
+  drawCentered(page,'Observations',B,8,NAVY,ox,obsW,botY+botH-13);
+  const lineSpacing = (botH - 22) / 4;
   for(let i=1;i<=3;i++){
-    const ly = botY + botH - 12 - i * lineSpacing;
+    const ly = botY + botH - 14 - i * lineSpacing;
     page.drawLine({start:{x:ox+6,y:ly},end:{x:ox+obsW-6,y:ly},thickness:0.4,color:MGRAY});
   }
 
   const sX=ox+obsW, mid=botY+botH/2;
-  // Teacher Signature (top half)
-  page.drawText('Teacher Signature',{x:sX+5,y:botY+botH-12,size:7,font:B,color:NAVY});
-  page.drawLine({start:{x:sX+5,y:botY+botH-24},end:{x:sX+sigW-36,y:botY+botH-24},thickness:0.5,color:MGRAY});
-  page.drawText('Date: ________',{x:sX+sigW-58,y:botY+botH-24,size:6,font:R,color:MGRAY});
-  // Divider
+  page.drawText('Teacher Signature',{x:sX+5,y:botY+botH-13,size:7,font:B,color:NAVY});
+  page.drawLine({start:{x:sX+5,y:botY+botH-26},end:{x:sX+sigW-36,y:botY+botH-26},thickness:0.5,color:MGRAY});
+  page.drawText('Date: ________',{x:sX+sigW-58,y:botY+botH-26,size:6,font:R,color:MGRAY});
   page.drawLine({start:{x:sX+5,y:mid},end:{x:sX+sigW-5,y:mid},thickness:0.5,color:MGRAY});
-  // Parent Signature (bottom half)
   page.drawText('Parent Signature',{x:sX+5,y:mid-12,size:7,font:B,color:NAVY});
-  page.drawLine({start:{x:sX+5,y:mid-24},end:{x:sX+sigW-36,y:mid-24},thickness:0.5,color:MGRAY});
-  page.drawText('Date: ________',{x:sX+sigW-58,y:mid-24,size:6,font:R,color:MGRAY});
+  page.drawLine({start:{x:sX+5,y:mid-25},end:{x:sX+sigW-36,y:mid-25},thickness:0.5,color:MGRAY});
+  page.drawText('Date: ________',{x:sX+sigW-58,y:mid-25,size:6,font:R,color:MGRAY});
 }
 
 // ════════════════════════════════════════════════════════════
