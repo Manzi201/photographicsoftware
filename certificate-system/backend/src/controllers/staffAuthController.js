@@ -19,19 +19,27 @@ exports.login = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Username and password required' });
     }
 
-    const uname = username.toLowerCase().trim();
+    const uname = username.trim(); // preserve case for staff_id (ELA/TCH/001)
 
-    // Search by staff_id first (new system), then by username (legacy)
-    const { data: staffRows, error: staffErr } = await supabase
+    // Search by staff_id first (exact match), then by username (lowercase)
+    const { data: byStaffId } = await supabase
       .from('staff')
       .select('*, school:schools(id,school_name,logo_url,active_year,city,phone,address,signatory_name,signature_url,stamp_url,bg_preset,cert_line1,cert_line2,cert_purpose,cert_done_text,cert_template_url,cert_template_mode)')
-      .or(`staff_id.eq.${uname},username.eq.${uname}`)
+      .eq('staff_id', uname)
       .eq('is_active', true)
       .limit(1);
 
-    if (staffErr) {
-      console.error('Staff lookup error:', staffErr.message);
-      return res.status(500).json({ success: false, error: 'Database error: ' + staffErr.message });
+    let staffRows = byStaffId;
+
+    // Fallback: search by username (lowercase)
+    if (!byStaffId?.length) {
+      const { data: byUsername } = await supabase
+        .from('staff')
+        .select('*, school:schools(id,school_name,logo_url,active_year,city,phone,address,signatory_name,signature_url,stamp_url,bg_preset,cert_line1,cert_line2,cert_purpose,cert_done_text,cert_template_url,cert_template_mode)')
+        .eq('username', uname.toLowerCase())
+        .eq('is_active', true)
+        .limit(1);
+      staffRows = byUsername;
     }
 
     const staffMember = staffRows?.[0];
