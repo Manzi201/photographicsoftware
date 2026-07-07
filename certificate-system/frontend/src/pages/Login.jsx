@@ -96,11 +96,11 @@ export default function Login() {
               <div className="relative">
                 <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"/>
                 <input className="input-field pl-9"
-                  placeholder="admin@school.com or jmanzi"
+                  placeholder="admin@school.com or ELA/TCH/001"
                   value={form.identifier} onChange={f('identifier')}
                   autoFocus autoComplete="username" autoCapitalize="none"/>
               </div>
-              <p className="text-xs text-gray-400 mt-1">School admin: use email · Staff: use username</p>
+              <p className="text-xs text-gray-400 mt-1">School admin: use email · Staff: use Staff ID (e.g. ELA/TCH/001)</p>
             </div>
 
             <div>

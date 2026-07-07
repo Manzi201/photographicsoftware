@@ -21,11 +21,11 @@ exports.login = async (req, res) => {
 
     const uname = username.toLowerCase().trim();
 
-    // Search for staff by username across all schools
+    // Search by staff_id first (new system), then by username (legacy)
     const { data: staffRows, error: staffErr } = await supabase
       .from('staff')
-      .select('*, school:schools(id,school_name,logo_url,active_year,city,signatory_name,signature_url,stamp_url,bg_preset,cert_line1,cert_line2,cert_purpose,cert_done_text,cert_template_url,cert_template_mode)')
-      .eq('username', uname)
+      .select('*, school:schools(id,school_name,logo_url,active_year,city,phone,address,signatory_name,signature_url,stamp_url,bg_preset,cert_line1,cert_line2,cert_purpose,cert_done_text,cert_template_url,cert_template_mode)')
+      .or(`staff_id.eq.${uname},username.eq.${uname}`)
       .eq('is_active', true)
       .limit(1);
 
@@ -36,7 +36,7 @@ exports.login = async (req, res) => {
 
     const staffMember = staffRows?.[0];
     if (!staffMember) {
-      return res.status(401).json({ success: false, error: 'Username not found or account inactive' });
+      return res.status(401).json({ success: false, error: 'Staff ID not found or account inactive' });
     }
 
     // Verify password — try new fixed-salt hash first, then legacy school_id salt
