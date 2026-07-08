@@ -76,8 +76,8 @@ exports.exportClassReport = async (req, res) => {
     // ── School header ─────────────────────────────────────
     const { data: school } = await supabase.from('schools').select('school_name,active_year,city,phone').eq('id', req.schoolId).single();
 
-    // Total columns: #, ID, Name, Gender + per-subject(CAT1,CAT2,EXAM,TOTAL) + TOTAL_MARKS, %, RANK
-    const subColCount = subjects.length * 4; // CAT1+CAT2+EXAM+TOTAL per subject
+    // Total columns: #, ID, Name, Gender + per-subject(TEST,EXAM,TOTAL) + TOTAL_MARKS, %, RANK
+    const subColCount = subjects.length * 3; // TEST+EXAM+TOTAL per subject (no CAT2)
     const totalCols   = 4 + subColCount + 3; // 3 summary cols
 
     // Row 1: School name (merged)
@@ -118,23 +118,26 @@ exports.exportClassReport = async (req, res) => {
 
     let col = 5;
     subjects.forEach(sub => {
-      // Merge rows 4 over 4 columns for subject name
-      ws.mergeCells(4, col, 4, col+3);
+      // Merge rows 4 over 3 columns for subject name
+      ws.mergeCells(4, col, 4, col+2);
       const hdr = r4.getCell(col);
       hdr.value = (sub.name||'').toUpperCase() + (sub.coefficient>1?` (×${sub.coefficient})`:'');
       hdr.fill  = navyFill(); hdr.font = navyBold(8);
       hdr.alignment = { horizontal:'center', vertical:'middle', wrapText:true };
       hdr.border = medBorder();
 
-      const MAX = sub.max_marks || 100;
-      const mT  = MAX/2, mE = MAX/2;
-      ['CAT1\n('+mT+')','CAT2','EXAM\n('+mE+')','TOTAL\n('+MAX+')'].forEach((lbl,i) => {
+      const MAX  = sub.max_marks  || 100;
+      const mT   = sub.max_test  || Math.round(MAX/2);
+      const mE   = sub.max_exam  || (MAX - mT);
+      const hasExam = (sub.max_exam || 0) > 0;
+      // 3 cols per subject: TEST / EXAM (or blank if no exam) / TOTAL
+      [`TEST\n(${mT})`, hasExam ? `EXAM\n(${mE})` : 'EXAM\n(0)', `TOTAL\n(${MAX})`].forEach((lbl,i) => {
         const c = r5.getCell(col+i);
         c.value = lbl; c.fill = lgrayFill(); c.font = { name:'Calibri', bold:true, size:8, color:{argb:'FF'+NAVY_HEX} };
         c.alignment = { horizontal:'center', vertical:'middle', wrapText:true };
         c.border = thinBorder();
       });
-      col += 4;
+      col += 3;
     });
 
     // Summary cols
@@ -192,30 +195,28 @@ exports.exportClassReport = async (req, res) => {
         c.border = thinBorder();
       });
 
-      // Subject marks
+      // Subject marks — TEST / EXAM / TOTAL (no CAT2)
       let sc = 5;
       subjects.forEach(sub => {
-        const m = (allMarks||[]).find(mk=>mk.student_id===st.id&&mk.subject_id===sub.id);
-        const cat1 = m?.cat1!=null ? parseFloat(m.cat1) : null;
-        const cat2 = m?.cat2!=null ? parseFloat(m.cat2) : null;
-        const exam = m?.exam!=null ? parseFloat(m.exam) : null;
-        const tot  = m?.total!=null? parseFloat(m.total): null;
+        const m    = (allMarks||[]).find(mk=>mk.student_id===st.id&&mk.subject_id===sub.id);
+        const test = m?.cat1 !=null ? parseFloat(m.cat1)  : null;
+        const exam = m?.exam !=null ? parseFloat(m.exam)  : null;
+        const tot  = m?.total!=null ? parseFloat(m.total) : null;
 
-        [cat1,cat2,exam,tot].forEach((val,i) => {
+        [test, exam, tot].forEach((val,i) => {
           const c = row.getCell(sc+i);
           c.value = val!=null ? val : '';
-          c.fill  = i===3 ? lgrayFill() : rowBg;
-          c.font  = i===3 ? darkFont(9,true) : darkFont(9);
+          c.fill  = i===2 ? lgrayFill() : rowBg;
+          c.font  = i===2 ? darkFont(9,true) : darkFont(9);
           c.alignment = { horizontal:'center', vertical:'middle' };
           c.border = thinBorder();
-          // Color total based on % of subject
-          if (i===3 && tot!=null) {
+          if (i===2 && tot!=null) {
             const sPct = (tot/(sub.max_marks||100))*100;
             const { color } = grade(sPct);
             c.font = { name:'Calibri', bold:true, size:9, color:{argb:'FF'+color} };
           }
         });
-        sc += 4;
+        sc += 3;
       });
 
       // Summary cols

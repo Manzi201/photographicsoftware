@@ -17,29 +17,24 @@ SMS.interceptors.request.use(cfg => {
   return cfg;
 });
 
-async function fetchPDF(endpoint, body) {
+async function fetchXLSX(endpoint, body) {
   const res = await SMS.post(endpoint, body, { responseType: 'arraybuffer' });
-  // Verify it's actually a PDF (starts with %PDF)
+  // Check if it's actually an Excel file (PK header = zip/xlsx)
   const bytes = new Uint8Array(res.data).slice(0, 4);
   const header = String.fromCharCode(...bytes);
-  if (header !== '%PDF') {
-    // It's an error response encoded as arraybuffer
+  if (header !== 'PK\x03\x04' && header.charCodeAt(0) !== 80) {
     const text = new TextDecoder().decode(res.data);
     let msg = 'Server error';
     try { msg = JSON.parse(text)?.error || text; } catch {}
     throw new Error(msg);
   }
-  return new Blob([res.data], { type: 'application/pdf' });
+  return new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 }
 
 function openAndPrint(blob) {
   const url = URL.createObjectURL(blob);
   const win = window.open(url, '_blank');
-  if (win) {
-    win.addEventListener('load', () => { win.focus(); win.print(); });
-  } else {
-    toast.error('Pop-up blocked — allow pop-ups and try again');
-  }
+  if (!win) toast.error('Pop-up blocked — allow pop-ups and try again');
   setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 
@@ -95,23 +90,18 @@ export default function SmsBulletins() {
     if (!selClass || !selTerm || !selYear) { toast.error('Select class, term and year'); return; }
     setGenAll(action);
     try {
-      const blob = await fetchPDF('/bulletins/generate-class', {
+      const blob = await fetchXLSX('/bulletins/generate-class', {
         term_id: selTerm, class_id: selClass, academic_year_id: selYear,
         teacher_remarks: remarks.teacher, head_remarks: remarks.head, conduct: remarks.conduct,
       });
       const cls = classes.find(c => c.id === selClass);
       const trm = terms.find(t => t.id === selTerm);
-      const fname = `${cls?.name || 'class'}_${trm?.name || 'term'}_bulletins.pdf`;
-      if (action === 'print') {
-        openAndPrint(blob);
-      } else {
-        downloadBlob(blob, fname);
-        toast.success(`✅ ${students.length} bulletins downloaded!`);
-      }
+      const fname = `${cls?.name||'class'}_${trm?.name||'term'}_bulletins.xlsx`;
+      downloadBlob(blob, fname);
+      toast.success(`✅ ${students.length} bulletins downloaded as Excel!`);
       getBulletins({ class_id: selClass, term_id: selTerm }).then(r => setBulletins(r.data.data || []));
     } catch (err) {
-      toast.error(err.message || 'Failed to generate bulletins', { duration: 6000 });
-      console.error('generateAll error:', err);
+      toast.error(err.message || 'Failed to generate', { duration: 6000 });
     } finally { setGenAll(''); }
   };
 
@@ -119,20 +109,16 @@ export default function SmsBulletins() {
     if (!selTerm || !selYear) { toast.error('Select term and year first'); return; }
     setGenOne(student.id + '_' + action);
     try {
-      const blob = await fetchPDF('/bulletins/generate', {
+      const blob = await fetchXLSX('/bulletins/generate', {
         student_id: student.id, term_id: selTerm,
         class_id: selClass, academic_year_id: selYear,
         teacher_remarks: remarks.teacher, head_remarks: remarks.head, conduct: remarks.conduct,
       });
-      if (action === 'print') {
-        openAndPrint(blob);
-      } else {
-        downloadBlob(blob, `${student.student_id || student.id}_bulletin.pdf`);
-        toast.success('✅ Bulletin downloaded!');
-      }
+      const fname = `${student.student_id||student.id}_bulletin.xlsx`;
+      downloadBlob(blob, fname);
+      toast.success('✅ Bulletin downloaded as Excel!');
     } catch (err) {
-      toast.error(err.message || 'Failed to generate', { duration: 6000 });
-      console.error('generateOne error:', err);
+      toast.error(err.message || 'Failed', { duration: 6000 });
     } finally { setGenOne(''); }
   };
 
@@ -230,20 +216,12 @@ export default function SmsBulletins() {
 
       {/* ── Generate all buttons ──────────────────────────── */}
       {selClass && selTerm && selYear && (
-        <div className="flex gap-3 mb-5">
           <button onClick={() => handleGenerateAll('download')} disabled={!!genAll}
-            className="btn-primary flex-1 justify-center py-3 text-sm">
+            className="w-full btn-primary py-3 mb-5 justify-center text-sm">
             {genAll === 'download'
               ? <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/> Generating…</>
-              : <><Download className="w-4 h-4"/> Download All {students.length} Bulletins</>}
+              : <><Download className="w-4 h-4"/> Download All {students.length} Bulletins (.xlsx)</>}
           </button>
-          <button onClick={() => handleGenerateAll('print')} disabled={!!genAll}
-            className="btn-secondary flex-1 justify-center py-3 text-sm">
-            {genAll === 'print'
-              ? <><span className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"/> Preparing…</>
-              : <><Printer className="w-4 h-4"/> Print All {students.length}</>}
-          </button>
-        </div>
       )}
 
       {/* ── Students list ─────────────────────────────────────── */}
