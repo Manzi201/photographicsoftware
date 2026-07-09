@@ -11,7 +11,8 @@ const finance    = require('../controllers/financeController');
 const notif      = require('../controllers/notificationsController');
 const staffMgmt  = require('../controllers/staffMgmtController');
 const promotion  = require('../controllers/promotionController');
-const excel      = require('../controllers/excelController');
+const excel       = require('../controllers/excelController');
+const annualRpt   = require('../controllers/annualReportController');
 
 // All routes use staff auth (supports both Supabase JWT + staff session token)
 router.use(requireStaffAuth);
@@ -91,6 +92,10 @@ router.get ('/promotion/history',   requireRole('admin','dos'), promotion.getHis
 router.get('/excel/students',     requireRole('admin','secretary','finance'), excel.exportStudents);
 router.get('/excel/finance',      requireRole('admin','finance'),             excel.exportFinance);
 router.get('/excel/class-report', requireRole('admin','dos','secretary','teacher'), excel.exportClassReport);
+
+// ── Annual Report (Progressive School Report) ─────────────────
+router.get('/excel/annual-report',         requireRole('admin','dos','secretary'), annualRpt.generateAnnualReport);
+router.get('/excel/annual-report/student', requireRole('admin','dos','secretary'), annualRpt.generateOneAnnualReport);
 
 // ── Documents (Secretary + Admin) ─────────────────────────────
 const docs = require('../controllers/documentsController');

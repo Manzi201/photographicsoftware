@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, Download, Star, RefreshCw, GraduationCap, Users, ChevronDown, CheckCircle } from 'lucide-react';
+import { FileText, Download, Star, RefreshCw, GraduationCap, Users, ChevronDown, CheckCircle, BookOpen } from 'lucide-react';
 import toast from 'react-hot-toast';
 import axios from 'axios';
 import { getSmsClasses, getTerms, getAcademicYears, getSmsStudents, getBulletins, downloadBlob } from '../../api';
@@ -18,6 +18,17 @@ SMS.interceptors.request.use(cfg => {
 
 async function fetchXLSX(endpoint, body) {
   const res = await SMS.post(endpoint, body, { responseType: 'arraybuffer' });
+  const b = new Uint8Array(res.data).slice(0, 4);
+  if (b[0] !== 80 || b[1] !== 75) {
+    const text = new TextDecoder().decode(res.data);
+    let msg = 'Server error'; try { msg = JSON.parse(text)?.error || text; } catch {}
+    throw new Error(msg);
+  }
+  return new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+}
+
+async function fetchXLSXGet(endpoint, params) {
+  const res = await SMS.get(endpoint, { params, responseType: 'arraybuffer' });
   const b = new Uint8Array(res.data).slice(0, 4);
   if (b[0] !== 80 || b[1] !== 75) {
     const text = new TextDecoder().decode(res.data);
@@ -46,6 +57,7 @@ export default function SmsBulletins() {
   const [selYear,   setSelYear]   = useState('');
   const [genAll,    setGenAll]    = useState(false);
   const [genOne,    setGenOne]    = useState('');
+  const [genAnnual, setGenAnnual] = useState(false);
   const [remarks,   setRemarks]   = useState({ teacher:'', head:'', conduct:'Good' });
   const [loading,   setLoading]   = useState(true);
 
@@ -106,6 +118,19 @@ export default function SmsBulletins() {
       toast.success('✅ Downloaded!');
     } catch (err) { toast.error(err.message || 'Failed'); }
     finally { setGenOne(''); }
+  };
+
+  const handleGenerateAnnual = async () => {
+    if (!selClass || !selYear) { toast.error('Select class and year first'); return; }
+    setGenAnnual(true);
+    try {
+      const blob = await fetchXLSXGet('/excel/annual-report', {
+        class_id: selClass, academic_year_id: selYear,
+      });
+      downloadBlob(blob, `${selectedClass?.name||'class'}_annual_report.xlsx`);
+      toast.success('✅ Annual Progressive Report downloaded!');
+    } catch (err) { toast.error(err.message || 'Failed', { duration: 6000 }); }
+    finally { setGenAnnual(false); }
   };
 
   return (
@@ -233,14 +258,26 @@ export default function SmsBulletins() {
           </div>
         </div>
 
-        {/* ── Download all button ──────────────────────────── */}
+        {/* ── Download buttons ──────────────────────────── */}
         {ready && (
-          <button onClick={handleGenerateAll} disabled={genAll}
-            className="w-full flex items-center justify-center gap-3 py-4 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-60 text-white font-semibold text-sm transition-all shadow-lg shadow-blue-500/20 hover:shadow-xl hover:shadow-blue-500/30 hover:-translate-y-0.5">
-            {genAll
-              ? <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/> Generating Excel bulletins…</>
-              : <><Download className="w-4 h-4"/> Download All {students.length} Report Cards &nbsp;·&nbsp; .xlsx Excel</>}
-          </button>
+          <div className="space-y-3">
+            {/* Term bulletins */}
+            <button onClick={handleGenerateAll} disabled={genAll}
+              className="w-full flex items-center justify-center gap-3 py-4 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-60 text-white font-semibold text-sm transition-all shadow-lg shadow-blue-500/20 hover:shadow-xl hover:shadow-blue-500/30 hover:-translate-y-0.5">
+              {genAll
+                ? <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/> Generating Excel bulletins…</>
+                : <><Download className="w-4 h-4"/> Download All {students.length} Report Cards &nbsp;·&nbsp; .xlsx Excel</>}
+            </button>
+            {/* Annual Progressive School Report */}
+            {selClass && selYear && (
+              <button onClick={handleGenerateAnnual} disabled={genAnnual}
+                className="w-full flex items-center justify-center gap-3 py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 disabled:opacity-60 text-white font-semibold text-sm transition-all shadow-lg shadow-amber-500/20 hover:-translate-y-0.5">
+                {genAnnual
+                  ? <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/> Generating Annual Report…</>
+                  : <><BookOpen className="w-4 h-4"/> Download Annual Progressive Report &nbsp;·&nbsp; T1 + T2 + T3</>}
+              </button>
+            )}
+          </div>
         )}
 
         {/* ── Students list ─────────────────────────────────── */}
