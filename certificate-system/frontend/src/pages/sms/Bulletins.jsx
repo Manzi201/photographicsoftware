@@ -16,26 +16,16 @@ SMS.interceptors.request.use(cfg => {
   return cfg;
 });
 
-async function fetchXLSX(endpoint, body) {
+async function fetchPDF(endpoint, body) {
   const res = await SMS.post(endpoint, body, { responseType: 'arraybuffer' });
   const b = new Uint8Array(res.data).slice(0, 4);
-  if (b[0] !== 80 || b[1] !== 75) {
+  const header = String.fromCharCode(...b);
+  if (header !== '%PDF') {
     const text = new TextDecoder().decode(res.data);
     let msg = 'Server error'; try { msg = JSON.parse(text)?.error || text; } catch {}
     throw new Error(msg);
   }
-  return new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-}
-
-async function fetchXLSXGet(endpoint, params) {
-  const res = await SMS.get(endpoint, { params, responseType: 'arraybuffer' });
-  const b = new Uint8Array(res.data).slice(0, 4);
-  if (b[0] !== 80 || b[1] !== 75) {
-    const text = new TextDecoder().decode(res.data);
-    let msg = 'Server error'; try { msg = JSON.parse(text)?.error || text; } catch {}
-    throw new Error(msg);
-  }
-  return new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  return new Blob([res.data], { type: 'application/pdf' });
 }
 
 const TERM_NUMBER_LABEL = { 1:'T1', 2:'T2', 3:'T3', 4:'Ann.' };
