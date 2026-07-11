@@ -71,11 +71,11 @@ const NAV_BY_ROLE = {
     { section: 'Overview' },
     { to: '/sms/dashboard', icon: Home,       label: 'Dashboard' },
     { section: 'Academics' },
-    { to: '/sms/students',  icon: Users,      label: 'Students' },
-    { to: '/sms/marks',     icon: BookOpen,   label: 'Marks & Grades' },
+    { to: '/sms/marks',     icon: BookOpen,   label: 'Student Marks (View)' },
     { to: '/sms/bulletins', icon: FileText,   label: 'Bulletins' },
     { to: '/sms/promotion', icon: TrendingUp, label: 'Promotion' },
     { to: '/sms/classes',   icon: Layers,     label: 'Classes & Years' },
+    { to: '/sms/students',  icon: Users,      label: 'Students' },
   ],
 };
 
