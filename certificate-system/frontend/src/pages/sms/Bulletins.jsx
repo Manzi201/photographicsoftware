@@ -85,12 +85,12 @@ export default function SmsBulletins() {
     if (!ready) { toast.error('Select class, term and year'); return; }
     setGenAll(true);
     try {
-      const blob = await fetchXLSX('/bulletins/generate-class', {
+      const blob = await fetchPDF('/bulletins/generate-class', {
         term_id: selTerm, class_id: selClass, academic_year_id: selYear,
         teacher_remarks: remarks.teacher, head_remarks: remarks.head, conduct: remarks.conduct,
       });
-      downloadBlob(blob, `${selectedClass?.name||'class'}_${selectedTerm?.name||'term'}_bulletins.xlsx`);
-      toast.success(`✅ ${students.length} bulletins downloaded!`);
+      downloadBlob(blob, `${selectedClass?.name||'class'}_${selectedTerm?.name||'term'}_bulletins.pdf`);
+      toast.success(`✅ ${students.length} bulletins downloaded as PDF!`);
       getBulletins({ class_id: selClass, term_id: selTerm }).then(r => setBulletins(r.data.data || []));
     } catch (err) { toast.error(err.message || 'Failed', { duration: 6000 }); }
     finally { setGenAll(false); }
@@ -100,11 +100,11 @@ export default function SmsBulletins() {
     if (!selTerm || !selYear) { toast.error('Select term and year first'); return; }
     setGenOne(student.id);
     try {
-      const blob = await fetchXLSX('/bulletins/generate', {
+      const blob = await fetchPDF('/bulletins/generate', {
         student_id: student.id, term_id: selTerm, class_id: selClass, academic_year_id: selYear,
         teacher_remarks: remarks.teacher, head_remarks: remarks.head, conduct: remarks.conduct,
       });
-      downloadBlob(blob, `${student.student_id||student.id}_bulletin.xlsx`);
+      downloadBlob(blob, `${student.student_id||student.id}_bulletin.pdf`);
       toast.success('✅ Downloaded!');
     } catch (err) { toast.error(err.message || 'Failed'); }
     finally { setGenOne(''); }
@@ -114,12 +114,14 @@ export default function SmsBulletins() {
     if (!selClass || !selYear) { toast.error('Select class and year first'); return; }
     setGenAnnual(true);
     try {
-      const blob = await fetchXLSXGet('/excel/annual-report', {
-        class_id: selClass, academic_year_id: selYear,
+      const res = await SMS.get('/excel/annual-report', {
+        params: { class_id: selClass, academic_year_id: selYear },
+        responseType: 'arraybuffer',
       });
+      const blob = new Blob([res.data], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       downloadBlob(blob, `${selectedClass?.name||'class'}_annual_report.xlsx`);
       toast.success('✅ Annual Progressive Report downloaded!');
-    } catch (err) { toast.error(err.message || 'Failed', { duration: 6000 }); }
+    } catch (err) { toast.error(err?.message || 'Failed', { duration: 6000 }); }
     finally { setGenAnnual(false); }
   };
 
@@ -251,20 +253,20 @@ export default function SmsBulletins() {
         {/* ── Download buttons ──────────────────────────── */}
         {ready && (
           <div className="space-y-3">
-            {/* Term bulletins */}
+            {/* Term PDF bulletin */}
             <button onClick={handleGenerateAll} disabled={genAll}
               className="w-full flex items-center justify-center gap-3 py-4 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-60 text-white font-semibold text-sm transition-all shadow-lg shadow-blue-500/20 hover:shadow-xl hover:shadow-blue-500/30 hover:-translate-y-0.5">
               {genAll
-                ? <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/> Generating Excel bulletins…</>
-                : <><Download className="w-4 h-4"/> Download All {students.length} Report Cards &nbsp;·&nbsp; .xlsx Excel</>}
+                ? <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/> Generating PDF…</>
+                : <><Download className="w-4 h-4"/> Download {selectedTerm?.name} Report Cards (.pdf) — {students.length} students</>}
             </button>
-            {/* Annual Progressive School Report */}
+            {/* Annual Progressive Report (Excel) */}
             {selClass && selYear && (
               <button onClick={handleGenerateAnnual} disabled={genAnnual}
                 className="w-full flex items-center justify-center gap-3 py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 disabled:opacity-60 text-white font-semibold text-sm transition-all shadow-lg shadow-amber-500/20 hover:-translate-y-0.5">
                 {genAnnual
-                  ? <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/> Generating Annual Report…</>
-                  : <><BookOpen className="w-4 h-4"/> Download Annual Progressive Report &nbsp;·&nbsp; T1 + T2 + T3</>}
+                  ? <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/> Generating…</>
+                  : <><BookOpen className="w-4 h-4"/> Annual Progressive Report (T1+T2+T3 avg) · Excel</>}
               </button>
             )}
           </div>
