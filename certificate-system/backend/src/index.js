@@ -107,19 +107,28 @@ app.listen(PORT, '0.0.0.0', async () => {
   console.log(`✅ Server running on port ${PORT}`);
   console.log(`   Health: http://localhost:${PORT}/api/health`);
 
-  // Verify Supabase connection + key tables exist
-  try {
-    const { data, error } = await require('./supabase').supabase
-      .from('schools').select('count').limit(1);
-    if (error) console.error('⚠️  Supabase check failed:', error.message);
-    else console.log('✅ Supabase connected');
+  const { supabase } = require('./supabase');
 
-    // Check if staff table has username column (DB migration needed)
-    const { error: staffErr } = await require('./supabase').supabase
-      .from('staff').select('username').limit(1);
-    if (staffErr?.message?.includes('username')) {
-      console.warn('⚠️  staff.username column missing — run database.sql Step 1 migration');
+  // ── Verify Supabase + run schema checks ───────────────────
+  try {
+    const { error } = await supabase.from('schools').select('count').limit(1);
+    if (error) { console.error('⚠️  Supabase check failed:', error.message); return; }
+    console.log('✅ Supabase connected');
+
+    // Check key columns exist — warn if migration needed
+    const checks = [
+      { table: 'subjects',         col: 'sort_order',   hint: 'subjects sort_order+is_core' },
+      { table: 'document_folders', col: 'folder_type',  hint: 'document_folders folder_type+class_id+term_id' },
+      { table: 'document_folders', col: 'is_locked',    hint: 'document_folders password protection' },
+      { table: 'staff',            col: 'staff_id',     hint: 'staff ID system' },
+    ];
+    for (const { table, col, hint } of checks) {
+      const { error: e } = await supabase.from(table).select(col).limit(1);
+      if (e?.message?.includes(col) || e?.message?.includes('does not exist')) {
+        console.warn(`⚠️  Missing column: ${table}.${col} (${hint}) — run database.sql in Supabase SQL Editor`);
+      }
     }
+    console.log('✅ Schema checks done');
   } catch (e) {
     console.error('⚠️  Startup check error:', e.message);
   }
