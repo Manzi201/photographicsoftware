@@ -117,6 +117,12 @@ function StudentModal({ student, classes, years, onSave, onClose }) {
 
 export default function SmsStudents() {
   const { school } = useAuth();
+
+  // Role check — teachers can only VIEW, not register/edit/delete
+  const staffData = JSON.parse(localStorage.getItem('staff_data') || '{}');
+  const role      = staffData.role || 'teacher';
+  const canWrite  = ['admin', 'secretary', 'dos', 'finance'].includes(role);
+
   const [students, setStudents] = useState([]);
   const [classes,  setClasses]  = useState([]);
   const [years,    setYears]    = useState([]);
@@ -187,9 +193,11 @@ export default function SmsStudents() {
           <button onClick={loadAll} disabled={loading} className="btn-secondary text-sm">
             {loading ? '⟳' : '↺ Refresh'}
           </button>
-          <button onClick={() => setModal('add')} className="btn-primary">
-            <UserPlus className="w-4 h-4"/> Register Student
-          </button>
+          {canWrite && (
+            <button onClick={() => setModal('add')} className="btn-primary">
+              <UserPlus className="w-4 h-4"/> Register Student
+            </button>
+          )}
         </div>
       </div>
 
@@ -220,7 +228,7 @@ export default function SmsStudents() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
-                  {['Photo','ID','Name','Class','Parent Phone','Fee Status','Actions'].map(h => (
+                  {['Photo','ID','Name','Class','Parent Phone','Fee Status', ...(canWrite ? ['Actions'] : [])].map(h => (
                     <th key={h} className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">{h}</th>
                   ))}
                 </tr>
@@ -252,10 +260,12 @@ export default function SmsStudents() {
                         {s.fee_status || 'unpaid'}
                       </span>
                     </td>
-                    <td className="py-3 px-4 flex items-center gap-1">
-                      <button onClick={() => setModal(s)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit2 className="w-4 h-4"/></button>
-                      <button onClick={() => handleDelete(s)} className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4"/></button>
-                    </td>
+                    {canWrite && (
+                      <td className="py-3 px-4 flex items-center gap-1">
+                        <button onClick={() => setModal(s)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit2 className="w-4 h-4"/></button>
+                        <button onClick={() => handleDelete(s)} className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4"/></button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -264,7 +274,7 @@ export default function SmsStudents() {
         )}
       </div>
 
-      {modal && (
+      {modal && canWrite && (
         <StudentModal
           student={modal === 'add' ? null : modal}
           classes={classes} years={years}
