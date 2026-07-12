@@ -147,13 +147,6 @@ export const getBulletins      = (p)  => sms.get('/bulletins', { params: p });
 export const generateBulletin  = (d)  => sms.post('/bulletins/generate', d, { responseType:'blob' });
 export const generateClassBulletins = (d) => sms.post('/bulletins/generate-class', d, { responseType:'blob' });
 
-// ── Student bulk import ───────────────────────────────────────
-export const importStudentsExcel = (file) => {
-  const fd = new FormData();
-  fd.append('file', file);
-  return sms.post('/students/import', fd, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 });
-};
-
 // ── Finance ───────────────────────────────────────────────────
 export const getFeeStructure    = (p) => sms.get('/finance/fee-structure', { params: p });
 export const createFeeStructure = (d) => sms.post('/finance/fee-structure', d);
