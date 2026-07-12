@@ -87,19 +87,26 @@ export default function SmsMarks() {
   }, [selClass, isTeacher, session.staffId]);
 
   // ── Marks ─────────────────────────────────────────────────
-  const loadData = useCallback(async () => {
-    if (!selClass || !selTerm || subjects.length === 0) { setStudents([]); setMarksData({}); return; }
+  // NOTE: subjects is passed as a parameter so the effect below
+  // can call it with the freshest value without stale closure issues.
+  const loadData = useCallback(async (subsOverride) => {
+    const subs = subsOverride ?? subjects;
+    if (!selClass || !selTerm || subs.length === 0) {
+      setStudents([]);
+      setMarksData({});
+      return;
+    }
     setLoading(true);
     try {
       const [sRes, ...markRes] = await Promise.all([
         getSmsStudents({ class_id: selClass }),
-        ...subjects.map(sub => getMarks({ class_id: selClass, term_id: selTerm, subject_id: sub.id })),
+        ...subs.map(sub => getMarks({ class_id: selClass, term_id: selTerm, subject_id: sub.id })),
       ]);
       const stList = sRes.data.data || [];
       setStudents(stList);
       const md = {};
       stList.forEach(st => { md[st.id] = {}; });
-      subjects.forEach((sub, idx) => {
+      subs.forEach((sub, idx) => {
         const mList = markRes[idx]?.data?.data || [];
         stList.forEach(st => {
           const m = mList.find(x => x.student_id === st.id);
@@ -111,9 +118,20 @@ export default function SmsMarks() {
       setDirty(false);
     } catch { toast.error('Failed to load marks'); }
     finally { setLoading(false); }
-  }, [selClass, selTerm, subjects]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selClass, selTerm]);
 
+  // Re-run whenever class or term changes (subjects may still be loading → handled below)
   useEffect(() => { loadData(); }, [selClass, selTerm]);
+
+  // Also re-run when subjects finish loading (fixes race condition)
+  useEffect(() => {
+    if (selClass && selTerm && subjects.length > 0) {
+      loadData(subjects);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subjects]);
+
   useEffect(() => { setTimeout(() => firstInputRef.current?.focus(), 80); }, [selSubIdx]);
 
   const setMark = (stId, subId, field, val) => {
@@ -136,7 +154,7 @@ export default function SmsMarks() {
       }
       toast.success(`✅ Marks saved — ${subjects.length} subjects`);
       setDirty(false);
-      loadData();
+      loadData(subjects);
     } catch (err) { toast.error(err.response?.data?.error || 'Save failed'); }
     finally { setSaving(false); }
   };
@@ -255,7 +273,7 @@ export default function SmsMarks() {
                 </div>
                 {selClass && (
                   <div className="flex gap-2 flex-wrap">
-                    <button onClick={() => loadData()} disabled={loading}
+                    <button onClick={() => loadData(subjects)} disabled={loading}
                       className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors shadow-sm">
                       <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh
                     </button>
