@@ -73,8 +73,19 @@ async function fetchTermIds(schoolId,academicYearId){
   const map={};(data||[]).forEach(t=>{map[t.number]=t;});return map;
 }
 async function fetchSubjects(classId){
-  const{data}=await supabase.from('class_subjects').select('*,subject:subjects(id,name,code,max_marks,max_test,max_exam,coefficient)').eq('class_id',classId);
-  return(data||[]).map(cs=>cs.subject).filter(Boolean).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  const{data}=await supabase.from('class_subjects').select('*,subject:subjects(id,name,code,max_marks,max_test,max_exam,coefficient,sort_order,is_core)').eq('class_id',classId);
+  return(data||[])
+    .map(cs=>({
+      ...cs.subject,
+      sort_order: cs.sort_order ?? cs.subject?.sort_order ?? 999,
+      is_core:    cs.is_core != null ? cs.is_core : (cs.subject?.is_core ?? false),
+    }))
+    .filter(Boolean)
+    .sort((a,b)=>{
+      const oa=a.sort_order??999, ob=b.sort_order??999;
+      if(oa!==ob)return oa-ob;
+      return(a.name||'').localeCompare(b.name||'');
+    });
 }
 async function fetchClassMarks(schoolId,classId,termId){
   if(!termId)return[];

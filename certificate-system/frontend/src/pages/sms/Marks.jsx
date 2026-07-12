@@ -219,34 +219,38 @@ export default function SmsMarks() {
           </div>
         </div>
 
-        {/* ── Config card ───────────────────────────────────── */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
+        {/* ── Config card — ONE horizontal line ─────────── */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+          <div className="flex flex-wrap items-end gap-4">
 
-          {/* Year */}
-          <div className="p-5 pb-4">
-            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">Academic Year</label>
-            <div className="relative max-w-xs">
-              <select value={selYear} onChange={e => { setSelYear(e.target.value); setSelTerm(''); setSelClass(''); setDirty(false); }} className={SEL_CLS}>
-                <option value="">— Select Year —</option>
-                {years.map(y => <option key={y.id} value={y.id}>{y.name}{y.is_current ? ' (current)' : ''}</option>)}
-              </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            {/* Academic Year */}
+            <div className="flex-1 min-w-[160px]">
+              <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">Academic Year</label>
+              <div className="relative">
+                <select value={selYear} onChange={e => { setSelYear(e.target.value); setSelTerm(''); setSelClass(''); setDirty(false); }} className={SEL_CLS}>
+                  <option value="">— Select Year —</option>
+                  {years.map(y => <option key={y.id} value={y.id}>{y.name}{y.is_current ? ' (current)' : ''}</option>)}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+              </div>
             </div>
-          </div>
 
-          {/* Term */}
-          {selYear && (
-            <div className="px-5 pb-4 border-t border-gray-50 pt-4">
-              <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2.5">Term</label>
+            {/* Divider */}
+            <div className="hidden sm:block w-px h-10 bg-gray-100 self-end mb-0.5" />
+
+            {/* Term buttons */}
+            <div className="flex-shrink-0">
+              <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">Term</label>
               {filteredTerms.length === 0
-                ? <p className="text-sm text-gray-400 italic">No terms — create in Classes &amp; Years</p>
-                : <div className="flex flex-wrap gap-2">
+                ? <p className="text-sm text-gray-400 italic py-2">—</p>
+                : <div className="flex gap-1.5">
                     {filteredTerms.map(t => {
-                      const p = TERM_PILL[t.number] || TERM_PILL[1];
+                      const p  = TERM_PILL[t.number] || TERM_PILL[1];
                       const on = selTerm === t.id;
                       return (
                         <button key={t.id} onClick={() => { setSelTerm(t.id); setSelClass(''); setDirty(false); }}
-                          className={`flex items-center gap-1.5 px-5 py-2.5 rounded-xl border-2 text-sm font-bold transition-all duration-150 ${on ? p.on + ' shadow-md scale-105' : p.off}`}>
+                          className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl border-2 text-sm font-bold transition-all duration-150
+                            ${on ? p.on + ' shadow-md scale-105' : p.off}`}>
                           {t.name}
                           {t.is_current && <span className={`w-2 h-2 rounded-full ${on ? 'bg-white/70' : 'bg-green-500'}`} />}
                         </button>
@@ -254,43 +258,49 @@ export default function SmsMarks() {
                     })}
                   </div>}
             </div>
-          )}
 
-          {/* Class + action buttons */}
-          {selYear && selTerm && (
-            <div className="px-5 pb-5 border-t border-gray-50 pt-4">
+            {/* Divider */}
+            <div className="hidden sm:block w-px h-10 bg-gray-100 self-end mb-0.5" />
+
+            {/* Class */}
+            <div className="flex-1 min-w-[180px]">
               <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">Class</label>
-              <div className="flex items-center gap-3 flex-wrap">
-                <div className="relative flex-1 min-w-52">
-                  <select value={selClass} onChange={e => { setSelClass(e.target.value); setDirty(false); }} className={SEL_CLS}>
-                    <option value="">— Select Class —</option>
-                    {classes.map(c => <option key={c.id} value={c.id}>{c.name}{c.level ? ` (${c.level})` : ''}</option>)}
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                </div>
-                {selClass && (
-                  <div className="flex gap-2 flex-wrap">
-                    <button onClick={() => loadData(subjects)} disabled={loading}
-                      className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors shadow-sm">
-                      <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh
-                    </button>
-                    <button onClick={handleExcel} disabled={dlExcel}
-                      className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors shadow-sm">
-                      {dlExcel ? <span className="w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" /> : <Download className="w-3.5 h-3.5 text-emerald-600" />}
-                      Excel
-                    </button>
-                    {canEdit && (
-                      <button onClick={handleSave} disabled={saving || loading || subjects.length === 0}
-                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#0a2156] hover:bg-[#0c2a6a] text-white text-xs font-bold disabled:opacity-50 transition-colors shadow-sm">
-                        {saving ? <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                        Save All Marks
-                      </button>
-                    )}
-                  </div>
-                )}
+              <div className="relative">
+                <select value={selClass} onChange={e => { setSelClass(e.target.value); setDirty(false); }}
+                  disabled={!selTerm}
+                  className={SEL_CLS + (!selTerm ? ' opacity-50 cursor-not-allowed' : '')}>
+                  <option value="">{selTerm ? '— Select Class —' : '— Select term first —'}</option>
+                  {classes.map(c => <option key={c.id} value={c.id}>{c.name}{c.level ? ` (${c.level})` : ''}</option>)}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
               </div>
             </div>
-          )}
+
+            {/* Action buttons — inline */}
+            {selClass && (
+              <>
+                <div className="hidden sm:block w-px h-10 bg-gray-100 self-end mb-0.5" />
+                <div className="flex gap-2 self-end flex-shrink-0">
+                  <button onClick={() => loadData(subjects)} disabled={loading}
+                    className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors shadow-sm">
+                    <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh
+                  </button>
+                  <button onClick={handleExcel} disabled={dlExcel}
+                    className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors shadow-sm">
+                    {dlExcel ? <span className="w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" /> : <Download className="w-3.5 h-3.5 text-emerald-600" />}
+                    Excel
+                  </button>
+                  {canEdit && (
+                    <button onClick={handleSave} disabled={saving || loading || subjects.length === 0}
+                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#0a2156] hover:bg-[#0c2a6a] text-white text-xs font-bold disabled:opacity-50 transition-colors shadow-sm">
+                      {saving ? <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                      Save All
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
         {/* ── Marks panel ───────────────────────────────────── */}

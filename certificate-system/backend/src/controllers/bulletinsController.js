@@ -239,8 +239,30 @@ async function fetchShared(schoolId,classId,academicYearId){
     supabase.from('classes').select('*').eq('id',classId).single(),
     supabase.from('schools').select('*').eq('id',schoolId).single(),
   ]);
-  const subjects=(classSubs||[]).map(cs=>cs.subject).filter(Boolean).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
-  return{subjects,yearInfo,classInfo,school};
+  // Build subjects: only core ones, sorted by sort_order then name
+  // is_core on class_subjects overrides is_core on subject itself
+  const allSubs=(classSubs||[])
+    .map(cs=>({
+      ...cs.subject,
+      sort_order: cs.sort_order ?? cs.subject?.sort_order ?? 999,
+      is_core:    cs.is_core    != null ? cs.is_core    : (cs.subject?.is_core ?? false),
+      class_subject_id: cs.id,
+    }))
+    .filter(s => s && s.id);
+
+  // Sort by sort_order then name
+  allSubs.sort((a,b)=>{
+    const oa=a.sort_order??999, ob=b.sort_order??999;
+    if(oa!==ob)return oa-ob;
+    return(a.name||'').localeCompare(b.name||'');
+  });
+
+  // For report cards: use only core subjects if any are marked core,
+  // otherwise fall back to all subjects
+  const coreOnly=allSubs.filter(s=>s.is_core);
+  const subjects=coreOnly.length>0?coreOnly:allSubs;
+
+  return{subjects,allSubjects:allSubs,yearInfo,classInfo,school};
 }
 async function buildPDF(students,marksMap,subjects,classInfo,termInfo,yearInfo,school,rankMap,statsMap,conduct,isAnnual){
   const doc=await PDFDocument.create();
@@ -327,4 +349,8 @@ exports.generateClass=async(req,res)=>{
     res.end(Buffer.from(pdfBytes));
   }catch(err){console.error('generateClass:',err);res.status(500).json({success:false,error:err.message});}
 };
+async function fetchSharedForOne(schoolId,classId,academicYearId){
+  const result=await fetchShared(schoolId,classId,academicYearId);
+  return result;
+}
 exports.computeAnnualMarks=computeAnnualMarks;

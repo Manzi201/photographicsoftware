@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { UserPlus, Search, Download, Upload, Edit2, Trash2, Phone, Mail, X, Check, ChevronDown } from 'lucide-react';
+import { UserPlus, Search, Download, Upload, Edit2, Trash2, X, Check,
+         FileSpreadsheet, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { getSmsStudents, getSmsClasses, getAcademicYears, createSmsStudent, updateSmsStudent, deleteSmsStudent } from '../../api';
+import { getSmsStudents, getSmsClasses, getAcademicYears,
+         createSmsStudent, updateSmsStudent, deleteSmsStudent,
+         importStudentsExcel } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 
 const GENDERS = ['M','F'];
@@ -115,6 +118,110 @@ function StudentModal({ student, classes, years, onSave, onClose }) {
   );
 }
 
+// ── Excel Import Modal ────────────────────────────────────────
+function ImportModal({ onDone, onClose }) {
+  const [file,      setFile]      = useState(null);
+  const [loading,   setLoading]   = useState(false);
+  const [result,    setResult]    = useState(null);
+  const fileRef = useRef();
+
+  const handleImport = async () => {
+    if (!file) { toast.error('Select an Excel file first'); return; }
+    setLoading(true);
+    try {
+      const res = await importStudentsExcel(file);
+      setResult(res.data);
+      if (res.data.inserted > 0) onDone();
+    } catch (err) {
+      setResult({ error: err.response?.data?.error || err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-emerald-100 flex items-center justify-center">
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600"/>
+            </div>
+            <h2 className="font-bold text-gray-900">Import Students from Excel</h2>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl"><X className="w-4 h-4"/></button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          {/* Template hint */}
+          <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-xs text-blue-700 space-y-1">
+            <p className="font-bold">Expected Excel columns (row 1 = header):</p>
+            <p className="font-mono text-[11px]">last_name | first_name | date_of_birth | gender | parent_phone | class | academic_year</p>
+            <p className="text-blue-500 mt-1">• gender: M or F &nbsp;• class: exact class name e.g. P1A &nbsp;• date_of_birth: YYYY-MM-DD</p>
+          </div>
+
+          {/* File picker */}
+          <div
+            onClick={() => fileRef.current.click()}
+            className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors
+              ${file ? 'border-emerald-300 bg-emerald-50' : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/40'}`}>
+            <FileSpreadsheet className={`w-8 h-8 mx-auto mb-2 ${file ? 'text-emerald-500' : 'text-gray-300'}`}/>
+            {file
+              ? <><p className="font-semibold text-emerald-700 text-sm">{file.name}</p>
+                  <p className="text-xs text-emerald-500 mt-0.5">{(file.size/1024).toFixed(1)} KB</p></>
+              : <><p className="font-semibold text-gray-500 text-sm">Click to choose Excel file</p>
+                  <p className="text-xs text-gray-400 mt-0.5">.xlsx or .xls</p></>}
+            <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden"
+              onChange={e => { setFile(e.target.files[0]); setResult(null); }}/>
+          </div>
+
+          {/* Result */}
+          {result && (
+            <div className={`rounded-xl p-4 text-sm space-y-1 ${result.error ? 'bg-red-50 border border-red-100' : 'bg-emerald-50 border border-emerald-100'}`}>
+              {result.error ? (
+                <div className="flex items-start gap-2 text-red-700">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5"/>
+                  <span>{result.error}</span>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2 text-emerald-700 font-semibold">
+                    <CheckCircle2 className="w-4 h-4"/> {result.message}
+                  </div>
+                  {result.row_errors?.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      <p className="text-amber-700 font-semibold text-xs">Skipped rows:</p>
+                      {result.row_errors.slice(0, 5).map((e, i) => (
+                        <p key={i} className="text-xs text-amber-600">Row {e.row}: {e.error}</p>
+                      ))}
+                      {result.row_errors.length > 5 && (
+                        <p className="text-xs text-amber-500">…and {result.row_errors.length - 5} more</p>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-3 px-6 py-4 border-t border-gray-100">
+          <button onClick={onClose} className="btn-secondary flex-1 justify-center">
+            {result?.inserted > 0 ? 'Close' : 'Cancel'}
+          </button>
+          {!result?.inserted && (
+            <button onClick={handleImport} disabled={loading || !file} className="btn-primary flex-1 justify-center">
+              {loading
+                ? <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"/>Importing…</>
+                : <><Upload className="w-4 h-4 mr-1.5"/>Import Students</>}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function SmsStudents() {
   const { school } = useAuth();
 
@@ -129,7 +236,8 @@ export default function SmsStudents() {
   const [search,   setSearch]   = useState('');
   const [classFilter, setClassFilter] = useState('');
   const [loading,  setLoading]  = useState(true);
-  const [modal,    setModal]    = useState(null); // null | 'add' | student object
+  const [modal,    setModal]    = useState(null);
+  const [importModal, setImportModal] = useState(false);
 
   useEffect(() => { loadAll(); }, []);
 
@@ -194,9 +302,14 @@ export default function SmsStudents() {
             {loading ? '⟳' : '↺ Refresh'}
           </button>
           {canWrite && (
-            <button onClick={() => setModal('add')} className="btn-primary">
-              <UserPlus className="w-4 h-4"/> Register Student
-            </button>
+            <>
+              <button onClick={() => setImportModal(true)} className="btn-secondary text-sm flex items-center gap-1.5">
+                <FileSpreadsheet className="w-4 h-4 text-emerald-600"/> Import Excel
+              </button>
+              <button onClick={() => setModal('add')} className="btn-primary">
+                <UserPlus className="w-4 h-4"/> Register Student
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -280,6 +393,12 @@ export default function SmsStudents() {
           classes={classes} years={years}
           onSave={() => { setModal(null); loadAll(); }}
           onClose={() => setModal(null)}
+        />
+      )}
+      {importModal && canWrite && (
+        <ImportModal
+          onDone={() => loadAll()}
+          onClose={() => setImportModal(false)}
         />
       )}
     </div>

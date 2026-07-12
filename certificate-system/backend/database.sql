@@ -409,6 +409,14 @@ ALTER TABLE classes ADD COLUMN IF NOT EXISTS section     VARCHAR(5) DEFAULT 'A';
 ALTER TABLE subjects ADD COLUMN IF NOT EXISTS max_test   INT DEFAULT 0;
 ALTER TABLE subjects ADD COLUMN IF NOT EXISTS max_exam   INT DEFAULT 0;
 
+-- subjects: display order + core subject flag
+ALTER TABLE subjects ADD COLUMN IF NOT EXISTS sort_order INT DEFAULT 999;
+ALTER TABLE subjects ADD COLUMN IF NOT EXISTS is_core    BOOLEAN DEFAULT false;
+
+-- class_subjects: per-class sort order override + core flag override
+ALTER TABLE class_subjects ADD COLUMN IF NOT EXISTS sort_order INT DEFAULT 999;
+ALTER TABLE class_subjects ADD COLUMN IF NOT EXISTS is_core    BOOLEAN DEFAULT false;
+
 -- student_profiles
 ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS previous_class_id UUID REFERENCES classes(id) ON DELETE SET NULL;
 ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS promotion_status  VARCHAR(20) DEFAULT 'active';

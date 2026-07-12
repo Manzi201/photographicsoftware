@@ -26,6 +26,8 @@ router.get   ('/students/:id',    students.getStudent);
 router.post  ('/students',        requireRole('admin','secretary','dos','finance'), students.createStudent);
 router.put   ('/students/:id',    requireRole('admin','secretary','dos','finance'), students.updateStudent);
 router.delete('/students/:id',    requireRole('admin','secretary','dos','finance'), students.deleteStudent);
+// BULK IMPORT from Excel
+router.post  ('/students/import', requireRole('admin','secretary','dos','finance'), students.importStudents);
 
 // ── Academic ──────────────────────────────────────────────────
 router.get   ('/academic-years',        academic.getAcademicYears);

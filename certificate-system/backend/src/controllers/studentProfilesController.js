@@ -160,3 +160,171 @@ exports.getStats = async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 };
+
+// ── POST /api/sms/students/import — bulk import from Excel ────
+// Expected columns (case-insensitive, order flexible):
+//   last_name*, first_name*, other_names, date_of_birth, gender,
+//   nationality, parent_name, parent_phone, parent_phone2,
+//   parent_email, address, class (name), academic_year (name)
+exports.importStudents = async (req, res) => {
+  try {
+    const ExcelJS = require('exceljs');
+
+    if (!req.files?.file) {
+      return res.status(400).json({ success: false, error: 'No file uploaded. Field name must be "file".' });
+    }
+
+    const schoolId = req.schoolId;
+    const buf      = req.files.file.data;
+
+    // ── Parse Excel ─────────────────────────────────────
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buf);
+    const ws = wb.worksheets[0];
+    if (!ws) return res.status(400).json({ success: false, error: 'Excel file has no worksheets' });
+
+    // Read header row (row 1) — normalise to lowercase_snake
+    const headerRow = ws.getRow(1);
+    const headers   = [];
+    headerRow.eachCell({ includeEmpty: true }, (cell, col) => {
+      const raw = String(cell.value || '').trim().toLowerCase()
+        .replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+      headers[col] = raw;
+    });
+
+    // Map common header aliases
+    const alias = {
+      firstname: 'first_name', lastname: 'last_name', surname: 'last_name',
+      othername: 'other_names', othernames: 'other_names',
+      dob: 'date_of_birth', birthdate: 'date_of_birth', birth_date: 'date_of_birth',
+      sex: 'gender',
+      phone: 'parent_phone', parent_tel: 'parent_phone', tel: 'parent_phone',
+      phone2: 'parent_phone2', phone_2: 'parent_phone2',
+      email: 'parent_email',
+      class: 'class_name', classname: 'class_name', class_name: 'class_name',
+      year: 'academic_year_name', academic_year: 'academic_year_name',
+      nationalite: 'nationality',
+    };
+
+    // Load classes + years for name→id lookup
+    const [{ data: classes }, { data: years }] = await Promise.all([
+      supabase.from('classes').select('id,name').eq('school_id', schoolId),
+      supabase.from('academic_years').select('id,name,is_current').eq('school_id', schoolId),
+    ]);
+    const classMap = {};
+    (classes || []).forEach(c => { classMap[c.name.toLowerCase()] = c.id; });
+    const yearMap = {};
+    (years || []).forEach(y => { yearMap[y.name.toLowerCase()] = y.id; });
+    const currentYear = (years || []).find(y => y.is_current);
+
+    // Get current count for ID generation
+    const { count: existing } = await supabase.from('student_profiles')
+      .select('*', { count: 'exact', head: true }).eq('school_id', schoolId);
+    let seq = (existing || 0) + 1;
+    const year = new Date().getFullYear();
+
+    const rows = [];
+    const errors = [];
+
+    ws.eachRow({ includeEmpty: false }, (row, rowNum) => {
+      if (rowNum === 1) return; // skip header
+
+      // Build object from row
+      const obj = {};
+      row.eachCell({ includeEmpty: true }, (cell, col) => {
+        const h = headers[col];
+        if (!h) return;
+        const key = alias[h] || h;
+        let val = cell.value;
+        // Handle ExcelJS date objects
+        if (val instanceof Date) {
+          val = val.toISOString().split('T')[0];
+        } else if (val && typeof val === 'object' && val.text) {
+          val = val.text; // rich text
+        } else if (val != null) {
+          val = String(val).trim();
+        }
+        if (val !== '' && val != null) obj[key] = val;
+      });
+
+      // Skip truly empty rows
+      if (!obj.first_name && !obj.last_name) return;
+
+      const missing = [];
+      if (!obj.first_name) missing.push('first_name');
+      if (!obj.last_name)  missing.push('last_name');
+      if (missing.length > 0) {
+        errors.push({ row: rowNum, error: `Missing: ${missing.join(', ')}` });
+        return;
+      }
+
+      // Resolve class
+      const classId = obj.class_name
+        ? classMap[(obj.class_name || '').toLowerCase()] || null
+        : null;
+
+      // Resolve year
+      const yearId = obj.academic_year_name
+        ? yearMap[(obj.academic_year_name || '').toLowerCase()] || currentYear?.id || null
+        : currentYear?.id || null;
+
+      // Normalise gender
+      const gRaw = (obj.gender || 'M').toUpperCase();
+      const gender = gRaw === 'F' || gRaw === 'FEMALE' || gRaw === 'FILLE' ? 'F' : 'M';
+
+      rows.push({
+        school_id:        schoolId,
+        student_id:       `${year}/${String(seq++).padStart(4, '0')}`,
+        first_name:       obj.first_name.trim(),
+        last_name:        obj.last_name.trim(),
+        other_names:      obj.other_names   || null,
+        date_of_birth:    obj.date_of_birth || null,
+        gender,
+        nationality:      obj.nationality   || 'Rwandan',
+        parent_name:      obj.parent_name   || null,
+        parent_phone:     obj.parent_phone  || null,
+        parent_phone2:    obj.parent_phone2 || null,
+        parent_email:     obj.parent_email  || null,
+        address:          obj.address       || null,
+        current_class_id: classId,
+        academic_year_id: yearId,
+        admission_date:   new Date().toISOString().split('T')[0],
+        status:           'active',
+      });
+    });
+
+    if (rows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No valid student rows found in file.',
+        row_errors: errors,
+      });
+    }
+
+    // Insert in chunks of 50 to avoid payload limits
+    const CHUNK = 50;
+    let inserted = 0;
+    const insertErrors = [];
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      const chunk = rows.slice(i, i + CHUNK);
+      const { data, error } = await supabase.from('student_profiles').insert(chunk).select('id');
+      if (error) {
+        insertErrors.push(error.message);
+      } else {
+        inserted += (data || []).length;
+      }
+    }
+
+    res.json({
+      success:       true,
+      inserted,
+      skipped:       rows.length - inserted,
+      row_errors:    errors,
+      insert_errors: insertErrors,
+      message:       `${inserted} student(s) imported successfully.${errors.length ? ` ${errors.length} row(s) skipped.` : ''}`,
+    });
+  } catch (err) {
+    console.error('importStudents error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+};

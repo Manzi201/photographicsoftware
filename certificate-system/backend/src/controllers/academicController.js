@@ -289,9 +289,22 @@ exports.getSubjects = async (req, res) => {
 
       const { data, error } = await q;
       if (error) throw error;
+      // Sort by class_subject sort_order first, then subject sort_order, then name
+      const sorted = (data || []).sort((a, b) => {
+        const oa = a.sort_order ?? a.subject?.sort_order ?? 999;
+        const ob = b.sort_order ?? b.subject?.sort_order ?? 999;
+        if (oa !== ob) return oa - ob;
+        return (a.subject?.name || '').localeCompare(b.subject?.name || '');
+      });
       return res.json({
         success: true,
-        data: data.map(r => ({ ...r.subject, teacher: r.teacher, class_subject_id: r.id })),
+        data: sorted.map(r => ({
+          ...r.subject,
+          teacher:          r.teacher,
+          class_subject_id: r.id,
+          sort_order:       r.sort_order ?? r.subject?.sort_order ?? 999,
+          is_core:          r.is_core ?? r.subject?.is_core ?? false,
+        })),
       });
     }
 
@@ -303,18 +316,24 @@ exports.getSubjects = async (req, res) => {
         .select('subject:subjects(*)')
         .eq('teacher_id', staffId);
       if (csErr) throw csErr;
-      // Deduplicate by subject id
       const seen = new Set();
       const subs = (cs || []).map(r => r.subject).filter(s => {
         if (!s || seen.has(s.id)) return false;
         seen.add(s.id);
         return true;
-      }).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      }).sort((a, b) => {
+        const oa = a.sort_order ?? 999;
+        const ob = b.sort_order ?? 999;
+        if (oa !== ob) return oa - ob;
+        return (a.name || '').localeCompare(b.name || '');
+      });
       return res.json({ success: true, data: subs });
     }
 
     const { data, error } = await supabase.from('subjects')
-      .select('*').eq('school_id', req.schoolId).order('name');
+      .select('*').eq('school_id', req.schoolId)
+      .order('sort_order', { ascending: true })
+      .order('name',       { ascending: true });
     if (error) throw error;
     res.json({ success: true, data });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
@@ -322,7 +341,7 @@ exports.getSubjects = async (req, res) => {
 
 exports.createSubject = async (req, res) => {
   try {
-    const { name, code, max_test, max_exam, passing_marks, coefficient } = req.body;
+    const { name, code, max_test, max_exam, passing_marks, coefficient, sort_order, is_core } = req.body;
     if (!name) return res.status(400).json({ success:false, error:'name required' });
     const mTest = parseInt(max_test)||0;
     const mExam = parseInt(max_exam)||0;
@@ -332,6 +351,8 @@ exports.createSubject = async (req, res) => {
       max_marks, max_test: mTest, max_exam: mExam,
       passing_marks: parseInt(passing_marks)||50,
       coefficient: parseInt(coefficient)||1,
+      sort_order: sort_order != null ? parseInt(sort_order) : 999,
+      is_core: !!is_core,
     }]).select().single();
     if (error) throw error;
     res.status(201).json({ success: true, data });
@@ -340,13 +361,18 @@ exports.createSubject = async (req, res) => {
 
 exports.updateSubject = async (req, res) => {
   try {
-    const { name, code, max_test, max_exam, passing_marks, coefficient } = req.body;
+    const { name, code, max_test, max_exam, passing_marks, coefficient, sort_order, is_core } = req.body;
     const mTest = parseInt(max_test)||0;
     const mExam = parseInt(max_exam)||0;
     const max_marks = mTest + mExam || 100;
     const { data, error } = await supabase.from('subjects')
-      .update({ name, code: code||null, max_marks, max_test: mTest, max_exam: mExam,
-        passing_marks: parseInt(passing_marks)||50, coefficient: parseInt(coefficient)||1 })
+      .update({
+        name, code: code||null, max_marks, max_test: mTest, max_exam: mExam,
+        passing_marks: parseInt(passing_marks)||50,
+        coefficient: parseInt(coefficient)||1,
+        sort_order: sort_order != null ? parseInt(sort_order) : 999,
+        is_core: !!is_core,
+      })
       .eq('id', req.params.id).eq('school_id', req.schoolId)
       .select().single();
     if (error) throw error;
@@ -420,10 +446,16 @@ exports.getClassSubjects = async (req, res) => {
 
 exports.assignSubject = async (req, res) => {
   try {
-    const { class_id, subject_id, teacher_id } = req.body;
+    const { class_id, subject_id, teacher_id, sort_order, is_core } = req.body;
     if (!class_id || !subject_id) return res.status(400).json({ success: false, error: 'class_id and subject_id required' });
+    const row = {
+      class_id, subject_id,
+      teacher_id: teacher_id || null,
+      sort_order: sort_order != null ? parseInt(sort_order) : 999,
+      is_core:    is_core != null ? !!is_core : false,
+    };
     const { data, error } = await supabase.from('class_subjects')
-      .upsert([{ class_id, subject_id, teacher_id: teacher_id || null }], { onConflict: 'class_id,subject_id' })
+      .upsert([row], { onConflict: 'class_id,subject_id' })
       .select('*, subject:subjects(*), teacher:staff(id,full_name)').single();
     if (error) throw error;
     res.status(201).json({ success: true, data });
