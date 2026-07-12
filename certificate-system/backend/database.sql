@@ -378,6 +378,14 @@ ALTER TABLE document_folders ADD COLUMN IF NOT EXISTS academic_year_id UUID REFE
 ALTER TABLE document_folders ADD COLUMN IF NOT EXISTS password_hash    TEXT;
 ALTER TABLE document_folders ADD COLUMN IF NOT EXISTS is_locked        BOOLEAN DEFAULT false;
 CREATE INDEX IF NOT EXISTS idx_doc_folders_year ON document_folders(academic_year_id);
+
+-- documents: folder type classification (school | class | month)
+ALTER TABLE document_folders ADD COLUMN IF NOT EXISTS folder_type VARCHAR(20) DEFAULT 'school';
+ALTER TABLE document_folders ADD COLUMN IF NOT EXISTS class_id    UUID REFERENCES classes(id) ON DELETE SET NULL;
+ALTER TABLE document_folders ADD COLUMN IF NOT EXISTS term_id     UUID REFERENCES terms(id)   ON DELETE SET NULL;
+ALTER TABLE document_folders ADD COLUMN IF NOT EXISTS month_label VARCHAR(20); -- e.g. 'January 2026'
+CREATE INDEX IF NOT EXISTS idx_doc_folders_class ON document_folders(class_id);
+CREATE INDEX IF NOT EXISTS idx_doc_folders_term  ON document_folders(term_id);
 CREATE INDEX IF NOT EXISTS idx_docs_folder            ON school_documents(folder_id);
 
 

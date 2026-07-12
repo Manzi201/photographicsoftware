@@ -18,32 +18,35 @@ function getFileType(ext) {
 
 exports.getFolders = async (req, res) => {
   try {
-    const { academic_year_id } = req.query;
+    const { academic_year_id, folder_type } = req.query;
     let q = supabase.from('document_folders')
       .select(`
-        id, name, description, color, is_locked,
-        academic_year_id, created_at, updated_at,
-        created_by,
+        id, name, description, color, is_locked, folder_type,
+        academic_year_id, class_id, term_id, month_label,
+        created_at, updated_at, created_by,
         academic_year:academic_years(id,name,is_current),
+        class:classes(id,name,level),
+        term:terms(id,name,number),
         doc_count:school_documents(count)
       `)
       .eq('school_id', req.schoolId)
-      .order('academic_year_id', { ascending: false, nullsFirst: false })
       .order('name');
 
     if (academic_year_id) q = q.eq('academic_year_id', academic_year_id);
+    if (folder_type)      q = q.eq('folder_type', folder_type);
 
     const { data, error } = await q;
     if (error) throw error;
-
-    // Never expose password_hash to client
     res.json({ success: true, data: data || [] });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 };
 
 exports.createFolder = async (req, res) => {
   try {
-    const { name, description, color, academic_year_id, password } = req.body;
+    const {
+      name, description, color, academic_year_id, password,
+      folder_type, class_id, term_id, month_label
+    } = req.body;
     if (!name?.trim()) return res.status(400).json({ success: false, error: 'Folder name required' });
 
     const row = {
@@ -52,14 +55,21 @@ exports.createFolder = async (req, res) => {
       description:      description || null,
       color:            color || '#2563eb',
       academic_year_id: academic_year_id || null,
+      folder_type:      folder_type || 'school',
+      class_id:         class_id    || null,
+      term_id:          term_id     || null,
+      month_label:      month_label || null,
       created_by:       req.staff?.id || null,
       is_locked:        !!password,
       password_hash:    password ? hashPwd(password) : null,
     };
 
     const { data, error } = await supabase.from('document_folders').insert([row]).select(`
-      id, name, description, color, is_locked, academic_year_id, created_at,
-      academic_year:academic_years(id,name,is_current)
+      id, name, description, color, is_locked, folder_type,
+      academic_year_id, class_id, term_id, month_label, created_at,
+      academic_year:academic_years(id,name,is_current),
+      class:classes(id,name,level),
+      term:terms(id,name,number)
     `).single();
     if (error) throw error;
     res.status(201).json({ success: true, data });
@@ -68,22 +78,32 @@ exports.createFolder = async (req, res) => {
 
 exports.updateFolder = async (req, res) => {
   try {
-    const { name, description, color, academic_year_id, password, remove_password } = req.body;
-    const update = {
-      updated_at: new Date().toISOString(),
-    };
-    if (name        !== undefined) update.name             = name.trim();
-    if (description !== undefined) update.description      = description;
-    if (color       !== undefined) update.color            = color;
+    const {
+      name, description, color, academic_year_id, password, remove_password,
+      folder_type, class_id, term_id, month_label
+    } = req.body;
+    const update = { updated_at: new Date().toISOString() };
+    if (name             !== undefined) update.name             = name.trim();
+    if (description      !== undefined) update.description      = description;
+    if (color            !== undefined) update.color            = color;
     if (academic_year_id !== undefined) update.academic_year_id = academic_year_id || null;
-    if (remove_password)  { update.is_locked = false; update.password_hash = null; }
-    if (password)         { update.is_locked = true;  update.password_hash = hashPwd(password); }
+    if (folder_type      !== undefined) update.folder_type      = folder_type;
+    if (class_id         !== undefined) update.class_id         = class_id    || null;
+    if (term_id          !== undefined) update.term_id          = term_id     || null;
+    if (month_label      !== undefined) update.month_label      = month_label || null;
+    if (remove_password) { update.is_locked = false; update.password_hash = null; }
+    if (password)        { update.is_locked = true;  update.password_hash = hashPwd(password); }
 
     const { data, error } = await supabase.from('document_folders')
       .update(update)
       .eq('id', req.params.id).eq('school_id', req.schoolId)
-      .select(`id, name, description, color, is_locked, academic_year_id, created_at,
-               academic_year:academic_years(id,name,is_current)`)
+      .select(`
+        id, name, description, color, is_locked, folder_type,
+        academic_year_id, class_id, term_id, month_label, created_at,
+        academic_year:academic_years(id,name,is_current),
+        class:classes(id,name,level),
+        term:terms(id,name,number)
+      `)
       .single();
     if (error) throw error;
     res.json({ success: true, data });
