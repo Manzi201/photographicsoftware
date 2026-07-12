@@ -19,14 +19,14 @@ function getFileType(ext) {
 exports.getFolders = async (req, res) => {
   try {
     const { academic_year_id, folder_type } = req.query;
+
+    // Build select — try with class/term joins, fall back if columns missing
     let q = supabase.from('document_folders')
       .select(`
-        id, name, description, color, is_locked, folder_type,
-        academic_year_id, class_id, term_id, month_label,
+        id, name, description, color, is_locked,
+        folder_type, academic_year_id, class_id, term_id, month_label,
         created_at, updated_at, created_by,
         academic_year:academic_years(id,name,is_current),
-        class:classes(id,name,level),
-        term:terms(id,name,number),
         doc_count:school_documents(count)
       `)
       .eq('school_id', req.schoolId)
@@ -36,8 +36,52 @@ exports.getFolders = async (req, res) => {
     if (folder_type)      q = q.eq('folder_type', folder_type);
 
     const { data, error } = await q;
+
+    // If the new columns don't exist yet (migration not run), fall back to basic query
+    if (error && (error.message?.includes('class_id') || error.message?.includes('term_id') || error.message?.includes('relationship') || error.message?.includes('schema cache'))) {
+      const { data: fallback, error: fbErr } = await supabase.from('document_folders')
+        .select(`
+          id, name, description, color, is_locked,
+          academic_year_id, created_at, updated_at,
+          academic_year:academic_years(id,name,is_current),
+          doc_count:school_documents(count)
+        `)
+        .eq('school_id', req.schoolId)
+        .order('name');
+      if (fbErr) throw fbErr;
+      // Add missing fields with defaults
+      const normalized = (fallback||[]).map(f => ({
+        ...f, folder_type: f.folder_type||'school',
+        class_id:null, term_id:null, month_label:null,
+        class:null, term:null,
+      }));
+      return res.json({ success:true, data: normalized });
+    }
+
     if (error) throw error;
-    res.json({ success: true, data: data || [] });
+
+    // Enrich with class/term names if we have the IDs
+    // (do separate lookups since FK joins require schema cache)
+    const classIds = [...new Set((data||[]).map(f=>f.class_id).filter(Boolean))];
+    const termIds  = [...new Set((data||[]).map(f=>f.term_id).filter(Boolean))];
+    let classMap = {}, termMap = {};
+    if (classIds.length) {
+      const {data:cls} = await supabase.from('classes').select('id,name,level').in('id',classIds);
+      (cls||[]).forEach(c => { classMap[c.id]=c; });
+    }
+    if (termIds.length) {
+      const {data:trm} = await supabase.from('terms').select('id,name,number').in('id',termIds);
+      (trm||[]).forEach(t => { termMap[t.id]=t; });
+    }
+
+    const enriched = (data||[]).map(f => ({
+      ...f,
+      folder_type: f.folder_type||'school',
+      class: f.class_id ? classMap[f.class_id]||null : null,
+      term:  f.term_id  ? termMap[f.term_id]||null  : null,
+    }));
+
+    res.json({ success: true, data: enriched });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 };
 
@@ -55,24 +99,25 @@ exports.createFolder = async (req, res) => {
       description:      description || null,
       color:            color || '#2563eb',
       academic_year_id: academic_year_id || null,
-      folder_type:      folder_type || 'school',
-      class_id:         class_id    || null,
-      term_id:          term_id     || null,
-      month_label:      month_label || null,
       created_by:       req.staff?.id || null,
       is_locked:        !!password,
       password_hash:    password ? hashPwd(password) : null,
     };
 
-    const { data, error } = await supabase.from('document_folders').insert([row]).select(`
-      id, name, description, color, is_locked, folder_type,
-      academic_year_id, class_id, term_id, month_label, created_at,
-      academic_year:academic_years(id,name,is_current),
-      class:classes(id,name,level),
-      term:terms(id,name,number)
-    `).single();
+    // Add new columns only if they're safe to include
+    // (migration may not have run yet on some deployments)
+    try {
+      row.folder_type  = folder_type  || 'school';
+      row.class_id     = class_id     || null;
+      row.term_id      = term_id      || null;
+      row.month_label  = month_label  || null;
+    } catch {}
+
+    const { data, error } = await supabase.from('document_folders').insert([row])
+      .select('id, name, description, color, is_locked, academic_year_id, created_at')
+      .single();
     if (error) throw error;
-    res.status(201).json({ success: true, data });
+    res.status(201).json({ success: true, data: { ...data, folder_type: folder_type||'school', class_id: class_id||null, term_id: term_id||null, month_label: month_label||null, class:null, term:null } });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 };
 

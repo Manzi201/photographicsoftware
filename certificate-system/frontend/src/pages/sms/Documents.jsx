@@ -576,7 +576,15 @@ export default function Documents() {
   }, []);
 
   const loadFolders = () =>
-    SMS.get('/sms/documents/folders').then(r => setFolders(r.data.data||[]));
+    SMS.get('/sms/documents/folders').then(r => setFolders(r.data.data||[]))
+       .catch(err => {
+         const msg = err.response?.data?.error || '';
+         if (msg.includes('relationship') || msg.includes('schema cache') || msg.includes('class_id')) {
+           toast.error('Run the SQL migration in Supabase first — see database.sql', { duration: 8000 });
+         } else {
+           toast.error('Failed to load folders');
+         }
+       });
 
   useEffect(() => {
     if (activeFolder) {
