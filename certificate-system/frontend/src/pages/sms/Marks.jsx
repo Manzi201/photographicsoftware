@@ -39,7 +39,6 @@ const SEL_CLS = 'w-full appearance-none bg-white border border-gray-200 text-gra
 
 export default function SmsMarks() {
   const session   = useMemo(() => getSession(), []);
-  const isTeacher = session.role === 'teacher';
   const isDos     = session.role === 'dos';
   const canEdit   = !isDos;
 
@@ -73,18 +72,16 @@ export default function SmsMarks() {
   }, []);
 
   // ── Subjects ─────────────────────────────────────────────
+  // Backend already filters by teacher when role=teacher
+  // No need to filter client-side — just load what the API returns
   useEffect(() => {
     if (!selClass) { setSubjects([]); return; }
     getSmsSubjects({ class_id: selClass }).then(r => {
-      let subs = r.data.data || [];
-      if (isTeacher && session.staffId) {
-        const mine = subs.filter(s => s.teacher?.id === session.staffId || s.teacher_id === session.staffId);
-        subs = mine.length > 0 ? mine : subs;
-      }
+      const subs = r.data.data || [];
       setSubjects(subs);
       setSelSubIdx(0);
     });
-  }, [selClass, isTeacher, session.staffId]);
+  }, [selClass]);
 
   // ── Marks ─────────────────────────────────────────────────
   // NOTE: subjects is passed as a parameter so the effect below

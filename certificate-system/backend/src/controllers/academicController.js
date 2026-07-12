@@ -170,6 +170,32 @@ exports.deleteTerm = async (req, res) => {
 exports.getClasses = async (req, res) => {
   try {
     const { academic_year_id } = req.query;
+    const staffId = req.staff?.id;
+    const role    = req.role || req.staff?.role;
+
+    // Teacher: only classes where they are assigned to teach at least one subject
+    if (role === 'teacher' && staffId) {
+      // Get distinct class_ids this teacher is assigned to
+      const { data: assignments, error: aErr } = await supabase
+        .from('class_subjects')
+        .select('class_id')
+        .eq('teacher_id', staffId);
+      if (aErr) throw aErr;
+
+      const classIds = [...new Set((assignments || []).map(a => a.class_id))];
+      if (classIds.length === 0) return res.json({ success: true, data: [] });
+
+      let q = supabase.from('classes')
+        .select('*, class_teacher:staff(id,full_name), academic_year:academic_years(id,name)')
+        .eq('school_id', req.schoolId)
+        .in('id', classIds);
+      if (academic_year_id) q = q.eq('academic_year_id', academic_year_id);
+      const { data, error } = await q.order('level_order').order('name');
+      if (error) throw error;
+      return res.json({ success: true, data });
+    }
+
+    // Admin / DoS / Secretary: all classes
     let q = supabase.from('classes')
       .select('*, class_teacher:staff(id,full_name), academic_year:academic_years(id,name)')
       .eq('school_id', req.schoolId);
@@ -248,13 +274,45 @@ exports.deleteClass = async (req, res) => {
 exports.getSubjects = async (req, res) => {
   try {
     const { class_id } = req.query;
+    const staffId = req.staff?.id;
+    const role    = req.role || req.staff?.role;
+
     if (class_id) {
-      const { data, error } = await supabase.from('class_subjects')
+      let q = supabase.from('class_subjects')
         .select('*, subject:subjects(*), teacher:staff(id,full_name)')
         .eq('class_id', class_id);
+
+      // Teacher: only subjects they are assigned to teach in this class
+      if (role === 'teacher' && staffId) {
+        q = q.eq('teacher_id', staffId);
+      }
+
+      const { data, error } = await q;
       if (error) throw error;
-      return res.json({ success: true, data: data.map(r => ({ ...r.subject, teacher: r.teacher, class_subject_id: r.id })) });
+      return res.json({
+        success: true,
+        data: data.map(r => ({ ...r.subject, teacher: r.teacher, class_subject_id: r.id })),
+      });
     }
+
+    // No class_id: return all subjects for the school
+    // Teacher: only subjects they teach (across all classes)
+    if (role === 'teacher' && staffId) {
+      const { data: cs, error: csErr } = await supabase
+        .from('class_subjects')
+        .select('subject:subjects(*)')
+        .eq('teacher_id', staffId);
+      if (csErr) throw csErr;
+      // Deduplicate by subject id
+      const seen = new Set();
+      const subs = (cs || []).map(r => r.subject).filter(s => {
+        if (!s || seen.has(s.id)) return false;
+        seen.add(s.id);
+        return true;
+      }).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      return res.json({ success: true, data: subs });
+    }
+
     const { data, error } = await supabase.from('subjects')
       .select('*').eq('school_id', req.schoolId).order('name');
     if (error) throw error;
