@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
-  Home, Shield, Users, Upload, Search, Award, Printer,
+  Home, Shield, Users, Folder, Search, Award, Printer,
   Settings, GraduationCap, Menu, X, LogOut, ChevronDown,
   BookOpen, UserCircle, School, FileText, CreditCard, Bell,
-  TrendingUp, Folder, Layers, ChevronRight
+  TrendingUp, Layers, ChevronRight
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
@@ -36,15 +36,6 @@ const NAV_BY_ROLE = {
     { to: '/sms/dashboard',       icon: Home,          label: 'Dashboard' },
     { section: 'Students' },
     { to: '/sms/students',        icon: Users,         label: 'Registration' },
-    { to: '/upload',              icon: Upload,        label: 'Upload Photos/CSV' },
-    { to: '/search',              icon: Search,        label: 'Search Student' },
-    { section: 'Certificates' },
-    { to: '/generate',            icon: Award,         label: 'Generate Certificate' },
-    { to: '/print-all',           icon: Printer,       label: 'Print All' },
-    { to: '/templates/Top Class', icon: GraduationCap, label: 'Top Class' },
-    { to: '/templates/P6',        icon: GraduationCap, label: 'P6' },
-    { to: '/templates/S3',        icon: GraduationCap, label: 'S3' },
-    { to: '/templates/S6',        icon: GraduationCap, label: 'S6' },
     { section: 'Report Cards' },
     { to: '/sms/bulletins',       icon: FileText,      label: 'Print Bulletins' },
     { section: 'Documents' },

@@ -79,7 +79,7 @@ function YearModal({ year, onSave, onClose }) {
 function TermModal({ term, years, onSave, onClose }) {
   const TERM_TYPES = [
     { label:'Term 1', number:1 }, { label:'Term 2', number:2 },
-    { label:'Term 3', number:3 }, { label:'Annual (avg T1+T2+T3)', number:4 },
+    { label:'Term 3', number:3 }, { label:'Annual',  number:4 },
   ];
 
   // Resolve preset year: could come from _preset_year (new from year row) or academic_year_id (editing)
@@ -123,10 +123,20 @@ function TermModal({ term, years, onSave, onClose }) {
           <div className="grid grid-cols-2 gap-2">
             {TERM_TYPES.map(tt=>(
               <button key={tt.number} type="button" onClick={()=>pickType(tt)}
-                className={`px-3 py-2 rounded-xl border text-xs font-semibold transition-all text-left
-                  ${form.number===tt.number?'bg-blue-600 text-white border-blue-600':'bg-gray-50 text-gray-600 border-gray-200 hover:border-blue-300'}`}>
+                className={`px-3 py-2.5 rounded-xl border text-xs font-semibold transition-all text-left
+                  ${form.number===tt.number
+                    ? tt.number===4
+                      ? 'bg-amber-500 text-white border-amber-500'
+                      : 'bg-blue-600 text-white border-blue-600'
+                    : tt.number===4
+                      ? 'bg-amber-50 text-amber-700 border-amber-200 hover:border-amber-400'
+                      : 'bg-gray-50 text-gray-600 border-gray-200 hover:border-blue-300'}`}>
                 {tt.label}
-                {tt.number===4 && <span className="block text-[10px] opacity-70 mt-0.5">Average T1+T2+T3 automatically</span>}
+                {tt.number===4 && (
+                  <span className={`block text-[10px] mt-0.5 ${form.number===4 ? 'text-white/80' : 'text-amber-500'}`}>
+                    Average of T1 + T2 + T3
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -750,9 +760,12 @@ export default function SmsClasses() {
                       {yt.sort((a,b)=>a.number-b.number).map(t=>(
                         <div key={t.id} className="flex items-center px-5 py-3 hover:bg-gray-50 gap-3">
                           <span className={`text-xs font-bold px-2 py-0.5 rounded-full shrink-0 ${TERM_COLOR(t.number)}`}>{TERM_LABEL(t.number)}</span>
-                          <span className="font-medium text-gray-900 text-sm">{t.name}</span>
+                          <span className="font-medium text-gray-900 text-sm">
+                            {/* Show clean name — strip the verbose suffix if present */}
+                            {t.number === 4 ? 'Annual' : t.name}
+                          </span>
                           {t.is_current&&<span className="text-xs bg-green-500 text-white px-2 py-0.5 rounded-full">Current</span>}
-                          {t.number===4&&<span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">Avg T1+T2+T3</span>}
+                          {t.number===4&&<span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">avg T1+T2+T3</span>}
                           {canWrite && (
                             <div className="flex gap-1 ml-auto">
                               <button onClick={()=>setTermModal(t)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit2 className="w-3.5 h-3.5"/></button>
