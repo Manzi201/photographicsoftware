@@ -19,15 +19,15 @@ router.use(requireStaffAuth);
 
 // ── Students ──────────────────────────────────────────────────
 // READ: all authenticated staff can view students
-router.get   ('/students',        students.getStudents);
 router.get   ('/students/stats',  students.getStats);
+// BULK IMPORT from Excel — must be before /:id to avoid route conflict
+router.post  ('/students/import', requireRole('admin','secretary','dos','finance'), students.importStudents);
+router.get   ('/students',        students.getStudents);
 router.get   ('/students/:id',    students.getStudent);
 // WRITE: only secretary, dos, finance (accountant), admin
 router.post  ('/students',        requireRole('admin','secretary','dos','finance'), students.createStudent);
 router.put   ('/students/:id',    requireRole('admin','secretary','dos','finance'), students.updateStudent);
 router.delete('/students/:id',    requireRole('admin','secretary','dos','finance'), students.deleteStudent);
-// BULK IMPORT from Excel
-router.post  ('/students/import', requireRole('admin','secretary','dos','finance'), students.importStudents);
 
 // ── Academic ──────────────────────────────────────────────────
 router.get   ('/academic-years',        academic.getAcademicYears);

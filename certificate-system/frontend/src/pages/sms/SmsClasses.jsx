@@ -483,7 +483,15 @@ function AssignModal({ cls, subjects, staffList, onSave, onClose }) {
 // ── MAIN PAGE ─────────────────────────────────────────────────
 const TABS = ['classes', 'terms', 'subjects'];
 
+function getRole() {
+  try { return JSON.parse(localStorage.getItem('staff_data') || '{}').role || 'teacher'; }
+  catch { return 'teacher'; }
+}
+
 export default function SmsClasses() {
+  const role     = getRole();
+  const canWrite = ['admin', 'dos', 'secretary'].includes(role); // who can add/edit/delete
+
   const [tab,       setTab]       = useState('classes');
   const [years,     setYears]     = useState([]);
   const [classes,   setClasses]   = useState([]);
@@ -498,21 +506,42 @@ export default function SmsClasses() {
   const [classModal,   setClassModal]   = useState(null);
   const [termModal,    setTermModal]    = useState(null);
   const [subjectModal, setSubjectModal] = useState(false);
-  const [assignModal,  setAssignModal]  = useState(null); // class object
+  const [assignModal,  setAssignModal]  = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [yr, cl, tm, sb, st] = await Promise.all([
-        getAcademicYears(), getSmsClasses(), getTerms(), getSmsSubjects(), getStaff()
+      // Load all data in parallel — staff list is admin-only so we handle 403 gracefully
+      const [yr, cl, tm, sb] = await Promise.all([
+        getAcademicYears(),
+        getSmsClasses(),
+        getTerms(),
+        getSmsSubjects(),
       ]);
       const yrs = yr.data.data || [];
-      setYears(yrs); setClasses(cl.data.data||[]);
-      setTerms(tm.data.data||[]); setSubjects(sb.data.data||[]);
-      setStaffList(st.data.data||[]);
-      const cur = yrs.find(y=>y.is_current);
-      if (cur) setExpanded(e=>({...e,[cur.id]:true}));
-    } catch { toast.error('Failed to load'); }
+      setYears(yrs);
+      setClasses(cl.data.data || []);
+      setTerms(tm.data.data   || []);
+      setSubjects(sb.data.data || []);
+      const cur = yrs.find(y => y.is_current);
+      if (cur) setExpanded(e => ({ ...e, [cur.id]: true }));
+
+      // Staff list — only admins/dos can access this; others get empty list silently
+      try {
+        const st = await getStaff();
+        setStaffList(st.data.data || []);
+      } catch {
+        setStaffList([]); // not an admin — just show empty teacher list
+      }
+    } catch (err) {
+      const msg = err.response?.data?.error || err.message || 'Network error';
+      const status = err.response?.status;
+      if (status === 401 || status === 403) {
+        toast.error('Session expired — please sign in again');
+      } else {
+        toast.error(`Failed to load: ${msg}`);
+      }
+    }
     finally { setLoading(false); }
   }, []);
 
@@ -560,21 +589,49 @@ export default function SmsClasses() {
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <Layers className="w-6 h-6 text-blue-600"/> Academic Setup
           </h1>
-          <p className="text-gray-500 text-sm">{years.length} years · {classes.length} classes · {terms.length} terms · {subjects.length} subjects</p>
+          <p className="text-gray-500 text-sm">
+            {years.length} years · {classes.length} classes · {terms.length} terms · {subjects.length} subjects
+          </p>
         </div>
-        <div className="flex gap-2">
-          {tab==='classes'  && <><button onClick={()=>setYearModal('new')} className="btn-secondary text-sm"><Calendar className="w-4 h-4"/> Add Year</button><button onClick={()=>setClassModal('new')} className="btn-primary text-sm"><Plus className="w-4 h-4"/> Add Class</button></>}
-          {tab==='terms'    && <button onClick={()=>setTermModal('new')} className="btn-primary text-sm"><Plus className="w-4 h-4"/> Add Term</button>}
-          {tab==='subjects' && <button onClick={()=>setSubjectModal(true)} className="btn-primary text-sm"><Plus className="w-4 h-4"/> Add Subject</button>}
+        <div className="flex gap-2 flex-wrap">
+          {/* Refresh always visible */}
+          <button onClick={load} disabled={loading}
+            className="btn-secondary text-sm flex items-center gap-1.5">
+            <Clock className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`}/>
+            {loading ? 'Loading…' : 'Refresh'}
+          </button>
+          {/* Write actions — admin/dos/secretary only */}
+          {canWrite && tab === 'classes' && (
+            <>
+              <button onClick={() => setYearModal('new')} className="btn-secondary text-sm">
+                <Calendar className="w-4 h-4"/> Add Year
+              </button>
+              <button onClick={() => setClassModal('new')} className="btn-primary text-sm">
+                <Plus className="w-4 h-4"/> Add Class
+              </button>
+            </>
+          )}
+          {canWrite && tab === 'terms' && (
+            <button onClick={() => setTermModal('new')} className="btn-primary text-sm">
+              <Plus className="w-4 h-4"/> Add Term
+            </button>
+          )}
+          {canWrite && tab === 'subjects' && (
+            <button onClick={() => setSubjectModal(true)} className="btn-primary text-sm">
+              <Plus className="w-4 h-4"/> Add Subject
+            </button>
+          )}
         </div>
       </div>
 
       {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit mb-5">
-        {TABS.map(t=>(
-          <button key={t} onClick={()=>setTab(t)}
+        {TABS.map(t => (
+          <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2 rounded-lg text-sm font-semibold capitalize transition-all
-              ${tab===t?'bg-white shadow text-blue-600':'text-gray-500 hover:text-gray-700'}`}>{t}</button>
+              ${tab === t ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}>
+            {t}
+          </button>
         ))}
       </div>
 
@@ -585,7 +642,15 @@ export default function SmsClasses() {
         {/* ── CLASSES TAB ─────────────────────────────────── */}
         {tab==='classes' && (
           <div className="space-y-4">
-            {years.length===0&&<div className="text-center py-16 text-gray-400"><Calendar className="w-12 h-12 mx-auto mb-3 opacity-30"/><p className="font-semibold text-gray-500">No academic years yet</p><button onClick={()=>setYearModal('new')} className="btn-primary mt-4 text-sm">Add Year</button></div>}
+            {years.length===0 && (
+              <div className="text-center py-16 text-gray-400">
+                <Calendar className="w-12 h-12 mx-auto mb-3 opacity-30"/>
+                <p className="font-semibold text-gray-500">No academic years yet</p>
+                {canWrite
+                  ? <button onClick={()=>setYearModal('new')} className="btn-primary mt-4 text-sm">Add Year</button>
+                  : <p className="text-xs text-gray-400 mt-2">Contact your administrator to set up academic years</p>}
+              </div>
+            )}
             {years.map(year=>{
               const yc=classesForYear(year.id); const open=!!expanded[year.id];
               return (
@@ -602,8 +667,10 @@ export default function SmsClasses() {
                       <p className="text-xs text-gray-400">{yc.length} class{yc.length!==1?'es':''}</p>
                     </div>
                     <div className="flex gap-1 shrink-0" onClick={e=>e.stopPropagation()}>
-                      <button onClick={()=>setYearModal(year)} className="p-1.5 rounded-lg hover:bg-blue-100 text-blue-600"><Edit2 className="w-3.5 h-3.5"/></button>
-                      <button onClick={()=>delYear(year)} className="p-1.5 rounded-lg hover:bg-red-100 text-red-500"><Trash2 className="w-3.5 h-3.5"/></button>
+                      {canWrite && <>
+                        <button onClick={()=>setYearModal(year)} className="p-1.5 rounded-lg hover:bg-blue-100 text-blue-600"><Edit2 className="w-3.5 h-3.5"/></button>
+                        <button onClick={()=>delYear(year)} className="p-1.5 rounded-lg hover:bg-red-100 text-red-500"><Trash2 className="w-3.5 h-3.5"/></button>
+                      </>}
                     </div>
                     {open?<ChevronDown className="w-4 h-4 text-gray-400 shrink-0"/>:<ChevronRight className="w-4 h-4 text-gray-400 shrink-0"/>}
                   </div>
@@ -623,12 +690,16 @@ export default function SmsClasses() {
                                 <td className="py-2.5 px-3 text-xs text-gray-500">{cls.capacity}</td>
                                 <td className="py-2.5 px-3 text-xs text-gray-500 truncate max-w-[110px]">{cls.class_teacher?.full_name||'—'}</td>
                                 <td className="py-2.5 px-3">
-                                  <button onClick={()=>setAssignModal(cls)} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
-                                    <BookOpen className="w-3 h-3"/> Assign</button>
+                                  {canWrite && (
+                                    <button onClick={()=>setAssignModal(cls)} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                                      <BookOpen className="w-3 h-3"/> Assign</button>
+                                  )}
                                 </td>
                                 <td className="py-2.5 px-3 flex gap-1">
-                                  <button onClick={()=>setClassModal(cls)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit2 className="w-3.5 h-3.5"/></button>
-                                  <button onClick={()=>delClass(cls)} className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg"><Trash2 className="w-3.5 h-3.5"/></button>
+                                  {canWrite && <>
+                                    <button onClick={()=>setClassModal(cls)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit2 className="w-3.5 h-3.5"/></button>
+                                    <button onClick={()=>delClass(cls)} className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg"><Trash2 className="w-3.5 h-3.5"/></button>
+                                  </>}
                                 </td>
                               </tr>
                             ))}
@@ -636,7 +707,9 @@ export default function SmsClasses() {
                         </table>
                       )}
                       <div className="px-5 py-2.5 border-t border-dashed border-gray-100">
-                        <button onClick={()=>setClassModal({_preset_year:year.id})} className="text-xs font-semibold text-blue-600 flex items-center gap-1"><Plus className="w-3.5 h-3.5"/>Add class to {year.name}</button>
+                        {canWrite && (
+                          <button onClick={()=>setClassModal({_preset_year:year.id})} className="text-xs font-semibold text-blue-600 flex items-center gap-1"><Plus className="w-3.5 h-3.5"/>Add class to {year.name}</button>
+                        )}
                       </div>
                     </div>
                   )}
@@ -649,7 +722,11 @@ export default function SmsClasses() {
         {/* ── TERMS TAB ───────────────────────────────────── */}
         {tab==='terms' && (
           <div className="space-y-4">
-            {years.length===0&&<div className="text-center py-10 text-gray-400">Create an academic year first</div>}
+            {years.length===0 && (
+              <div className="text-center py-10 text-gray-400">
+                {canWrite ? 'Create an academic year first' : 'No academic years set up yet'}
+              </div>
+            )}
             {years.map(year=>{
               const yt=termsForYear(year.id);
               return (
@@ -658,9 +735,17 @@ export default function SmsClasses() {
                     <span className="font-bold text-gray-900">{year.name}</span>
                     {year.is_current&&<span className="text-xs bg-blue-600 text-white px-2 py-0.5 rounded-full">Current</span>}
                     <span className="text-xs text-gray-400 ml-1">{yt.length} term{yt.length!==1?'s':''}</span>
-                    <button onClick={()=>setTermModal({_preset_year:year.id})} className="ml-auto text-xs text-blue-600 hover:underline flex items-center gap-1"><Plus className="w-3 h-3"/>Add</button>
+                    {canWrite && (
+                      <button onClick={()=>setTermModal({_preset_year:year.id})} className="ml-auto text-xs text-blue-600 hover:underline flex items-center gap-1">
+                        <Plus className="w-3 h-3"/>Add
+                      </button>
+                    )}
                   </div>
-                  {yt.length===0?<div className="px-5 py-5 text-center text-sm text-gray-400">No terms yet — <button onClick={()=>setTermModal({_preset_year:year.id})} className="text-blue-600 hover:underline">add Term 1, 2, 3 + Annual</button></div>:(
+                  {yt.length===0 ? (
+                    <div className="px-5 py-5 text-center text-sm text-gray-400">
+                      No terms yet{canWrite && <> — <button onClick={()=>setTermModal({_preset_year:year.id})} className="text-blue-600 hover:underline">add Term 1, 2, 3 + Annual</button></>}
+                    </div>
+                  ) : (
                     <div className="divide-y divide-gray-50">
                       {yt.sort((a,b)=>a.number-b.number).map(t=>(
                         <div key={t.id} className="flex items-center px-5 py-3 hover:bg-gray-50 gap-3">
@@ -668,10 +753,12 @@ export default function SmsClasses() {
                           <span className="font-medium text-gray-900 text-sm">{t.name}</span>
                           {t.is_current&&<span className="text-xs bg-green-500 text-white px-2 py-0.5 rounded-full">Current</span>}
                           {t.number===4&&<span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">Avg T1+T2+T3</span>}
-                          <div className="flex gap-1 ml-auto">
-                            <button onClick={()=>setTermModal(t)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit2 className="w-3.5 h-3.5"/></button>
-                            <button onClick={()=>delTerm(t)} className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg"><Trash2 className="w-3.5 h-3.5"/></button>
-                          </div>
+                          {canWrite && (
+                            <div className="flex gap-1 ml-auto">
+                              <button onClick={()=>setTermModal(t)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit2 className="w-3.5 h-3.5"/></button>
+                              <button onClick={()=>delTerm(t)} className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg"><Trash2 className="w-3.5 h-3.5"/></button>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -685,11 +772,19 @@ export default function SmsClasses() {
         {/* ── SUBJECTS TAB ─────────────────────────────────── */}
         {tab==='subjects' && (
           <div>
-            {subjects.length===0?<div className="text-center py-12 text-gray-400"><BookOpen className="w-10 h-10 mx-auto mb-2 opacity-30"/><p>No subjects yet</p><button onClick={()=>setSubjectModal(true)} className="btn-primary mt-3 text-sm">Add First Subject</button></div>:(
+            {subjects.length===0 ? (
+              <div className="text-center py-12 text-gray-400">
+                <BookOpen className="w-10 h-10 mx-auto mb-2 opacity-30"/>
+                <p>No subjects yet</p>
+                {canWrite && <button onClick={()=>setSubjectModal(true)} className="btn-primary mt-3 text-sm">Add First Subject</button>}
+              </div>
+            ) : (
               <div className="rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
                 <table className="w-full text-sm">
                   <thead><tr className="bg-gray-50 border-b border-gray-100">
-                    {['#','Subject','Code','Coef','Max TEST','Max EXAM','Total','Core','Actions'].map(h=><th key={h} className="text-left py-2.5 px-3 text-xs font-semibold text-gray-400">{h}</th>)}
+                    {['#','Subject','Code','Coef','Max TEST','Max EXAM','Total','Core', ...(canWrite?['Actions']:[])].map(h=>(
+                      <th key={h} className="text-left py-2.5 px-3 text-xs font-semibold text-gray-400">{h}</th>
+                    ))}
                   </tr></thead>
                   <tbody>
                     {[...subjects].sort((a,b)=>(a.sort_order??999)-(b.sort_order??999)).map((s,i)=>(
@@ -703,13 +798,21 @@ export default function SmsClasses() {
                         <td className="py-3 px-3 font-bold text-gray-900">{(s.max_test||0)+(s.max_exam||0)||s.max_marks||0}</td>
                         <td className="py-3 px-3">
                           {s.is_core
-                            ? <span className="flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full w-fit"><span className="w-2.5 h-2.5 rounded bg-emerald-500 flex items-center justify-center"><span className="text-white text-[7px]">✓</span></span>Core</span>
+                            ? <span className="flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full w-fit">
+                                <span className="w-2.5 h-2.5 rounded bg-emerald-500 flex items-center justify-center">
+                                  <span className="text-white text-[7px]">✓</span>
+                                </span>Core
+                              </span>
                             : <span className="text-xs text-gray-300">—</span>}
                         </td>
-                        <td className="py-3 px-3 flex items-center gap-1">
-                          <button onClick={()=>setSubjectModal(s)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg" title="Edit"><Edit2 className="w-3.5 h-3.5"/></button>
-                          <button onClick={()=>delSubject(s)} className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg" title="Delete"><Trash2 className="w-3.5 h-3.5"/></button>
-                        </td>
+                        {canWrite && (
+                          <td className="py-3 px-3">
+                            <div className="flex items-center gap-1">
+                              <button onClick={()=>setSubjectModal(s)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg" title="Edit"><Edit2 className="w-3.5 h-3.5"/></button>
+                              <button onClick={()=>delSubject(s)} className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg" title="Delete"><Trash2 className="w-3.5 h-3.5"/></button>
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -721,12 +824,12 @@ export default function SmsClasses() {
         </>
       )}
 
-      {/* ── Modals ─────────────────────────────────────────── */}
-      {yearModal   && <YearModal    year={yearModal==='new'?null:yearModal}       onSave={()=>{setYearModal(null);load();}}    onClose={()=>setYearModal(null)}/>}
-      {classModal  && <ClassModal   cls={classModal?.id?classModal:null}           years={years} staffList={staffList} onSave={()=>{setClassModal(null);load();}} onClose={()=>setClassModal(null)}/>}
-      {termModal   && <TermModal    term={termModal?._preset_year?null:termModal} years={years} onSave={()=>{setTermModal(null);load();}}  onClose={()=>setTermModal(null)}/>}
-      {subjectModal&& <SubjectModal subject={subjectModal===true?null:subjectModal} onSave={()=>{setSubjectModal(false);load();}} onClose={()=>setSubjectModal(false)}/>}
-      {assignModal && <AssignModal  cls={assignModal} subjects={subjects} staffList={staffList} onSave={()=>load()} onClose={()=>setAssignModal(null)}/>}
+      {/* ── Modals — only render if canWrite ───────────────── */}
+      {canWrite && yearModal    && <YearModal    year={yearModal==='new'?null:yearModal}         onSave={()=>{setYearModal(null);load();}}    onClose={()=>setYearModal(null)}/>}
+      {canWrite && classModal   && <ClassModal   cls={classModal?.id?classModal:null}             years={years} staffList={staffList} onSave={()=>{setClassModal(null);load();}} onClose={()=>setClassModal(null)}/>}
+      {canWrite && termModal    && <TermModal    term={termModal?._preset_year?null:termModal}   years={years} onSave={()=>{setTermModal(null);load();}}  onClose={()=>setTermModal(null)}/>}
+      {canWrite && subjectModal && <SubjectModal subject={subjectModal===true?null:subjectModal} onSave={()=>{setSubjectModal(false);load();}} onClose={()=>setSubjectModal(false)}/>}
+      {canWrite && assignModal  && <AssignModal  cls={assignModal} subjects={subjects} staffList={staffList} onSave={()=>load()} onClose={()=>setAssignModal(null)}/>}
     </div>
   );
 }
