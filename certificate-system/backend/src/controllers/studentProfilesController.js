@@ -114,13 +114,30 @@ exports.updateStudent = async (req, res) => {
   }
 };
 
-// DELETE /api/sms/students/:id (soft delete)
+// DELETE /api/sms/students/:id — hard delete with all related data
 exports.deleteStudent = async (req, res) => {
   try {
-    await supabase.from('student_profiles')
-      .update({ status: 'inactive' })
-      .eq('id', req.params.id).eq('school_id', req.schoolId);
-    res.json({ success: true });
+    const studentId = req.params.id;
+    const schoolId  = req.schoolId;
+
+    // Verify ownership first
+    const { data: student } = await supabase.from('student_profiles')
+      .select('id').eq('id', studentId).eq('school_id', schoolId).single();
+    if (!student) return res.status(404).json({ success: false, error: 'Student not found' });
+
+    // Delete all related data in dependency order
+    await supabase.from('bulletins')          .delete().eq('student_id', studentId);
+    await supabase.from('marks')              .delete().eq('student_id', studentId);
+    await supabase.from('payments')           .delete().eq('student_id', studentId);
+    await supabase.from('notifications')      .delete().eq('student_id', studentId);
+    await supabase.from('promotion_history')  .delete().eq('student_id', studentId);
+
+    // Finally delete the student profile itself
+    const { error } = await supabase.from('student_profiles')
+      .delete().eq('id', studentId).eq('school_id', schoolId);
+    if (error) throw error;
+
+    res.json({ success: true, message: 'Student and all related data deleted permanently' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

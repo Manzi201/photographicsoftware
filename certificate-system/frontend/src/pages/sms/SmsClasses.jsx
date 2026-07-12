@@ -433,20 +433,32 @@ export default function SmsClasses() {
   useEffect(()=>{ load(); },[load]);
 
   const delYear = async y => {
-    if (!window.confirm(`Delete "${y.name}"?`)) return;
-    try { await deleteAcademicYear(y.id); toast.success('Deleted'); load(); } catch { toast.error('Error'); }
+    if (!window.confirm(
+      `⚠️ DELETE Academic Year "${y.name}" PERMANENTLY?\n\nThis will also delete:\n• All terms in this year\n• All classes in this year\n• All marks and report cards\n• All fee structures\n\nThis cannot be undone.`
+    )) return;
+    try { await deleteAcademicYear(y.id); toast.success(`"${y.name}" deleted permanently`); load(); }
+    catch (err) { toast.error(err.response?.data?.error || 'Delete failed'); }
   };
   const delClass = async c => {
-    if (!window.confirm(`Delete class "${c.name}"?`)) return;
-    try { await deleteSmsClass(c.id); toast.success('Deleted'); load(); } catch { toast.error('Error'); }
+    if (!window.confirm(
+      `⚠️ DELETE Class "${c.name}" PERMANENTLY?\n\nThis will also delete:\n• All subject assignments\n• All marks for this class\n• All report cards\n\nThis cannot be undone.`
+    )) return;
+    try { await deleteSmsClass(c.id); toast.success(`Class "${c.name}" deleted permanently`); load(); }
+    catch (err) { toast.error(err.response?.data?.error || 'Delete failed'); }
   };
   const delTerm = async t => {
-    if (!window.confirm(`Delete "${t.name}"?`)) return;
-    try { await deleteTerm(t.id); toast.success('Deleted'); load(); } catch { toast.error('Error'); }
+    if (!window.confirm(
+      `⚠️ DELETE Term "${t.name}" PERMANENTLY?\n\nThis will also delete:\n• All marks entered for this term\n• All report cards for this term\n• All payments linked to this term\n\nThis cannot be undone.`
+    )) return;
+    try { await deleteTerm(t.id); toast.success(`"${t.name}" deleted permanently`); load(); }
+    catch (err) { toast.error(err.response?.data?.error || 'Delete failed'); }
   };
   const delSubject = async s => {
-    if (!window.confirm(`Delete subject "${s.name}"?`)) return;
-    try { await deleteSmsSubject(s.id); toast.success('Deleted'); load(); } catch { toast.error('Error'); }
+    if (!window.confirm(
+      `⚠️ DELETE Subject "${s.name}" PERMANENTLY?\n\nThis will also delete:\n• All marks for this subject across all classes\n• All class assignments for this subject\n\nThis cannot be undone.`
+    )) return;
+    try { await deleteSmsSubject(s.id); toast.success(`Subject "${s.name}" deleted permanently`); load(); }
+    catch (err) { toast.error(err.response?.data?.error || 'Delete failed'); }
   };
 
   const classesForYear = id => classes.filter(c=>c.academic_year_id===id);

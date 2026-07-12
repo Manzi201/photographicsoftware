@@ -155,11 +155,18 @@ export default function SmsStudents() {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Deactivate this student?')) return;
-    await deleteSmsStudent(id);
-    toast.success('Student deactivated');
-    loadAll();
+  const handleDelete = async (student) => {
+    const name = `${student.first_name} ${student.last_name}`;
+    if (!window.confirm(
+      `⚠️ DELETE "${name}" PERMANENTLY?\n\nThis will also delete:\n• All marks\n• All report cards (bulletins)\n• All payments\n• All notifications\n\nThis cannot be undone.`
+    )) return;
+    try {
+      await deleteSmsStudent(student.id);
+      toast.success(`${name} deleted permanently`);
+      loadAll();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Delete failed');
+    }
   };
 
   const filtered = students.filter(s => {
@@ -247,7 +254,7 @@ export default function SmsStudents() {
                     </td>
                     <td className="py-3 px-4 flex items-center gap-1">
                       <button onClick={() => setModal(s)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit2 className="w-4 h-4"/></button>
-                      <button onClick={() => handleDelete(s.id)} className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4"/></button>
+                      <button onClick={() => handleDelete(s)} className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4"/></button>
                     </td>
                   </tr>
                 ))}

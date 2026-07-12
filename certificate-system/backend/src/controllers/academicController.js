@@ -42,8 +42,57 @@ exports.updateAcademicYear = async (req, res) => {
 
 exports.deleteAcademicYear = async (req, res) => {
   try {
-    await supabase.from('academic_years').delete().eq('id', req.params.id).eq('school_id', req.schoolId);
-    res.json({ success: true });
+    const yearId   = req.params.id;
+    const schoolId = req.schoolId;
+
+    // Verify ownership
+    const { data: year } = await supabase.from('academic_years')
+      .select('id').eq('id', yearId).eq('school_id', schoolId).single();
+    if (!year) return res.status(404).json({ success: false, error: 'Academic year not found' });
+
+    // Get all term IDs for this year
+    const { data: terms } = await supabase.from('terms')
+      .select('id').eq('academic_year_id', yearId);
+    const termIds = (terms || []).map(t => t.id);
+
+    // Get all class IDs for this year
+    const { data: classes } = await supabase.from('classes')
+      .select('id').eq('academic_year_id', yearId);
+    const classIds = (classes || []).map(c => c.id);
+
+    // Delete marks + bulletins tied to these terms/classes
+    if (termIds.length > 0) {
+      await supabase.from('bulletins').delete().in('term_id', termIds);
+      await supabase.from('marks')    .delete().in('term_id', termIds);
+    }
+    if (classIds.length > 0) {
+      await supabase.from('class_subjects')   .delete().in('class_id', classIds);
+      await supabase.from('promotion_history').delete().in('from_class_id', classIds);
+      await supabase.from('promotion_history').delete().in('to_class_id',   classIds);
+      // Nullify student FK references to these classes
+      await supabase.from('student_profiles').update({ current_class_id: null })
+        .in('current_class_id', classIds);
+      await supabase.from('student_profiles').update({ previous_class_id: null })
+        .in('previous_class_id', classIds);
+    }
+
+    // Nullify student references to this academic year
+    await supabase.from('student_profiles').update({ academic_year_id: null })
+      .eq('academic_year_id', yearId);
+    await supabase.from('bulletins').update({ academic_year_id: null })
+      .eq('academic_year_id', yearId);
+    await supabase.from('fee_structure').delete().eq('academic_year_id', yearId);
+
+    // Delete terms and classes
+    if (termIds.length > 0)  await supabase.from('terms')  .delete().in('id', termIds);
+    if (classIds.length > 0) await supabase.from('classes').delete().in('id', classIds);
+
+    // Finally delete the academic year
+    const { error } = await supabase.from('academic_years')
+      .delete().eq('id', yearId).eq('school_id', schoolId);
+    if (error) throw error;
+
+    res.json({ success: true, message: 'Academic year and all related data deleted permanently' });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 };
 
@@ -95,8 +144,25 @@ exports.updateTerm = async (req, res) => {
 
 exports.deleteTerm = async (req, res) => {
   try {
-    await supabase.from('terms').delete().eq('id', req.params.id).eq('school_id', req.schoolId);
-    res.json({ success: true });
+    const termId   = req.params.id;
+    const schoolId = req.schoolId;
+
+    // Verify ownership
+    const { data: term } = await supabase.from('terms')
+      .select('id').eq('id', termId).eq('school_id', schoolId).single();
+    if (!term) return res.status(404).json({ success: false, error: 'Term not found' });
+
+    // Delete all marks and bulletins for this term
+    await supabase.from('bulletins').delete().eq('term_id', termId);
+    await supabase.from('marks')    .delete().eq('term_id', termId);
+    await supabase.from('payments') .delete().eq('term_id', termId);
+
+    // Finally delete the term
+    const { error } = await supabase.from('terms')
+      .delete().eq('id', termId).eq('school_id', schoolId);
+    if (error) throw error;
+
+    res.json({ success: true, message: 'Term and all related marks/bulletins deleted permanently' });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 };
 
@@ -148,8 +214,33 @@ exports.updateClass = async (req, res) => {
 
 exports.deleteClass = async (req, res) => {
   try {
-    await supabase.from('classes').delete().eq('id', req.params.id).eq('school_id', req.schoolId);
-    res.json({ success: true });
+    const classId  = req.params.id;
+    const schoolId = req.schoolId;
+
+    // Verify ownership
+    const { data: cls } = await supabase.from('classes')
+      .select('id').eq('id', classId).eq('school_id', schoolId).single();
+    if (!cls) return res.status(404).json({ success: false, error: 'Class not found' });
+
+    // Delete all data tied to this class
+    await supabase.from('bulletins')        .delete().eq('class_id', classId);
+    await supabase.from('marks')            .delete().eq('class_id', classId);
+    await supabase.from('class_subjects')   .delete().eq('class_id', classId);
+    await supabase.from('promotion_history').delete().eq('from_class_id', classId);
+    await supabase.from('promotion_history').delete().eq('to_class_id',   classId);
+
+    // Nullify student FK references to this class
+    await supabase.from('student_profiles').update({ current_class_id: null })
+      .eq('current_class_id', classId);
+    await supabase.from('student_profiles').update({ previous_class_id: null })
+      .eq('previous_class_id', classId);
+
+    // Finally delete the class
+    const { error } = await supabase.from('classes')
+      .delete().eq('id', classId).eq('school_id', schoolId);
+    if (error) throw error;
+
+    res.json({ success: true, message: 'Class and all related data deleted permanently' });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 };
 
@@ -207,8 +298,24 @@ exports.updateSubject = async (req, res) => {
 
 exports.deleteSubject = async (req, res) => {
   try {
-    await supabase.from('subjects').delete().eq('id', req.params.id).eq('school_id', req.schoolId);
-    res.json({ success: true });
+    const subjectId = req.params.id;
+    const schoolId  = req.schoolId;
+
+    // Verify ownership
+    const { data: subject } = await supabase.from('subjects')
+      .select('id').eq('id', subjectId).eq('school_id', schoolId).single();
+    if (!subject) return res.status(404).json({ success: false, error: 'Subject not found' });
+
+    // Delete all marks for this subject, class assignments
+    await supabase.from('marks')         .delete().eq('subject_id', subjectId);
+    await supabase.from('class_subjects').delete().eq('subject_id', subjectId);
+
+    // Finally delete the subject
+    const { error } = await supabase.from('subjects')
+      .delete().eq('id', subjectId).eq('school_id', schoolId);
+    if (error) throw error;
+
+    res.json({ success: true, message: 'Subject and all related marks/assignments deleted permanently' });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 };
 
