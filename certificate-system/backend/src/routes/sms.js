@@ -103,12 +103,13 @@ router.get('/excel/annual-report/student', requireRole('admin','dos','secretary'
 
 // ── Documents (Secretary + Admin) ─────────────────────────────
 const docs = require('../controllers/documentsController');
-router.get   ('/documents/folders',      requireRole('admin','secretary'), docs.getFolders);
-router.post  ('/documents/folders',      requireRole('admin','secretary'), docs.createFolder);
-router.put   ('/documents/folders/:id',  requireRole('admin','secretary'), docs.updateFolder);
-router.delete('/documents/folders/:id',  requireRole('admin','secretary'), docs.deleteFolder);
-router.get   ('/documents',              requireRole('admin','secretary'), docs.getDocuments);
-router.post  ('/documents',              requireRole('admin','secretary'), docs.uploadDocument);
-router.delete('/documents/:id',          requireRole('admin','secretary'), docs.deleteDocument);
+router.get   ('/documents/folders',          requireRole('admin','secretary'), docs.getFolders);
+router.post  ('/documents/folders',          requireRole('admin','secretary'), docs.createFolder);
+router.put   ('/documents/folders/:id',      requireRole('admin','secretary'), docs.updateFolder);
+router.delete('/documents/folders/:id',      requireRole('admin','secretary'), docs.deleteFolder);
+router.post  ('/documents/folders/:id/unlock', requireRole('admin','secretary','dos','teacher','finance'), docs.unlockFolder);
+router.get   ('/documents',                  requireRole('admin','secretary'), docs.getDocuments);
+router.post  ('/documents',                  requireRole('admin','secretary'), docs.uploadDocument);
+router.delete('/documents/:id',              requireRole('admin','secretary'), docs.deleteDocument);
 
 module.exports = router;

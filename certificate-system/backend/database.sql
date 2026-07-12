@@ -373,7 +373,11 @@ CREATE INDEX IF NOT EXISTS idx_bulletins_class        ON bulletins(class_id);
 CREATE INDEX IF NOT EXISTS idx_payments_student       ON payments(student_id);
 CREATE INDEX IF NOT EXISTS idx_payments_school        ON payments(school_id);
 CREATE INDEX IF NOT EXISTS idx_payments_receipt       ON payments(receipt_number);
-CREATE INDEX IF NOT EXISTS idx_doc_folders_school     ON document_folders(school_id);
+-- documents: academic year + password protection
+ALTER TABLE document_folders ADD COLUMN IF NOT EXISTS academic_year_id UUID REFERENCES academic_years(id) ON DELETE SET NULL;
+ALTER TABLE document_folders ADD COLUMN IF NOT EXISTS password_hash    TEXT;
+ALTER TABLE document_folders ADD COLUMN IF NOT EXISTS is_locked        BOOLEAN DEFAULT false;
+CREATE INDEX IF NOT EXISTS idx_doc_folders_year ON document_folders(academic_year_id);
 CREATE INDEX IF NOT EXISTS idx_docs_folder            ON school_documents(folder_id);
 
 
