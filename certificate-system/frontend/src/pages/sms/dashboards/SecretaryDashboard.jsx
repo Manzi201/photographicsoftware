@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Users, UserPlus, FileText, Folder, Download,
-  ArrowRight, GraduationCap, CheckCircle2, AlertCircle, Printer
+  ArrowRight, GraduationCap, Printer
 } from 'lucide-react';
 import { getSmsStudents, getSmsClasses, getTerms, generateClassBulletins, downloadBlob } from '../../../api';
 import toast from 'react-hot-toast';
@@ -50,8 +50,6 @@ export default function SecretaryDashboard() {
     finally { setGenAll(false); }
   };
 
-  const paid    = students.filter(s => s.fee_status === 'paid').length;
-  const issues  = students.filter(s => s.fee_status !== 'paid').length;
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 sm:p-6">
@@ -144,32 +142,7 @@ export default function SecretaryDashboard() {
           </div>
         </div>
 
-        {/* ── Fee summary ───────────────────────────────── */}
-        {!loading && students.length > 0 && (
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-emerald-50 border border-emerald-100 rounded-2xl px-5 py-4 shadow-sm">
-              <div className="flex items-center gap-2 mb-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600"/>
-                <span className="text-xs font-bold text-emerald-700 uppercase tracking-wide">Fees Paid</span>
-              </div>
-              <p className="text-2xl font-bold text-emerald-700">{paid}</p>
-              <p className="text-xs text-emerald-500 mt-0.5">
-                {students.length > 0 ? Math.round((paid/students.length)*100) : 0}% of students
-              </p>
-            </div>
-            <div className="bg-amber-50 border border-amber-100 rounded-2xl px-5 py-4 shadow-sm">
-              <div className="flex items-center gap-2 mb-2">
-                <AlertCircle className="w-4 h-4 text-amber-600"/>
-                <span className="text-xs font-bold text-amber-700 uppercase tracking-wide">Fee Issues</span>
-              </div>
-              <p className="text-2xl font-bold text-amber-700">{issues}</p>
-              <p className="text-xs text-amber-500 mt-0.5">
-                {students.filter(s=>s.fee_status==='partial').length} partial ·{' '}
-                {students.filter(s=>s.fee_status==='unpaid').length} unpaid
-              </p>
-            </div>
-          </div>
-        )}
+        {/* ── Fee summary removed — handled by Finance role ── */}
 
       </div>
     </div>
