@@ -362,7 +362,7 @@ CREATE INDEX IF NOT EXISTS idx_class_subj_teacher     ON class_subjects(teacher_
 CREATE INDEX IF NOT EXISTS idx_sp_school              ON student_profiles(school_id);
 CREATE INDEX IF NOT EXISTS idx_sp_current_class       ON student_profiles(current_class_id);
 CREATE INDEX IF NOT EXISTS idx_sp_student_id          ON student_profiles(student_id);
-CREATE INDEX IF NOT EXISTSremove idx_sp_year                ON student_profiles(academic_year_id);
+CREATE INDEX IF NOT EXISTS idx_sp_year                ON student_profiles(academic_year_id);
 CREATE INDEX IF NOT EXISTS idx_marks_student          ON marks(student_id);
 CREATE INDEX IF NOT EXISTS idx_marks_term             ON marks(term_id);
 CREATE INDEX IF NOT EXISTS idx_marks_class            ON marks(class_id);
