@@ -424,6 +424,8 @@ ALTER TABLE document_folders ADD COLUMN IF NOT EXISTS folder_type      VARCHAR(2
 ALTER TABLE document_folders ADD COLUMN IF NOT EXISTS class_id         UUID REFERENCES classes(id) ON DELETE SET NULL;
 ALTER TABLE document_folders ADD COLUMN IF NOT EXISTS term_id          UUID REFERENCES terms(id)   ON DELETE SET NULL;
 ALTER TABLE document_folders ADD COLUMN IF NOT EXISTS month_label      VARCHAR(20);
+-- Backfill: set folder_type='school' on any existing folders that have NULL
+UPDATE document_folders SET folder_type = 'school' WHERE folder_type IS NULL;
 CREATE INDEX IF NOT EXISTS idx_doc_folders_year  ON document_folders(academic_year_id);
 CREATE INDEX IF NOT EXISTS idx_doc_folders_class ON document_folders(class_id);
 CREATE INDEX IF NOT EXISTS idx_doc_folders_term  ON document_folders(term_id);
