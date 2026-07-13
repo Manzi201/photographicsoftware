@@ -1,16 +1,12 @@
 [build]
-  # Tell Netlify where the frontend lives (relative to repo root)
-  base = "certificate-system/frontend"
+  base    = "certificate-system/frontend"
   publish = "dist"
-  command = "npm run build"
+  command = "npm ci && npm run build"
 
 [build.environment]
   NODE_VERSION = "20"
 
-# ── SPA routing fix: redirect everything to index.html ───────
-# This is the CRITICAL fix for React Router — without this
-# every page refresh or direct URL gives 404 on Netlify
 [[redirects]]
-  from = "/*"
-  to = "/index.html"
+  from   = "/*"
+  to     = "/index.html"
   status = 200
