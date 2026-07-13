@@ -166,3 +166,10 @@ export const sendCustomNotif    = (d) => sms.post('/notifications/custom', d);
 export const exportStudentsExcel = (p) => sms.get('/excel/students', { params: p, responseType: 'blob' });
 export const exportMarksExcel    = (p) => sms.get('/excel/marks',    { params: p, responseType: 'blob' });
 export const exportFinanceExcel  = (p) => sms.get('/excel/finance',  { params: p, responseType: 'blob' });
+
+// ── Student bulk import ───────────────────────────────────────
+export const importStudentsExcel = (file) => {
+  const fd = new FormData();
+  fd.append('file', file);
+  return sms.post('/students/import', fd, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 });
+};
