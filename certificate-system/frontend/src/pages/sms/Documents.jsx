@@ -49,6 +49,7 @@ function FileIcon({ type, size = 5 }) {
   if (type === 'doc')   return <FileText className={`${c} text-blue-500`}/>;
   if (type === 'excel') return <FileSpreadsheet className={`${c} text-green-600`}/>;
   if (type === 'ppt')   return <FileText className={`${c} text-orange-500`}/>;
+  if (type === 'zip')   return <FileText className={`${c} text-purple-500`}/>;
   return <File className={`${c} text-gray-400`}/>;
 }
 
@@ -150,9 +151,11 @@ function UploadModal({ folder, onSave, onClose }) {
             className="border-2 border-dashed border-gray-200 hover:border-blue-400 bg-gray-50 hover:bg-blue-50/30 rounded-xl p-8 text-center cursor-pointer transition-all">
             <Upload className="w-8 h-8 text-gray-300 mx-auto mb-2"/>
             <p className="text-sm font-semibold text-gray-600">Click or drag &amp; drop</p>
-            <p className="text-xs text-gray-400 mt-1">PDF, Word, Excel, Images…</p>
+            <p className="text-xs text-gray-400 mt-1">PDF, Word, Excel, Images, ZIP, RAR…</p>
           </div>
-          <input ref={inputRef} type="file" multiple className="hidden" onChange={e=>addFiles(e.target.files)}/>
+          <input ref={inputRef} type="file" multiple className="hidden"
+            accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.webp,.zip,.rar,.7z,.tar,.gz"
+            onChange={e=>addFiles(e.target.files)}/>
           {files.length>0 && (
             <div className="space-y-1.5 max-h-40 overflow-y-auto">
               {files.map((f,i) => (

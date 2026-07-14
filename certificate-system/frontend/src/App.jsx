@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import ForgotPassword from './pages/ForgotPassword';
 import Dashboard from './pages/Dashboard';
 import ClassesManager from './pages/ClassesManager';
 import UploadStudents from './pages/UploadStudents';
@@ -36,14 +37,15 @@ function hasSession(user) {
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
 
-  // While Supabase is initialising, also check localStorage immediately
-  // so staff sessions don't flicker to /login
   const staffToken = localStorage.getItem('staff_token');
   const staffData  = localStorage.getItem('staff_data');
   const hasStaff   = !!(staffToken && staffData);
 
-  if (loading && !hasStaff) {
-    // Only show spinner if we have no staff session to fall back on
+  // Staff session: bypass Supabase loading entirely
+  if (hasStaff) return children;
+
+  // Supabase admin: wait for auth to resolve
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center space-y-3">
@@ -54,9 +56,7 @@ function ProtectedRoute({ children }) {
     );
   }
 
-  // Allow access if: Supabase user exists OR staff_token exists
-  if (user || hasStaff) return children;
-
+  if (user) return children;
   return <Navigate to="/login" replace />;
 }
 
@@ -66,12 +66,13 @@ function PublicRoute({ children }) {
   const staffData  = localStorage.getItem('staff_data');
   const hasStaff   = !!(staffToken && staffData);
 
-  // Don't block if Supabase is still loading
-  if (loading && !hasStaff) return children;
+  // Staff already logged in → redirect immediately, no flash
+  if (hasStaff) return <Navigate to="/sms/dashboard" replace />;
 
-  // Already authenticated → redirect away from login/register
-  if (user || hasStaff) return <Navigate to="/sms/dashboard" replace />;
+  // Supabase admin loading
+  if (loading) return children;
 
+  if (user) return <Navigate to="/sms/dashboard" replace />;
   return children;
 }
 
@@ -84,9 +85,10 @@ function AppRoutes() {
       />
       <Routes>
         {/* Public */}
-        <Route path="/login"       element={<PublicRoute><Login /></PublicRoute>} />
-        <Route path="/register"    element={<PublicRoute><Register /></PublicRoute>} />
-        <Route path="/staff-login" element={<Navigate to="/login" replace />} />
+        <Route path="/login"           element={<PublicRoute><Login /></PublicRoute>} />
+        <Route path="/register"        element={<PublicRoute><Register /></PublicRoute>} />
+        <Route path="/forgot-password" element={<PublicRoute><ForgotPassword /></PublicRoute>} />
+        <Route path="/staff-login"     element={<Navigate to="/login" replace />} />
 
         {/* Protected — all inside Layout */}
         <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>

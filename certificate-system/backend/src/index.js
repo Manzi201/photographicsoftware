@@ -43,7 +43,7 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(fileUpload({
-  limits:       { fileSize: 10 * 1024 * 1024 },
+  limits:       { fileSize: 50 * 1024 * 1024 },  // 50MB — supports large zip archives
   useTempFiles: false,
 }));
 

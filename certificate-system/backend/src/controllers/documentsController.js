@@ -11,6 +11,7 @@ function getFileType(ext) {
   if (['doc','docx'].includes(ext))                    return 'doc';
   if (['xls','xlsx','csv'].includes(ext))              return 'excel';
   if (['ppt','pptx'].includes(ext))                    return 'ppt';
+  if (['zip','rar','7z','tar','gz'].includes(ext))     return 'zip';
   return 'other';
 }
 
