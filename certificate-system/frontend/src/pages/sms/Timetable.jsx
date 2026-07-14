@@ -510,15 +510,20 @@ export default function Timetable() {
                           const slot = getSlot(period.id, di+1);
                           const sub  = slot ? subjects.find(s => s.id === slot.subject_id) : null;
                           const col  = sub ? subjectColorMap[sub.id] : '';
+                          // Display: code (short) first, then teacher initials
+                          const displayName = sub ? (sub.code || sub.name?.slice(0,6) || '').toUpperCase() : '';
+                          const teacherInitials = slot?.teacher?.full_name
+                            ? slot.teacher.full_name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()
+                            : '';
                           return (
-                            <td key={di} className="py-1.5 px-2 border-r border-gray-100 border-b border-gray-50 align-top min-w-[100px]">
+                            <td key={di} className="py-1.5 px-2 border-r border-gray-100 border-b border-gray-50 align-top min-w-[90px]">
                               {slot && sub ? (
                                 <div
                                   onClick={() => canEdit && setSlotModal({ periodId: period.id, dayOfWeek: di+1, slot })}
                                   className={`rounded-xl border px-2 py-1.5 text-[11px] cursor-pointer hover:opacity-80 transition-opacity ${col}`}>
-                                  <p className="font-bold leading-tight truncate">{sub.name}</p>
-                                  {slot.teacher && <p className="opacity-70 mt-0.5 truncate">{slot.teacher.full_name}</p>}
-                                  {slot.room    && <p className="opacity-60 mt-0.5">{slot.room.name}</p>}
+                                  <p className="font-bold leading-tight">{displayName}</p>
+                                  {teacherInitials && <p className="opacity-60 mt-0.5 text-[10px]">{teacherInitials}</p>}
+                                  {slot.room && <p className="opacity-50 mt-0.5 text-[9px]">{slot.room.name}</p>}
                                 </div>
                               ) : (
                                 canEdit && (

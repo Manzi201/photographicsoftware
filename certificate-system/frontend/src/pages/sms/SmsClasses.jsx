@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Plus, Edit2, Trash2, X, Check, ChevronDown, ChevronRight,
   GraduationCap, Calendar, BookOpen, Users, Layers, Star, Clock,
-  Tag, Link as LinkIcon, RefreshCw
+  Tag, Link as LinkIcon, RefreshCw, UserCheck
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
@@ -10,7 +10,7 @@ import {
   getTerms, createTerm, updateTerm, deleteTerm,
   getSmsClasses, createSmsClass, updateSmsClass, deleteSmsClass,
   getSmsSubjects, createSmsSubject, updateSmsSubject, deleteSmsSubject,
-  getStaff, assignSubjectToAllClasses,
+  getStaff, assignSubjectToAllClasses, setTeacherForSubject,
 } from '../../api';
 import axios from 'axios';
 
@@ -358,20 +358,31 @@ function SubjectModal({ subject, onSave, onClose }) {
 }
 
 // ── Assign Subject to Class Modal ─────────────────────────────
-function AssignModal({ cls, subjects, staffList, onSave, onClose }) {
+// Shows subjects assigned to this class, with:
+//   - sort order, core toggle, teacher assignment per-class
+//   - "Set teacher for ALL classes" button per subject
+function AssignModal({ cls, subjects, staffList, allClasses, onSave, onClose }) {
   const [classSubjects, setClassSubjects] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [teacherSelects, setTeacherSelects] = useState({}); // { subjectId: teacherId }
 
-  const reload = () =>
-    getSmsSubjects({ class_id: cls.id }).then(r => setClassSubjects(r.data.data || []));
+  const reload = async () => {
+    const r = await getSmsSubjects({ class_id: cls.id });
+    const cs = r.data.data || [];
+    setClassSubjects(cs);
+    // Prefill teacher selects
+    const ts = {};
+    cs.forEach(s => { ts[s.id] = s.teacher?.id || ''; });
+    setTeacherSelects(ts);
+  };
 
-  useEffect(() => {
-    reload().finally(() => setLoading(false));
-  }, [cls.id]);
+  useEffect(() => { reload().finally(() => setLoading(false)); }, [cls.id]);
 
   const assignedIds = new Set(classSubjects.map(cs => cs.id));
   const unassigned  = subjects.filter(s => !assignedIds.has(s.id));
+  const teachers    = staffList.filter(s => s.role === 'teacher' || s.role === 'dos');
 
+  // Assign subject to this class
   const assign = async (subject_id) => {
     try {
       await SMS_API.post('/class-subjects', { class_id: cls.id, subject_id, teacher_id: null });
@@ -380,30 +391,7 @@ function AssignModal({ cls, subjects, staffList, onSave, onClose }) {
     } catch(err) { toast.error(err.response?.data?.error || 'Error'); }
   };
 
-  const toggleCore = async (cs) => {
-    try {
-      await SMS_API.post('/class-subjects', {
-        class_id: cls.id, subject_id: cs.id,
-        teacher_id: cs.teacher?.id || null,
-        is_core: !cs.is_core,
-        sort_order: cs.sort_order ?? 999,
-      });
-      await reload(); onSave();
-    } catch(err) { toast.error('Error updating'); }
-  };
-
-  const updateOrder = async (cs, newOrder) => {
-    try {
-      await SMS_API.post('/class-subjects', {
-        class_id: cls.id, subject_id: cs.id,
-        teacher_id: cs.teacher?.id || null,
-        is_core: cs.is_core ?? false,
-        sort_order: parseInt(newOrder) || 999,
-      });
-      await reload();
-    } catch(err) { toast.error('Error updating order'); }
-  };
-
+  // Remove subject from this class
   const unassign = async (cs) => {
     try {
       await SMS_API.delete(`/class-subjects/${cs.class_subject_id || cs.id}`);
@@ -412,66 +400,131 @@ function AssignModal({ cls, subjects, staffList, onSave, onClose }) {
     } catch(err) { toast.error('Error removing'); }
   };
 
+  // Toggle core for this class
+  const toggleCore = async (cs) => {
+    try {
+      await SMS_API.post('/class-subjects', {
+        class_id: cls.id, subject_id: cs.id,
+        teacher_id: cs.teacher?.id || null,
+        is_core: !cs.is_core, sort_order: cs.sort_order ?? 999,
+      });
+      await reload(); onSave();
+    } catch(err) { toast.error('Error'); }
+  };
+
+  // Update sort order for this class
+  const updateOrder = async (cs, newOrder) => {
+    try {
+      await SMS_API.post('/class-subjects', {
+        class_id: cls.id, subject_id: cs.id,
+        teacher_id: cs.teacher?.id || null,
+        is_core: cs.is_core ?? false, sort_order: parseInt(newOrder) || 999,
+      });
+      await reload();
+    } catch(err) { toast.error('Error'); }
+  };
+
+  // Set teacher for THIS class only
+  const setTeacherThisClass = async (cs, teacher_id) => {
+    try {
+      await SMS_API.post('/class-subjects', {
+        class_id: cls.id, subject_id: cs.id,
+        teacher_id: teacher_id || null,
+        is_core: cs.is_core ?? false, sort_order: cs.sort_order ?? 999,
+      });
+      toast.success(`Teacher set for ${cls.name}`);
+      await reload(); onSave();
+    } catch(err) { toast.error(err.response?.data?.error || 'Error'); }
+  };
+
+  // Set teacher for ALL classes that have this subject
+  const setTeacherAllClasses = async (subjectId, teacher_id) => {
+    try {
+      const res = await import('../../api').then(m =>
+        m.setTeacherForSubject({ subject_id: subjectId, teacher_id: teacher_id || null })
+      );
+      toast.success(res.data?.message || 'Teacher assigned in all classes!');
+      await reload(); onSave();
+    } catch(err) { toast.error(err.response?.data?.error || 'Error'); }
+  };
+
   return (
     <Modal title={`Subjects — ${cls.name}`} onClose={onClose} wide>
-      <div className="p-5 max-h-[70vh] overflow-y-auto space-y-4">
+      <div className="p-5 max-h-[75vh] overflow-y-auto space-y-5">
 
-        {/* Assigned subjects */}
+        {/* ── Assigned subjects ─────────────────────────── */}
         <div>
           <div className="flex items-center justify-between mb-2">
             <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">Assigned Subjects</p>
-            <p className="text-[10px] text-gray-400">Toggle ✓ = appears on Report Card</p>
+            <p className="text-[10px] text-gray-400">✓ Core = appears on Report Card</p>
           </div>
 
           {loading ? <p className="text-sm text-gray-400">Loading…</p> :
            classSubjects.length === 0 ? <p className="text-sm text-gray-400">No subjects assigned yet</p> : (
-            <div className="space-y-1.5">
-              {[...classSubjects].sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999)).map(cs => (
-                <div key={cs.class_subject_id || cs.id}
-                  className="flex items-center gap-2 bg-gray-50 border border-gray-100 rounded-xl px-3 py-2">
+            <div className="space-y-2">
+              {[...classSubjects].sort((a,b)=>(a.sort_order??999)-(b.sort_order??999)).map(cs => (
+                <div key={cs.class_subject_id||cs.id}
+                  className="bg-gray-50 border border-gray-100 rounded-xl p-3 space-y-2">
 
-                  {/* Sort order input */}
-                  <input
-                    type="number" min="1" max="99"
-                    defaultValue={cs.sort_order ?? 999}
-                    onBlur={e => updateOrder(cs, e.target.value)}
-                    className="w-10 text-center text-xs font-bold border border-gray-200 rounded-lg py-1 focus:outline-none focus:border-blue-400 bg-white text-gray-600"
-                    title="Display order"
-                  />
-
-                  {/* Name + teacher */}
-                  <div className="flex-1 min-w-0">
-                    <span className="font-semibold text-gray-900 text-sm">{cs.name}</span>
-                    {cs.coefficient > 1 && <span className="ml-1.5 text-xs text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded">×{cs.coefficient}</span>}
-                    {cs.teacher && <span className="ml-2 text-xs text-gray-400">→ {cs.teacher.full_name}</span>}
+                  {/* Row 1: order | name | core | remove */}
+                  <div className="flex items-center gap-2">
+                    <input type="number" min="1" max="99"
+                      defaultValue={cs.sort_order ?? 999}
+                      onBlur={e => updateOrder(cs, e.target.value)}
+                      className="w-10 text-center text-xs font-bold border border-gray-200 rounded-lg py-1 focus:outline-none focus:border-blue-400 bg-white text-gray-600"
+                      title="Display order"/>
+                    <div className="flex-1 min-w-0">
+                      <span className="font-bold text-gray-900 text-sm">{cs.name}</span>
+                      {cs.code && <span className="ml-1.5 text-[10px] font-mono text-blue-500 bg-blue-50 px-1 rounded">{cs.code}</span>}
+                      {cs.coefficient > 1 && <span className="ml-1.5 text-xs text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded">×{cs.coefficient}</span>}
+                    </div>
+                    <button onClick={() => toggleCore(cs)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border transition-all
+                        ${cs.is_core ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-white border-gray-200 text-gray-400 hover:border-emerald-300'}`}>
+                      <span className={`w-3 h-3 rounded border-2 flex items-center justify-center
+                        ${cs.is_core ? 'bg-emerald-500 border-emerald-500' : 'border-gray-300'}`}>
+                        {cs.is_core && <span className="text-white text-[8px] leading-none">✓</span>}
+                      </span>Core
+                    </button>
+                    <button onClick={() => unassign(cs)} className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg">
+                      <Trash2 className="w-3.5 h-3.5"/>
+                    </button>
                   </div>
 
-                  {/* Core toggle */}
-                  <button
-                    onClick={() => toggleCore(cs)}
-                    title={cs.is_core ? 'Core subject — on report card' : 'Not core — click to add to report card'}
-                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border transition-all
-                      ${cs.is_core
-                        ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                        : 'bg-white border-gray-200 text-gray-400 hover:border-emerald-300 hover:text-emerald-600'}`}>
-                    <span className={`w-3 h-3 rounded border-2 flex items-center justify-center
-                      ${cs.is_core ? 'bg-emerald-500 border-emerald-500' : 'border-gray-300'}`}>
-                      {cs.is_core && <span className="text-white text-[8px] leading-none">✓</span>}
-                    </span>
-                    Core
-                  </button>
-
-                  {/* Remove */}
-                  <button onClick={() => unassign(cs)} className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg">
-                    <Trash2 className="w-3.5 h-3.5"/>
-                  </button>
+                  {/* Row 2: Teacher assignment */}
+                  <div className="flex items-center gap-2 pl-12">
+                    <UserCheck className="w-3.5 h-3.5 text-gray-400 shrink-0"/>
+                    <div className="relative flex-1">
+                      <select
+                        value={teacherSelects[cs.id] || ''}
+                        onChange={e => setTeacherSelects(p => ({ ...p, [cs.id]: e.target.value }))}
+                        className="w-full appearance-none bg-white border border-gray-200 rounded-lg px-3 py-1.5 pr-8 text-xs font-medium text-gray-900 focus:outline-none focus:border-blue-400 transition-all">
+                        <option value="">— No teacher —</option>
+                        {teachers.map(t => <option key={t.id} value={t.id}>{t.full_name}</option>)}
+                      </select>
+                      <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none"/>
+                    </div>
+                    {/* Set for this class */}
+                    <button
+                      onClick={() => setTeacherThisClass(cs, teacherSelects[cs.id] || null)}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition-colors whitespace-nowrap shrink-0">
+                      <Check className="w-3 h-3"/> {cls.name}
+                    </button>
+                    {/* Set for ALL classes */}
+                    <button
+                      onClick={() => setTeacherAllClasses(cs.id, teacherSelects[cs.id] || null)}
+                      title="Assign this teacher to this subject in ALL classes"
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#0a2156] text-white text-xs font-bold hover:bg-[#0c2a6a] transition-colors whitespace-nowrap shrink-0">
+                      <Check className="w-3 h-3"/> All Classes
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        {/* Unassigned — quick assign */}
+        {/* ── Add unassigned subjects ────────────────────── */}
         {unassigned.length > 0 && (
           <div>
             <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Add Subject</p>
@@ -480,6 +533,7 @@ function AssignModal({ cls, subjects, staffList, onSave, onClose }) {
                 <div key={s.id} className="flex items-center justify-between bg-white border border-gray-200 rounded-xl px-3 py-2">
                   <span className="text-sm text-gray-700 font-medium">
                     {s.name}
+                    {s.code && <span className="ml-1.5 text-[10px] font-mono text-blue-500 bg-blue-50 px-1 rounded">{s.code}</span>}
                     {s.coefficient > 1 && <span className="ml-1 text-xs text-gray-400">×{s.coefficient}</span>}
                     {s.is_core && <span className="ml-2 text-xs text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">Core</span>}
                   </span>
@@ -490,7 +544,7 @@ function AssignModal({ cls, subjects, staffList, onSave, onClose }) {
           </div>
         )}
       </div>
-      <div className="px-5 py-3 border-t text-right">
+      <div className="px-5 py-3 border-t border-gray-100 text-right">
         <button onClick={onClose} className="btn-secondary text-sm">Done</button>
       </div>
     </Modal>
@@ -869,7 +923,7 @@ export default function SmsClasses() {
       {canWrite && classModal   && <ClassModal   cls={classModal?.id?classModal:null}             years={years} staffList={staffList} onSave={()=>{setClassModal(null);load();}} onClose={()=>setClassModal(null)}/>}
       {canWrite && termModal    && <TermModal    term={termModal?._preset_year?null:termModal}   years={years} onSave={()=>{setTermModal(null);load();}}  onClose={()=>setTermModal(null)}/>}
       {canWrite && subjectModal && <SubjectModal subject={subjectModal===true?null:subjectModal} onSave={()=>{setSubjectModal(false);load();}} onClose={()=>setSubjectModal(false)}/>}
-      {canWrite && assignModal  && <AssignModal  cls={assignModal} subjects={subjects} staffList={staffList} onSave={()=>load()} onClose={()=>setAssignModal(null)}/>}
+      {canWrite && assignModal  && <AssignModal  cls={assignModal} subjects={subjects} staffList={staffList} allClasses={classes} onSave={()=>load()} onClose={()=>setAssignModal(null)}/>}
     </div>
   );
 }

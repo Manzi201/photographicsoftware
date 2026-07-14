@@ -512,3 +512,30 @@ exports.assignSubjectToAll = async (req, res) => {
     res.json({ success:true, assigned: classes.length, message:`Assigned to ${classes.length} classes` });
   } catch (err) { res.status(500).json({ success:false, error: err.message }); }
 };
+
+// PUT /api/sms/class-subjects/set-teacher — assign teacher to a subject across specific or all classes
+exports.setTeacherForSubject = async (req, res) => {
+  try {
+    const { subject_id, teacher_id, class_ids } = req.body;
+    if (!subject_id) return res.status(400).json({ success:false, error:'subject_id required' });
+
+    let targetClassIds = class_ids;
+    if (!targetClassIds || targetClassIds.length === 0) {
+      // All classes that have this subject
+      const { data: cs } = await supabase.from('class_subjects')
+        .select('class_id').eq('subject_id', subject_id);
+      targetClassIds = (cs||[]).map(r => r.class_id);
+    }
+    if (!targetClassIds.length) return res.json({ success:true, updated: 0 });
+
+    // Update teacher for each class
+    let updated = 0;
+    for (const class_id of targetClassIds) {
+      const { error } = await supabase.from('class_subjects')
+        .update({ teacher_id: teacher_id || null })
+        .eq('class_id', class_id).eq('subject_id', subject_id);
+      if (!error) updated++;
+    }
+    res.json({ success:true, updated, message:`Teacher assigned in ${updated} class${updated!==1?'es':''}` });
+  } catch (err) { res.status(500).json({ success:false, error: err.message }); }
+};

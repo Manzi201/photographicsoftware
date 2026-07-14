@@ -131,6 +131,7 @@ export const createSmsSubject= (d)      => sms.post('/subjects', d);
 export const updateSmsSubject= (id, d)  => sms.put(`/subjects/${id}`, d);
 export const deleteSmsSubject= (id)     => sms.delete(`/subjects/${id}`);
 export const assignSubjectToAllClasses = (subject_id) => sms.post('/class-subjects/assign-all', { subject_id });
+export const setTeacherForSubject = (d) => sms.put('/class-subjects/set-teacher', d);
 
 // ── Staff list ────────────────────────────────────────────────
 export const getStaff   = ()       => sms.get('/staff');
