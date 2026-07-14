@@ -8,7 +8,15 @@ const fs      = require('fs');
 const path    = require('path');
 
 const PAGE_W = 841.89, PAGE_H = 595.28;
-const BULL_W = 400, BULL_GAP = 21, MARGIN_X = 10, MARGIN_Y = 8;
+// Layout: 2 bulletins side-by-side on A4 landscape (297×210mm = 841.89×595.28pt)
+// Leave 12pt margin each side, 16pt gap between bulletins
+// Each bulletin = (841.89 - 24 - 16) / 2 = 400.945 → use 400 (safe integer)
+const MARGIN_X = 12, MARGIN_Y = 10;
+const BULL_GAP = 16;
+const BULL_W   = 400;  // each bulletin width in points — verified: 12+400+16+400+12 = 840 < 841.89 ✓
+
+// Internal column widths — must sum to exactly BULL_W
+// SUBJ(100) + 6×MARK(38) + RANK(72) = 100+228+72 = 400 ✓
 const COL_SUBJ=100, COL_MARK=38, COL_RANK=72;
 const ROW_H_HDR=16, ROW_H_SUBJ=14;
 
@@ -70,6 +78,17 @@ function estimateH(numSubs){
 
 async function drawBulletin(pg,F,bx,bTopY,student,marks,subjects,classInfo,termInfo,yearInfo,school,meta,logoImg){
   const W=BULL_W;
+
+  // ── Calculate dynamic row height to ensure bulletin fits on page ──
+  // Fixed sections height: HDR(66) + sep(1.2) + title(16) + 3×infoRow(48) + 2×hdrRow(32) + total(16) + avg(16) + bot(60)
+  const FIXED_H = 66 + 1.2 + 16 + 16*3 + 16*2 + 16 + 16 + 60;
+  const available = bTopY - MARGIN_Y; // space from top to bottom margin
+  const rowBudget = available - FIXED_H;
+  // Use standard row height unless subjects are many
+  const rowH = subjects.length > 0
+    ? Math.max(10, Math.min(ROW_H_SUBJ, Math.floor(rowBudget / subjects.length)))
+    : ROW_H_SUBJ;
+
   let cur=0;
   const top=()=>bTopY-cur;
   const bot=(h)=>bTopY-cur-h;
@@ -87,8 +106,15 @@ async function drawBulletin(pg,F,bx,bTopY,student,marks,subjects,classInfo,termI
   if(school.phone)pg.drawText(school.phone,{x:lx,y:bTopY-40,size:6.5,font:F.regular,color:BLACK});
 
   const rBase=bx+W;
+  // Right-aligned header text — clip to RIGHT_W to prevent overflow
   [['MINISTRY OF EDUCATION',F.bold,7,NAVY],[`School Year: ${yearInfo?.name||''}`,F.regular,7,BLACK],[meta.is_annual?'ANNUAL REPORT':(termInfo?.name||''),F.bold,7.5,NAVY]]
-    .forEach(([t,f,s,c],i)=>{const tw=f.widthOfTextAtSize(t,s);pg.drawText(t,{x:rBase-tw-2,y:bTopY-10-i*12,size:s,font:f,color:c});});
+    .forEach(([t,f,s,c],i)=>{
+      let txt=String(t||'');
+      // Truncate so text never overflows right edge
+      while(txt.length>1 && f.widthOfTextAtSize(txt,s)>RIGHT_W-4) txt=txt.slice(0,-1);
+      const tw=f.widthOfTextAtSize(txt,s);
+      pg.drawText(txt,{x:rBase-tw-2,y:bTopY-10-i*12,size:s,font:f,color:c});
+    });
 
   // Logo
   const logoX=bx+LEFT_W+(MID_W-LS)/2, logoY=bTopY-HDR_H+(HDR_H-LS)/2;
@@ -149,7 +175,7 @@ async function drawBulletin(pg,F,bx,bTopY,student,marks,subjects,classInfo,termI
   let gmT=0,gmE=0,gmTot=0,goT=0,goE=0,goTot=0;
   subjects.forEach((sub,idx)=>{
     const alt=idx%2===1, bg=alt?LGRAY:WHITE;
-    const y=bot(ROW_H_SUBJ);
+    const y=bot(rowH);
     const mx=sub.max_marks||100,mxT=sub.max_test||0,mxE=sub.max_exam||0;
     const mk=marks.find(m=>m.subject_id===sub.id);
     const opT=mk?.cat1!=null?parseFloat(mk.cat1):null;
@@ -157,15 +183,15 @@ async function drawBulletin(pg,F,bx,bTopY,student,marks,subjects,classInfo,termI
     const opTo=mk?.total!=null?parseFloat(mk.total):null;
     gmT+=mxT;gmE+=mxE;gmTot+=mx;
     if(opT!=null)goT+=opT;if(opE!=null)goE+=opE;if(opTo!=null)goTot+=opTo;
-    cell(pg,cx[0],y,cw[0],ROW_H_SUBJ,(sub.name||'').toUpperCase(),F.regular,6.5,BLACK,bg,{maxW:cw[0]-4,borderColor:BORDER});
-    cell(pg,cx[1],y,cw[1],ROW_H_SUBJ,mxT||'—',F.regular,6.5,BLACK,bg,{align:'center',borderColor:BORDER});
-    cell(pg,cx[2],y,cw[2],ROW_H_SUBJ,mxE||'—',F.regular,6.5,BLACK,bg,{align:'center',borderColor:BORDER});
-    cell(pg,cx[3],y,cw[3],ROW_H_SUBJ,mx,F.regular,6.5,BLACK,bg,{align:'center',borderColor:BORDER});
-    cell(pg,cx[4],y,cw[4],ROW_H_SUBJ,fmt(opT),F.regular,6.5,BLACK,bg,{align:'center',borderColor:BORDER});
-    cell(pg,cx[5],y,cw[5],ROW_H_SUBJ,fmt(opE),F.regular,6.5,BLACK,bg,{align:'center',borderColor:BORDER});
-    cell(pg,cx[6],y,cw[6],ROW_H_SUBJ,fmt(opTo),F.bold,6.5,BLACK,bg,{align:'center',borderColor:BORDER});
-    cell(pg,cx[7],y,cw[7],ROW_H_SUBJ,meta.rank_in_class?String(meta.rank_in_class):'—',F.regular,6.5,BLACK,bg,{align:'center',borderColor:BORDER});
-    adv(ROW_H_SUBJ);
+    cell(pg,cx[0],y,cw[0],rowH,(sub.name||'').toUpperCase(),F.regular,6.5,BLACK,bg,{maxW:cw[0]-4,borderColor:BORDER});
+    cell(pg,cx[1],y,cw[1],rowH,mxT||'—',F.regular,6.5,BLACK,bg,{align:'center',borderColor:BORDER});
+    cell(pg,cx[2],y,cw[2],rowH,mxE||'—',F.regular,6.5,BLACK,bg,{align:'center',borderColor:BORDER});
+    cell(pg,cx[3],y,cw[3],rowH,mx,F.regular,6.5,BLACK,bg,{align:'center',borderColor:BORDER});
+    cell(pg,cx[4],y,cw[4],rowH,fmt(opT),F.regular,6.5,BLACK,bg,{align:'center',borderColor:BORDER});
+    cell(pg,cx[5],y,cw[5],rowH,fmt(opE),F.regular,6.5,BLACK,bg,{align:'center',borderColor:BORDER});
+    cell(pg,cx[6],y,cw[6],rowH,fmt(opTo),F.bold,6.5,BLACK,bg,{align:'center',borderColor:BORDER});
+    cell(pg,cx[7],y,cw[7],rowH,meta.rank_in_class?String(meta.rank_in_class):'—',F.regular,6.5,BLACK,bg,{align:'center',borderColor:BORDER});
+    adv(rowH);
   });
 
   // TOTAL row
