@@ -48,6 +48,7 @@ router.put   ('/subjects/:id',          academic.updateSubject);
 router.delete('/subjects/:id',          academic.deleteSubject);
 router.get   ('/class-subjects',        academic.getClassSubjects);
 router.post  ('/class-subjects',        academic.assignSubject);
+router.post  ('/class-subjects/assign-all', academic.assignSubjectToAll);
 router.delete('/class-subjects/:id',    academic.unassignSubject);
 router.get   ('/staff',                 academic.getStaff);
 router.post  ('/staff',                 academic.createStaff);

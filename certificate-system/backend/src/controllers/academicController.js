@@ -355,7 +355,31 @@ exports.createSubject = async (req, res) => {
       is_core: !!is_core,
     }]).select().single();
     if (error) throw error;
-    res.status(201).json({ success: true, data });
+
+    // ── Auto-assign to ALL existing classes for this school ──
+    // DoS creates a subject once — it becomes available in every class.
+    // Per-class teachers and is_core can be adjusted later in the Assign modal.
+    const { data: classes } = await supabase.from('classes')
+      .select('id').eq('school_id', req.schoolId);
+    if (classes && classes.length > 0) {
+      const assignments = classes.map(c => ({
+        class_id:   c.id,
+        subject_id: data.id,
+        teacher_id: null,
+        sort_order: sort_order != null ? parseInt(sort_order) : 999,
+        is_core:    !!is_core,
+      }));
+      // Use upsert so existing assignments are not duplicated
+      await supabase.from('class_subjects')
+        .upsert(assignments, { onConflict: 'class_id,subject_id', ignoreDuplicates: true });
+    }
+
+    res.status(201).json({
+      success: true,
+      data,
+      assigned_to: classes?.length || 0,
+      message: `Subject created and auto-assigned to ${classes?.length || 0} class${(classes?.length||0)!==1?'es':''}`,
+    });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 };
 
@@ -467,4 +491,24 @@ exports.unassignSubject = async (req, res) => {
     await supabase.from('class_subjects').delete().eq('id', req.params.id);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+};
+
+// POST /api/sms/class-subjects/assign-all — assign a subject to ALL classes
+exports.assignSubjectToAll = async (req, res) => {
+  try {
+    const { subject_id } = req.body;
+    if (!subject_id) return res.status(400).json({ success:false, error:'subject_id required' });
+
+    const { data: classes } = await supabase.from('classes').select('id').eq('school_id', req.schoolId);
+    if (!classes || classes.length === 0) return res.json({ success:true, assigned: 0 });
+
+    const rows = classes.map(c => ({
+      class_id: c.id, subject_id, teacher_id: null,
+      sort_order: 999, is_core: false,
+    }));
+    await supabase.from('class_subjects')
+      .upsert(rows, { onConflict: 'class_id,subject_id', ignoreDuplicates: true });
+
+    res.json({ success:true, assigned: classes.length, message:`Assigned to ${classes.length} classes` });
+  } catch (err) { res.status(500).json({ success:false, error: err.message }); }
 };

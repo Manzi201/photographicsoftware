@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Plus, Edit2, Trash2, X, Check, ChevronDown, ChevronRight,
   GraduationCap, Calendar, BookOpen, Users, Layers, Star, Clock,
-  Tag, Link as LinkIcon
+  Tag, Link as LinkIcon, RefreshCw
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
@@ -10,7 +10,7 @@ import {
   getTerms, createTerm, updateTerm, deleteTerm,
   getSmsClasses, createSmsClass, updateSmsClass, deleteSmsClass,
   getSmsSubjects, createSmsSubject, updateSmsSubject, deleteSmsSubject,
-  getStaff,
+  getStaff, assignSubjectToAllClasses,
 } from '../../api';
 import axios from 'axios';
 
@@ -252,8 +252,14 @@ function SubjectModal({ subject, onSave, onClose }) {
     if (maxTotal <= 0) { toast.error('Enter max marks for TEST or EXAM'); return; }
     setLoading(true);
     try {
-      if (subject?.id) { await updateSmsSubject(subject.id, form); toast.success('Subject updated!'); }
-      else             { await createSmsSubject(form);             toast.success('Subject created!'); }
+      if (subject?.id) {
+        await updateSmsSubject(subject.id, form);
+        toast.success('Subject updated!');
+      } else {
+        const res = await createSmsSubject(form);
+        const msg = res.data?.message || 'Subject created!';
+        toast.success(`✅ ${msg}`);
+      }
       onSave();
     } catch(err){ toast.error(err.response?.data?.error || 'Error'); }
     finally { setLoading(false); }
@@ -785,6 +791,15 @@ export default function SmsClasses() {
         {/* ── SUBJECTS TAB ─────────────────────────────────── */}
         {tab==='subjects' && (
           <div>
+            {/* Info banner */}
+            <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 mb-4 flex items-start gap-3">
+              <GraduationCap className="w-4 h-4 text-blue-600 shrink-0 mt-0.5"/>
+              <div className="text-xs text-blue-700">
+                <span className="font-bold">Auto-assignment:</span> New subjects are automatically assigned to all existing classes.
+                Use the <span className="font-bold">Assign to All</span> button on any row to push an existing subject to all classes,
+                or open a class → <span className="font-bold">Assign</span> to add/remove subjects per class individually.
+              </div>
+            </div>
             {subjects.length===0 ? (
               <div className="text-center py-12 text-gray-400">
                 <BookOpen className="w-10 h-10 mx-auto mb-2 opacity-30"/>
@@ -820,7 +835,19 @@ export default function SmsClasses() {
                         </td>
                         {canWrite && (
                           <td className="py-3 px-3">
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1 flex-wrap">
+                              {/* Assign to all classes */}
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    const res = await assignSubjectToAllClasses(s.id);
+                                    toast.success(res.data?.message || 'Assigned to all classes!');
+                                  } catch(err) { toast.error(err.response?.data?.error || 'Error'); }
+                                }}
+                                title="Assign to all classes"
+                                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 text-[10px] font-bold border border-blue-200 transition-colors">
+                                <Plus className="w-3 h-3"/> All Classes
+                              </button>
                               <button onClick={()=>setSubjectModal(s)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg" title="Edit"><Edit2 className="w-3.5 h-3.5"/></button>
                               <button onClick={()=>delSubject(s)} className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg" title="Delete"><Trash2 className="w-3.5 h-3.5"/></button>
                             </div>
