@@ -440,9 +440,7 @@ function AssignModal({ cls, subjects, staffList, allClasses, onSave, onClose }) 
   // Set teacher for ALL classes that have this subject
   const setTeacherAllClasses = async (subjectId, teacher_id) => {
     try {
-      const res = await import('../../api').then(m =>
-        m.setTeacherForSubject({ subject_id: subjectId, teacher_id: teacher_id || null })
-      );
+      const res = await setTeacherForSubject({ subject_id: subjectId, teacher_id: teacher_id || null });
       toast.success(res.data?.message || 'Teacher assigned in all classes!');
       await reload(); onSave();
     } catch(err) { toast.error(err.response?.data?.error || 'Error'); }

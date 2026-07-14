@@ -800,9 +800,9 @@ export default function Timetable() {
               </div>
             </div>
 
-          </div>  {/* end export cards grid */}
+          </div>
 
-          </div>  {/* end generate tab */}
+          </div>
         )}
 
         {/* ══════════════════════════════════════════════════
