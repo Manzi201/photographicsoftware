@@ -338,11 +338,54 @@ CREATE TABLE IF NOT EXISTS school_documents (
   created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- ── TIMETABLE SYSTEM ─────────────────────────────────────────
+
+-- Rooms / Classrooms
+CREATE TABLE IF NOT EXISTS rooms (
+  id         UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  school_id  UUID REFERENCES schools(id) ON DELETE CASCADE NOT NULL,
+  name       VARCHAR(100) NOT NULL,
+  capacity   INT DEFAULT 40,
+  room_type  VARCHAR(30) DEFAULT 'classroom',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- School time periods (Period 1, Break, Lunch, etc.)
+CREATE TABLE IF NOT EXISTS school_periods (
+  id               UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  school_id        UUID REFERENCES schools(id)        ON DELETE CASCADE NOT NULL,
+  academic_year_id UUID REFERENCES academic_years(id) ON DELETE SET NULL,
+  term_id          UUID REFERENCES terms(id)          ON DELETE SET NULL,
+  name             VARCHAR(30) NOT NULL,
+  period_number    INT NOT NULL,
+  start_time       TIME NOT NULL,
+  end_time         TIME NOT NULL,
+  is_break         BOOLEAN DEFAULT false,
+  created_at       TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Timetable slots (one lesson = one slot)
+CREATE TABLE IF NOT EXISTS timetable_slots (
+  id               UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  school_id        UUID REFERENCES schools(id)        ON DELETE CASCADE NOT NULL,
+  academic_year_id UUID REFERENCES academic_years(id) ON DELETE CASCADE,
+  term_id          UUID REFERENCES terms(id)          ON DELETE SET NULL,
+  class_id         UUID REFERENCES classes(id)        ON DELETE CASCADE NOT NULL,
+  subject_id       UUID REFERENCES subjects(id)       ON DELETE SET NULL,
+  teacher_id       UUID REFERENCES staff(id)          ON DELETE SET NULL,
+  room_id          UUID REFERENCES rooms(id)          ON DELETE SET NULL,
+  period_id        UUID REFERENCES school_periods(id) ON DELETE CASCADE NOT NULL,
+  day_of_week      SMALLINT NOT NULL CHECK (day_of_week BETWEEN 1 AND 6),
+  created_at       TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(school_id, class_id,   period_id, day_of_week),
+  UNIQUE(school_id, teacher_id, period_id, day_of_week),
+  UNIQUE(school_id, room_id,    period_id, day_of_week)
+);
+
 
 -- ================================================================
 -- PART 2 — INDEXES
 -- ================================================================
-
 CREATE INDEX IF NOT EXISTS idx_schools_user_id        ON schools(user_id);
 CREATE INDEX IF NOT EXISTS idx_students_school_id     ON students(school_id);
 CREATE INDEX IF NOT EXISTS idx_certs_school_id        ON certificates(school_id);
@@ -374,6 +417,11 @@ CREATE INDEX IF NOT EXISTS idx_payments_student       ON payments(student_id);
 CREATE INDEX IF NOT EXISTS idx_payments_school        ON payments(school_id);
 CREATE INDEX IF NOT EXISTS idx_payments_receipt       ON payments(receipt_number);
 CREATE INDEX IF NOT EXISTS idx_docs_folder            ON school_documents(folder_id);
+CREATE INDEX IF NOT EXISTS idx_rooms_school           ON rooms(school_id);
+CREATE INDEX IF NOT EXISTS idx_periods_school         ON school_periods(school_id);
+CREATE INDEX IF NOT EXISTS idx_tt_class               ON timetable_slots(class_id);
+CREATE INDEX IF NOT EXISTS idx_tt_teacher             ON timetable_slots(teacher_id);
+CREATE INDEX IF NOT EXISTS idx_tt_term                ON timetable_slots(term_id);
 
 
 -- ================================================================
@@ -473,6 +521,9 @@ ALTER TABLE promotion_history ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE document_folders  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE school_documents  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE rooms             ENABLE ROW LEVEL SECURITY;
+ALTER TABLE school_periods    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE timetable_slots   ENABLE ROW LEVEL SECURITY;
 
 -- schools: owner only
 DROP POLICY IF EXISTS "schools_owner"       ON schools;
@@ -496,7 +547,8 @@ BEGIN
     'students','certificates','staff','staff_sessions',
     'academic_years','terms','classes','subjects','class_subjects',
     'student_profiles','marks','bulletins','fee_structure','payments',
-    'promotion_history','notifications','document_folders','school_documents'
+    'promotion_history','notifications','document_folders','school_documents',
+    'rooms','school_periods','timetable_slots'
   ]) LOOP
     EXECUTE format('DROP POLICY IF EXISTS "open_%s" ON %I', tbl, tbl);
     EXECUTE format('CREATE POLICY "open_%s" ON %I FOR ALL USING (true) WITH CHECK (true)', tbl, tbl);

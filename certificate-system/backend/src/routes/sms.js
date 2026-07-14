@@ -101,9 +101,25 @@ router.get('/excel/class-report', requireRole('admin','dos','secretary','teacher
 router.get('/excel/annual-report',         requireRole('admin','dos','secretary'), annualRpt.generateAnnualReport);
 router.get('/excel/annual-report/student', requireRole('admin','dos','secretary'), annualRpt.generateOneAnnualReport);
 
+// ── Timetable (DoS + Admin) ───────────────────────────────────
+const tt = require('../controllers/timetableController');
+router.get   ('/timetable/rooms',              requireRole('admin','dos','teacher'), tt.getRooms);
+router.post  ('/timetable/rooms',              requireRole('admin','dos'),           tt.createRoom);
+router.put   ('/timetable/rooms/:id',          requireRole('admin','dos'),           tt.updateRoom);
+router.delete('/timetable/rooms/:id',          requireRole('admin','dos'),           tt.deleteRoom);
+router.get   ('/timetable/periods',            requireRole('admin','dos','teacher'), tt.getPeriods);
+router.post  ('/timetable/periods',            requireRole('admin','dos'),           tt.createPeriod);
+router.put   ('/timetable/periods/:id',        requireRole('admin','dos'),           tt.updatePeriod);
+router.delete('/timetable/periods/:id',        requireRole('admin','dos'),           tt.deletePeriod);
+router.get   ('/timetable/slots',              requireRole('admin','dos','teacher'), tt.getSlots);
+router.post  ('/timetable/slots',              requireRole('admin','dos'),           tt.upsertSlot);
+router.delete('/timetable/slots/:id',          requireRole('admin','dos'),           tt.deleteSlot);
+router.post  ('/timetable/clear',              requireRole('admin','dos'),           tt.clearClassTimetable);
+router.get   ('/timetable/reports/workload',   requireRole('admin','dos'),           tt.teacherWorkload);
+router.get   ('/timetable/reports/conflicts',  requireRole('admin','dos'),           tt.conflictReport);
+
 // ── Documents (Secretary + Admin) ─────────────────────────────
-const docs = require('../controllers/documentsController');
-router.get   ('/documents/folders',          requireRole('admin','secretary'), docs.getFolders);
+const docs = require('../controllers/documentsController');router.get   ('/documents/folders',          requireRole('admin','secretary'), docs.getFolders);
 router.post  ('/documents/folders',          requireRole('admin','secretary'), docs.createFolder);
 router.put   ('/documents/folders/:id',      requireRole('admin','secretary'), docs.updateFolder);
 router.delete('/documents/folders/:id',      requireRole('admin','secretary'), docs.deleteFolder);

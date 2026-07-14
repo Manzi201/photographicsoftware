@@ -173,3 +173,19 @@ export const importStudentsExcel = (file) => {
   fd.append('file', file);
   return sms.post('/students/import', fd, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 });
 };
+
+// ── Timetable ─────────────────────────────────────────────────
+export const getTtRooms           = ()      => sms.get('/timetable/rooms');
+export const createTtRoom         = (d)     => sms.post('/timetable/rooms', d);
+export const updateTtRoom         = (id, d) => sms.put(`/timetable/rooms/${id}`, d);
+export const deleteTtRoom         = (id)    => sms.delete(`/timetable/rooms/${id}`);
+export const getTtPeriods         = (p)     => sms.get('/timetable/periods', { params: p });
+export const createTtPeriod       = (d)     => sms.post('/timetable/periods', d);
+export const updateTtPeriod       = (id, d) => sms.put(`/timetable/periods/${id}`, d);
+export const deleteTtPeriod       = (id)    => sms.delete(`/timetable/periods/${id}`);
+export const getTtSlots           = (p)     => sms.get('/timetable/slots', { params: p });
+export const upsertTtSlot         = (d)     => sms.post('/timetable/slots', d);
+export const deleteTtSlot         = (id)    => sms.delete(`/timetable/slots/${id}`);
+export const clearClassTimetable  = (d)     => sms.post('/timetable/clear', d);
+export const getTtWorkload        = (p)     => sms.get('/timetable/reports/workload',  { params: p });
+export const getTtConflicts       = (p)     => sms.get('/timetable/reports/conflicts', { params: p });

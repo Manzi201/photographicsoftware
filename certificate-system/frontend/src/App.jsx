@@ -24,6 +24,7 @@ import AdminStaff       from './pages/sms/AdminStaff';
 import Promotion        from './pages/sms/Promotion';
 import Documents        from './pages/sms/Documents';
 import SmsClasses       from './pages/sms/SmsClasses';
+import Timetable        from './pages/sms/Timetable';
 import RoleDashboard    from './pages/sms/dashboards/RoleDashboard';
 
 // ── Check if any valid session exists (Supabase admin OR staff token) ──
@@ -112,6 +113,7 @@ function AppRoutes() {
           <Route path="sms/notifications" element={<SmsNotifications />} />
           <Route path="sms/promotion"     element={<Promotion />} />
           <Route path="sms/documents"     element={<Documents />} />
+          <Route path="sms/timetable"     element={<Timetable />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

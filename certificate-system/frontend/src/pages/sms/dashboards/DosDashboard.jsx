@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, BookOpen, FileText, TrendingUp, Layers, ArrowUpRight, Plus, Eye } from 'lucide-react';
+import { Users, BookOpen, FileText, TrendingUp, Layers, ArrowUpRight, Plus, Eye, Calendar } from 'lucide-react';
 import { getSmsStudentStats, getSmsClasses, getTerms } from '../../../api';
 
 const SECTIONS = [
@@ -8,11 +8,12 @@ const SECTIONS = [
     title: 'Academics',
     color: 'purple',
     items: [
-      { to:'/sms/classes',   icon:Layers,     label:'Classes & Years',    desc:'Manage classes, subjects, teacher assignments' },
-      { to:'/sms/students',  icon:Users,       label:'Students',           desc:'View & manage students' },
-      { to:'/sms/marks',     icon:Eye,         label:'Student Marks',      desc:'View all marks (read-only)' },
-      { to:'/sms/bulletins', icon:FileText,    label:'Bulletins',          desc:'Download term & annual report cards' },
-      { to:'/sms/promotion', icon:TrendingUp,  label:'Promotion',          desc:'Promote or repeat students' },
+      { to:'/sms/classes',    icon:Layers,     label:'Classes & Years',    desc:'Manage classes, subjects, teacher assignments' },
+      { to:'/sms/timetable',  icon:Calendar,   label:'Timetable',          desc:'Build & manage class schedules' },
+      { to:'/sms/students',   icon:Users,      label:'Students',           desc:'View & manage students' },
+      { to:'/sms/marks',      icon:Eye,        label:'Student Marks',      desc:'View all marks (read-only)' },
+      { to:'/sms/bulletins',  icon:FileText,   label:'Bulletins',          desc:'Download term & annual report cards' },
+      { to:'/sms/promotion',  icon:TrendingUp, label:'Promotion',          desc:'Promote or repeat students' },
     ],
   },
 ];

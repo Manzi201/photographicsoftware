@@ -4,7 +4,7 @@ import {
   Home, Shield, Users, Folder, Search, Award, Printer,
   Settings, GraduationCap, Menu, X, LogOut, ChevronDown,
   BookOpen, UserCircle, School, FileText, CreditCard, Bell,
-  TrendingUp, Layers, ChevronRight
+  TrendingUp, Layers, ChevronRight, Calendar
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
@@ -48,6 +48,7 @@ const NAV_BY_ROLE = {
     { section: 'Academics' },
     { to: '/sms/marks',     icon: BookOpen, label: 'Enter Marks' },
     { to: '/sms/bulletins', icon: FileText, label: 'View Bulletins' },
+    { to: '/sms/timetable', icon: Calendar, label: 'My Timetable' },
   ],
 
   finance: [
@@ -60,13 +61,14 @@ const NAV_BY_ROLE = {
 
   dos: [
     { section: 'Overview' },
-    { to: '/sms/dashboard', icon: Home,       label: 'Dashboard' },
+    { to: '/sms/dashboard',   icon: Home,       label: 'Dashboard' },
     { section: 'Academics' },
-    { to: '/sms/marks',     icon: BookOpen,   label: 'Student Marks (View)' },
-    { to: '/sms/bulletins', icon: FileText,   label: 'Bulletins' },
-    { to: '/sms/promotion', icon: TrendingUp, label: 'Promotion' },
-    { to: '/sms/classes',   icon: Layers,     label: 'Classes & Years' },
-    { to: '/sms/students',  icon: Users,      label: 'Students' },
+    { to: '/sms/marks',       icon: BookOpen,   label: 'Student Marks (View)' },
+    { to: '/sms/bulletins',   icon: FileText,   label: 'Bulletins' },
+    { to: '/sms/timetable',   icon: Calendar,   label: 'Timetable' },
+    { to: '/sms/promotion',   icon: TrendingUp, label: 'Promotion' },
+    { to: '/sms/classes',     icon: Layers,     label: 'Classes & Years' },
+    { to: '/sms/students',    icon: Users,      label: 'Students' },
   ],
 };
 
