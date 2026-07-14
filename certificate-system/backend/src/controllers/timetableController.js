@@ -520,3 +520,157 @@ exports.generateSchoolTimetable = async (req, res) => {
     await wb.xlsx.write(res); res.end();
   } catch(err){console.error('generateSchoolTimetable:',err);res.status(500).json({success:false,error:err.message});}
 };
+
+// ══════════════════════════════════════════════════════════════
+// AUTO-GENERATE TIMETABLE
+// Logic:
+//  - For each class, get its assigned subjects + teachers
+//  - Distribute subjects across available days × periods
+//  - Avoid teacher double-booking (same teacher, same period, same day)
+//  - Each subject gets ⌈periods_per_week / num_subjects⌉ slots
+// ══════════════════════════════════════════════════════════════
+exports.autoGenerate = async (req, res) => {
+  try {
+    const { academic_year_id, term_id, days_per_week = 5, overwrite = false } = req.body;
+    if (!academic_year_id) return res.status(400).json({ success: false, error: 'academic_year_id required' });
+
+    const schoolId = req.schoolId;
+
+    // 1. Load periods (lesson periods only, not breaks)
+    let pq = supabase.from('school_periods').select('*').eq('school_id', schoolId).eq('is_break', false);
+    if (term_id)          pq = pq.eq('term_id', term_id);
+    else                  pq = pq.eq('academic_year_id', academic_year_id);
+    const { data: periods } = await pq.order('period_number');
+    if (!periods || periods.length === 0) {
+      return res.status(400).json({ success: false, error: 'No lesson periods found. Create periods first.' });
+    }
+
+    // 2. Load all classes for this school
+    const { data: classes } = await supabase.from('classes')
+      .select('id,name').eq('school_id', schoolId).order('level_order').order('name');
+    if (!classes || classes.length === 0) {
+      return res.status(400).json({ success: false, error: 'No classes found.' });
+    }
+
+    // 3. Load all class_subjects (subject + teacher per class)
+    const { data: allCS } = await supabase.from('class_subjects')
+      .select('class_id, subject_id, teacher_id, sort_order')
+      .in('class_id', classes.map(c => c.id))
+      .not('subject_id', 'is', null);
+
+    // 4. If overwrite, clear existing timetable
+    if (overwrite) {
+      let dq = supabase.from('timetable_slots').delete().eq('school_id', schoolId)
+        .eq('academic_year_id', academic_year_id);
+      if (term_id) dq = dq.eq('term_id', term_id);
+      await dq;
+    }
+
+    // 5. Build slots
+    // Track: teacherBusy[teacherId][day][periodId] = true
+    const teacherBusy = {};
+    const slotsToInsert = [];
+    let conflicts = 0, assigned = 0;
+
+    const days = Array.from({ length: Math.min(days_per_week, 6) }, (_, i) => i + 1);
+
+    for (const cls of classes) {
+      const classSubjects = (allCS || [])
+        .filter(cs => cs.class_id === cls.id)
+        .sort((a, b) => (a.sort_order || 999) - (b.sort_order || 999));
+
+      if (classSubjects.length === 0) continue;
+
+      // Total available slots = days × periods
+      const totalSlots = days.length * periods.length;
+      // Periods per subject (distribute evenly, minimum 1)
+      const perSubject = Math.max(1, Math.floor(totalSlots / classSubjects.length));
+
+      let subjectIdx = 0, subjectCount = 0;
+
+      // Iterate day → period → assign subject
+      outer:
+      for (const day of days) {
+        for (const period of periods) {
+          if (subjectIdx >= classSubjects.length) break outer;
+          const cs = classSubjects[subjectIdx];
+          const tid = cs.teacher_id;
+
+          // Check teacher conflict
+          if (tid) {
+            if (!teacherBusy[tid]) teacherBusy[tid] = {};
+            if (!teacherBusy[tid][day]) teacherBusy[tid][day] = {};
+            if (teacherBusy[tid][day][period.id]) {
+              // Try next subject in list that doesn't conflict
+              let found = false;
+              for (let si = 0; si < classSubjects.length; si++) {
+                const alt = classSubjects[si];
+                const atid = alt.teacher_id;
+                if (!atid || !teacherBusy[atid]?.[day]?.[period.id]) {
+                  // Use this alternative
+                  slotsToInsert.push({
+                    school_id: schoolId, academic_year_id,
+                    term_id: term_id || null,
+                    class_id: cs.class_id,
+                    subject_id: alt.subject_id,
+                    teacher_id: atid || null,
+                    period_id: period.id,
+                    day_of_week: day,
+                    room_id: null,
+                  });
+                  if (atid) {
+                    if (!teacherBusy[atid]) teacherBusy[atid] = {};
+                    if (!teacherBusy[atid][day]) teacherBusy[atid][day] = {};
+                    teacherBusy[atid][day][period.id] = true;
+                  }
+                  assigned++;
+                  found = true;
+                  break;
+                }
+              }
+              if (!found) conflicts++;
+              continue;
+            }
+            teacherBusy[tid][day][period.id] = true;
+          }
+
+          slotsToInsert.push({
+            school_id: schoolId, academic_year_id,
+            term_id: term_id || null,
+            class_id: cs.class_id,
+            subject_id: cs.subject_id,
+            teacher_id: tid || null,
+            period_id: period.id,
+            day_of_week: day,
+            room_id: null,
+          });
+          assigned++;
+          subjectCount++;
+          if (subjectCount >= perSubject) { subjectIdx++; subjectCount = 0; }
+        }
+      }
+    }
+
+    // 6. Insert all slots (in chunks of 50)
+    const CHUNK = 50;
+    let inserted = 0;
+    for (let i = 0; i < slotsToInsert.length; i += CHUNK) {
+      const { data, error } = await supabase.from('timetable_slots')
+        .upsert(slotsToInsert.slice(i, i + CHUNK), { onConflict: 'school_id,class_id,period_id,day_of_week', ignoreDuplicates: !overwrite })
+        .select('id');
+      if (!error) inserted += (data || []).length;
+    }
+
+    res.json({
+      success: true,
+      inserted,
+      conflicts,
+      total_classes: classes.length,
+      total_periods: periods.length,
+      message: `Auto-generated ${inserted} timetable slots across ${classes.length} classes. ${conflicts > 0 ? `${conflicts} conflicts skipped.` : 'No conflicts.'}`,
+    });
+  } catch (err) {
+    console.error('autoGenerate:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+};

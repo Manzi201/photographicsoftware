@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   Calendar, Plus, Trash2, Edit2, X, Check, ChevronDown,
   Clock, Users, BookOpen, MapPin, AlertTriangle, RefreshCw,
-  BarChart2, Grid3X3, List, Layers, User, Download, FileSpreadsheet
+  BarChart2, Grid3X3, List, Layers, User, Download, FileSpreadsheet,
+  Zap, Settings2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
@@ -12,6 +13,7 @@ import {
   getTtSlots, upsertTtSlot, deleteTtSlot, clearClassTimetable,
   getTtWorkload, getTtConflicts,
   exportClassTimetable, exportTeacherTimetable, exportSchoolTimetable,
+  autoGenerateTimetable,
 } from '../../api';
 
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
@@ -221,6 +223,10 @@ export default function Timetable() {
   const [conflicts,setConflicts]= useState([]);
   const [loading,  setLoading]  = useState(false);
   const [dlState,  setDlState]  = useState(''); // 'class'|'teacher'|'school'
+  const [autoGenLoading, setAutoGenLoading] = useState(false);
+  const [autoGenResult,  setAutoGenResult]  = useState(null);
+  const [autoGenDays,    setAutoGenDays]    = useState(5);
+  const [autoGenOverwrite, setAutoGenOverwrite] = useState(false);
 
   // Filters
   const [selYear,  setSelYear]  = useState('');
@@ -273,6 +279,26 @@ export default function Timetable() {
       `school_timetable.xlsx`
     );
     setDlState('');
+  };
+
+  const handleAutoGenerate = async () => {
+    if (!selYear) { toast.error('Select academic year first'); return; }
+    if (!periods.length) { toast.error('Create time periods first'); return; }
+    setAutoGenLoading(true);
+    setAutoGenResult(null);
+    try {
+      const res = await autoGenerateTimetable({
+        academic_year_id: selYear,
+        term_id: selTerm || null,
+        days_per_week: parseInt(autoGenDays),
+        overwrite: autoGenOverwrite,
+      });
+      setAutoGenResult(res.data);
+      toast.success(res.data.message || 'Timetable generated!');
+      loadSlots(); // refresh the grid
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Generation failed');
+    } finally { setAutoGenLoading(false); }
   };
 
   // Boot
@@ -606,7 +632,76 @@ export default function Timetable() {
             TAB: GENERATE / EXPORT
         ══════════════════════════════════════════════════ */}
         {tab === 'generate' && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="space-y-4">
+
+            {/* ── Auto-Generate ──────────────────────────── */}
+            <div className="bg-gradient-to-r from-[#0a2156] to-[#1e3a8a] rounded-2xl p-5 text-white">
+              <div className="flex items-start gap-4">
+                <div className="w-11 h-11 rounded-xl bg-white/15 flex items-center justify-center shrink-0">
+                  <Zap className="w-6 h-6 text-yellow-300"/>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-bold text-white text-base">Auto-Generate Timetable</h3>
+                  <p className="text-blue-200 text-xs mt-0.5">
+                    Automatically builds the timetable for all classes based on teacher–subject–class assignments and configured periods.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-[11px] font-bold text-blue-300 uppercase tracking-widest mb-2">Days per Week</label>
+                  <div className="relative">
+                    <select value={autoGenDays} onChange={e => setAutoGenDays(e.target.value)}
+                      className="w-full appearance-none bg-white/10 border border-white/20 text-white rounded-xl px-3.5 py-2.5 pr-9 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-white/30 transition-all">
+                      {[5,6].map(d => <option key={d} value={d} className="text-gray-900">{d} days (Mon–{d===5?'Fri':'Sat'})</option>)}
+                    </select>
+                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-300 pointer-events-none"/>
+                  </div>
+                </div>
+                <div className="flex items-end pb-0.5">
+                  <label className="flex items-center gap-3 cursor-pointer w-full">
+                    <div onClick={() => setAutoGenOverwrite(v => !v)}
+                      className={`w-11 h-6 rounded-full relative cursor-pointer transition-colors ${autoGenOverwrite ? 'bg-red-400' : 'bg-white/20'}`}>
+                      <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${autoGenOverwrite ? 'translate-x-5' : 'translate-x-0.5'}`}/>
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-white">Overwrite existing</p>
+                      <p className="text-[10px] text-blue-300">{autoGenOverwrite ? 'Clears current timetable first' : 'Skips already-filled slots'}</p>
+                    </div>
+                  </label>
+                </div>
+                <div className="flex items-end">
+                  <button onClick={handleAutoGenerate} disabled={autoGenLoading || !selYear || !periods.length}
+                    className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-yellow-400 hover:bg-yellow-300 text-[#0a2156] text-sm font-bold disabled:opacity-50 transition-colors shadow-sm">
+                    {autoGenLoading
+                      ? <span className="w-4 h-4 border-2 border-[#0a2156] border-t-transparent rounded-full animate-spin"/>
+                      : <Zap className="w-4 h-4"/>}
+                    {autoGenLoading ? 'Generating…' : 'Generate Now'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Result */}
+              {autoGenResult && (
+                <div className={`mt-4 rounded-xl px-4 py-3 text-sm font-semibold
+                  ${autoGenResult.inserted > 0 ? 'bg-emerald-400/20 text-emerald-200' : 'bg-red-400/20 text-red-200'}`}>
+                  ✅ {autoGenResult.message}
+                  {autoGenResult.conflicts > 0 && (
+                    <span className="ml-2 text-amber-300">⚠ {autoGenResult.conflicts} conflicts skipped</span>
+                  )}
+                </div>
+              )}
+
+              {!periods.length && (
+                <p className="mt-3 text-xs text-amber-300 flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5"/> No periods configured — go to <button onClick={() => setTab('periods')} className="underline font-semibold">Time Periods</button> tab first.
+                </p>
+              )}
+            </div>
+
+            {/* ── Export cards ─────────────────────────────── */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
 
             {/* Class Timetable */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col overflow-hidden">
@@ -700,7 +795,9 @@ export default function Timetable() {
               </div>
             </div>
 
-          </div>
+          </div>  {/* end export cards grid */}
+
+          </div>  {/* end generate tab */}
         )}
 
         {/* ══════════════════════════════════════════════════

@@ -116,6 +116,7 @@ router.get   ('/timetable/slots',              requireRole('admin','dos','teache
 router.post  ('/timetable/slots',              requireRole('admin','dos'),           tt.upsertSlot);
 router.delete('/timetable/slots/:id',          requireRole('admin','dos'),           tt.deleteSlot);
 router.post  ('/timetable/clear',              requireRole('admin','dos'),           tt.clearClassTimetable);
+router.post  ('/timetable/auto-generate',      requireRole('admin','dos'),           tt.autoGenerate);
 router.get   ('/timetable/reports/workload',        requireRole('admin','dos'),           tt.teacherWorkload);
 router.get   ('/timetable/reports/conflicts',       requireRole('admin','dos'),           tt.conflictReport);
 router.get   ('/timetable/export/class',            requireRole('admin','dos','teacher'), tt.generateClassTimetable);

@@ -188,6 +188,7 @@ export const getTtSlots           = (p)     => sms.get('/timetable/slots', { par
 export const upsertTtSlot         = (d)     => sms.post('/timetable/slots', d);
 export const deleteTtSlot         = (id)    => sms.delete(`/timetable/slots/${id}`);
 export const clearClassTimetable  = (d)     => sms.post('/timetable/clear', d);
+export const autoGenerateTimetable = (d)    => sms.post('/timetable/auto-generate', d);
 export const getTtWorkload        = (p)     => sms.get('/timetable/reports/workload',  { params: p });
 export const getTtConflicts       = (p)     => sms.get('/timetable/reports/conflicts', { params: p });
 export const exportClassTimetable   = (p)   => sms.get('/timetable/export/class',   { params: p, responseType: 'blob' });
