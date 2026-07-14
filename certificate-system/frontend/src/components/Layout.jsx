@@ -1,85 +1,70 @@
 import React, { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
-  Home, Shield, Users, Folder, Search, Award, Printer,
-  Settings, GraduationCap, Menu, X, LogOut, ChevronDown,
-  BookOpen, UserCircle, School, FileText, CreditCard, Bell,
-  TrendingUp, Layers, ChevronRight, Calendar
+  Home, Shield, Users, Folder, Menu, X, LogOut,
+  BookOpen, UserCircle, Settings, FileText, CreditCard, Bell,
+  TrendingUp, Layers, Calendar, GraduationCap, ChevronRight,
+  ChevronDown, LayoutDashboard
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 
-// ── Role colours ───────────────────────────────────────────────
+// ── Role config ───────────────────────────────────────────────
 const ROLE_META = {
-  admin:     { label: 'Administrator',       dot: 'bg-rose-400',   badge: 'bg-rose-500/20 text-rose-300 ring-rose-500/30' },
-  secretary: { label: 'Secretary',           dot: 'bg-emerald-400',badge: 'bg-emerald-500/20 text-emerald-300 ring-emerald-500/30' },
-  teacher:   { label: 'Teacher',             dot: 'bg-sky-400',    badge: 'bg-sky-500/20 text-sky-300 ring-sky-500/30' },
-  finance:   { label: 'Finance',             dot: 'bg-amber-400',  badge: 'bg-amber-500/20 text-amber-300 ring-amber-500/30' },
-  dos:       { label: 'Director of Studies', dot: 'bg-violet-400', badge: 'bg-violet-500/20 text-violet-300 ring-violet-500/30' },
+  admin:     { label: 'Administrator',       color: 'from-rose-500 to-rose-600',    bg: 'bg-rose-500/15',    text: 'text-rose-300'   },
+  secretary: { label: 'Secretary',           color: 'from-emerald-500 to-teal-600', bg: 'bg-emerald-500/15', text: 'text-emerald-300'},
+  teacher:   { label: 'Teacher',             color: 'from-sky-500 to-blue-600',     bg: 'bg-sky-500/15',     text: 'text-sky-300'    },
+  finance:   { label: 'Finance',             color: 'from-amber-500 to-orange-500', bg: 'bg-amber-500/15',   text: 'text-amber-300'  },
+  dos:       { label: 'Director of Studies', color: 'from-violet-500 to-purple-600',bg: 'bg-violet-500/15',  text: 'text-violet-300' },
 };
 
-// ── Nav definitions per role ───────────────────────────────────
+// ── Nav per role ──────────────────────────────────────────────
 const NAV_BY_ROLE = {
-
   admin: [
-    { section: 'Overview' },
-    { to: '/sms/dashboard', icon: Home,       label: 'Dashboard' },
-    { section: 'Management' },
+    { to: '/sms/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { divider: true },
     { to: '/sms/admin',     icon: Shield,     label: 'Staff Management' },
-    { section: 'School' },
-    { to: '/settings',      icon: Settings,   label: 'School Settings' },
-    { to: '/profile',       icon: UserCircle, label: 'School Profile' },
+    { to: '/settings',      icon: Settings,   label: 'School Settings'  },
+    { to: '/profile',       icon: UserCircle, label: 'School Profile'   },
   ],
-
   secretary: [
-    { section: 'Overview' },
-    { to: '/sms/dashboard',       icon: Home,          label: 'Dashboard' },
-    { section: 'Students' },
-    { to: '/sms/students',        icon: Users,         label: 'Registration' },
-    { section: 'Report Cards' },
-    { to: '/sms/bulletins',       icon: FileText,      label: 'Print Bulletins' },
-    { section: 'Documents' },
-    { to: '/sms/documents',       icon: Folder,        label: 'School Documents' },
+    { to: '/sms/dashboard', icon: LayoutDashboard, label: 'Dashboard'        },
+    { divider: true },
+    { to: '/sms/students',  icon: Users,    label: 'Students'          },
+    { to: '/sms/bulletins', icon: FileText, label: 'Print Bulletins'   },
+    { to: '/sms/documents', icon: Folder,   label: 'School Documents'  },
   ],
-
   teacher: [
-    { section: 'Overview' },
-    { to: '/sms/dashboard', icon: Home,     label: 'Dashboard' },
-    { section: 'Academics' },
-    { to: '/sms/marks',     icon: BookOpen, label: 'Enter Marks' },
+    { to: '/sms/dashboard', icon: LayoutDashboard, label: 'Dashboard'    },
+    { divider: true },
+    { to: '/sms/marks',     icon: BookOpen, label: 'Enter Marks'    },
     { to: '/sms/bulletins', icon: FileText, label: 'View Bulletins' },
-    { to: '/sms/timetable', icon: Calendar, label: 'My Timetable' },
+    { to: '/sms/timetable', icon: Calendar, label: 'My Timetable'   },
   ],
-
   finance: [
-    { section: 'Overview' },
-    { to: '/sms/dashboard',     icon: Home,       label: 'Dashboard' },
-    { section: 'Finance' },
+    { to: '/sms/dashboard',     icon: LayoutDashboard, label: 'Dashboard'       },
+    { divider: true },
     { to: '/sms/finance',       icon: CreditCard, label: 'Fees & Payments' },
-    { to: '/sms/notifications', icon: Bell,       label: 'Fee Reminders' },
+    { to: '/sms/notifications', icon: Bell,       label: 'Fee Reminders'   },
   ],
-
   dos: [
-    { section: 'Overview' },
-    { to: '/sms/dashboard',   icon: Home,       label: 'Dashboard' },
-    { section: 'Academics' },
-    { to: '/sms/marks',       icon: BookOpen,   label: 'Student Marks (View)' },
-    { to: '/sms/bulletins',   icon: FileText,   label: 'Bulletins' },
-    { to: '/sms/timetable',   icon: Calendar,   label: 'Timetable' },
-    { to: '/sms/promotion',   icon: TrendingUp, label: 'Promotion' },
-    { to: '/sms/classes',     icon: Layers,     label: 'Classes & Years' },
-    { to: '/sms/students',    icon: Users,      label: 'Students' },
+    { to: '/sms/dashboard', icon: LayoutDashboard, label: 'Dashboard'           },
+    { divider: true },
+    { to: '/sms/classes',   icon: Layers,     label: 'Classes & Years'    },
+    { to: '/sms/timetable', icon: Calendar,   label: 'Timetable'          },
+    { to: '/sms/marks',     icon: BookOpen,   label: 'Student Marks'      },
+    { to: '/sms/bulletins', icon: FileText,   label: 'Bulletins'          },
+    { to: '/sms/promotion', icon: TrendingUp, label: 'Promotion'          },
+    { to: '/sms/students',  icon: Users,      label: 'Students'           },
   ],
 };
 
-// ── Helper: get school / user info from localStorage ──────────
 function getSessionInfo(school) {
-  const staffToken = localStorage.getItem('staff_token');
-  const staffRaw   = localStorage.getItem('staff_data');
-  const schoolRaw  = localStorage.getItem('staff_school');
-
-  if (staffToken && staffRaw) {
-    try {
+  try {
+    const staffRaw  = localStorage.getItem('staff_data');
+    const schoolRaw = localStorage.getItem('staff_school');
+    const token     = localStorage.getItem('staff_token');
+    if (token && staffRaw) {
       const staff   = JSON.parse(staffRaw);
       const sSchool = schoolRaw ? JSON.parse(schoolRaw) : {};
       return {
@@ -89,18 +74,18 @@ function getSessionInfo(school) {
         schoolName:  sSchool.school_name || 'School',
         schoolYear:  sSchool.active_year || '',
         logoUrl:     sSchool.logo_url    || null,
-        initial:     (staff.full_name || 'S').charAt(0).toUpperCase(),
+        initials:    (staff.full_name || 'S').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2),
       };
-    } catch {}
-  }
+    }
+  } catch {}
   return {
     isStaff:     false,
     role:        'admin',
-    displayName: school?.school_name || 'SchoolMS',
+    displayName: school?.school_name || 'Admin',
     schoolName:  school?.school_name || 'My School',
     schoolYear:  school?.active_year || '',
     logoUrl:     school?.logo_url    || null,
-    initial:     (school?.school_name || 'S').charAt(0).toUpperCase(),
+    initials:    (school?.school_name || 'S').charAt(0).toUpperCase(),
   };
 }
 
@@ -108,15 +93,15 @@ export default function Layout() {
   const { school, logout } = useAuth();
   const navigate = useNavigate();
 
-  const [sidebarOpen,  setSidebarOpen]  = useState(typeof window !== 'undefined' ? window.innerWidth >= 1024 : true);
-  const [mobileOpen,   setMobileOpen]   = useState(false);
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [collapsed,   setCollapsed]   = useState(false);
+  const [mobileOpen,  setMobileOpen]  = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   const session  = getSessionInfo(school);
   const role     = session.role;
-  const roleMeta = ROLE_META[role] || ROLE_META.admin;
+  const meta     = ROLE_META[role] || ROLE_META.admin;
   const NAV      = NAV_BY_ROLE[role] || NAV_BY_ROLE.admin;
-  const expanded = sidebarOpen || mobileOpen;
+  const wide     = !collapsed || mobileOpen;
 
   const handleLogout = () => {
     localStorage.removeItem('staff_token');
@@ -128,88 +113,86 @@ export default function Layout() {
   };
 
   return (
-    <div className="flex h-screen bg-[#0f1117] overflow-hidden">
+    <div className="flex h-screen overflow-hidden bg-gray-100">
 
-      {/* ── Mobile backdrop ────────────────────────────────────── */}
+      {/* Mobile overlay */}
       {mobileOpen && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-30 lg:hidden"
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-30 lg:hidden"
           onClick={() => setMobileOpen(false)}/>
       )}
 
-      {/* ══════════════════════════════════════════════════════════
+      {/* ════════════════════════════════════════════════════
           SIDEBAR
-      ══════════════════════════════════════════════════════════ */}
+      ════════════════════════════════════════════════════ */}
       <aside className={`
-        fixed lg:static inset-y-0 left-0 z-40
+        fixed lg:static inset-y-0 left-0 z-40 flex flex-col
         ${mobileOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0
-        ${expanded ? 'w-[260px]' : 'lg:w-[68px] w-[260px]'}
-        flex flex-col
-        bg-[#13151c] border-r border-white/[0.06]
-        transition-all duration-300 ease-in-out shrink-0
+        ${wide ? 'w-64' : 'w-[70px]'}
+        bg-white border-r border-gray-200
+        transition-all duration-300 ease-in-out shrink-0 shadow-sm
       `}>
 
-        {/* ── Top bar: brand + toggle ─────────────────────────── */}
-        <div className="flex items-center gap-3 px-4 h-[60px] border-b border-white/[0.06] shrink-0">
-          {/* Logo mark */}
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shrink-0">
-            <GraduationCap className="w-4 h-4 text-white" />
+        {/* ── Brand header ────────────────────────────── */}
+        <div className="flex items-center gap-3 px-4 h-16 border-b border-gray-100 shrink-0">
+          <div className="w-9 h-9 rounded-xl bg-[#0a2156] flex items-center justify-center shadow-sm shrink-0">
+            <GraduationCap className="w-5 h-5 text-white"/>
           </div>
-          {expanded && (
-            <span className="font-bold text-white text-[15px] tracking-tight flex-1 truncate">SchoolMS</span>
+          {wide && (
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-gray-900 text-[15px] leading-tight truncate">SchoolMS</p>
+              <p className="text-[11px] text-gray-400 truncate">{session.schoolName}</p>
+            </div>
           )}
-          {/* Desktop collapse */}
-          <button onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="hidden lg:flex items-center justify-center w-7 h-7 rounded-lg text-gray-500 hover:text-white hover:bg-white/10 transition-all shrink-0">
-            <ChevronRight className={`w-4 h-4 transition-transform duration-300 ${sidebarOpen ? 'rotate-180' : ''}`}/>
+          <button onClick={() => { setCollapsed(!collapsed); setMobileOpen(false); }}
+            className="hidden lg:flex w-7 h-7 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 items-center justify-center transition-all shrink-0">
+            <ChevronRight className={`w-4 h-4 transition-transform duration-300 ${wide ? 'rotate-180' : ''}`}/>
           </button>
-          {/* Mobile close */}
           <button onClick={() => setMobileOpen(false)}
-            className="lg:hidden flex items-center justify-center w-7 h-7 rounded-lg text-gray-500 hover:text-white hover:bg-white/10 transition-all shrink-0">
+            className="lg:hidden w-7 h-7 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 flex items-center justify-center">
             <X className="w-4 h-4"/>
           </button>
         </div>
 
-        {/* ── School card ─────────────────────────────────────── */}
-        {expanded && (
-          <div className="mx-3 mt-3 rounded-2xl bg-gradient-to-br from-blue-600/20 via-indigo-600/10 to-transparent border border-white/10 p-3 shrink-0">
-            <div className="flex items-center gap-2.5 min-w-0">
-              {/* School logo or initial */}
-              {session.logoUrl
-                ? <img src={session.logoUrl} className="w-9 h-9 rounded-xl object-contain bg-white/10 p-0.5 shrink-0" alt="logo"/>
-                : <div className="w-9 h-9 rounded-xl bg-blue-600/40 flex items-center justify-center text-sm font-bold text-white shrink-0">
-                    {session.schoolName.charAt(0).toUpperCase()}
-                  </div>
-              }
-              <div className="min-w-0 flex-1">
-                <p className="text-[13px] font-bold text-white truncate leading-tight">
-                  {session.schoolName}
-                </p>
-                {session.schoolYear && (
-                  <p className="text-[11px] text-blue-300/80 mt-0.5">Year {session.schoolYear}</p>
-                )}
+        {/* ── User card ───────────────────────────────── */}
+        {wide && (
+          <div className="mx-3 mt-3 shrink-0">
+            <div className={`rounded-2xl ${meta.bg} border border-white/50 p-3`}>
+              <div className="flex items-center gap-2.5">
+                <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${meta.color} flex items-center justify-center text-sm font-bold text-white shrink-0 shadow-sm`}>
+                  {session.initials}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-bold text-gray-900 truncate leading-tight">{session.displayName}</p>
+                  <p className={`text-[11px] font-semibold ${meta.text} mt-0.5`}>{meta.label}</p>
+                </div>
               </div>
-            </div>
-            {/* Role badge */}
-            <div className="mt-2.5">
-              <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-full ring-1 ${roleMeta.badge}`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${roleMeta.dot}`}/>
-                {roleMeta.label}
-              </span>
+              {session.schoolYear && (
+                <div className="mt-2 pt-2 border-t border-white/30">
+                  <p className="text-[11px] text-gray-500">
+                    Academic Year: <span className="font-semibold text-gray-700">{session.schoolYear}</span>
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         )}
 
-        {/* ── Nav items ──────────────────────────────────────── */}
-        <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5 scrollbar-thin">
+        {/* Collapsed: avatar only */}
+        {!wide && (
+          <div className="flex justify-center mt-4 shrink-0">
+            <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${meta.color} flex items-center justify-center text-sm font-bold text-white shadow-sm`}>
+              {session.initials}
+            </div>
+          </div>
+        )}
+
+        {/* ── Navigation ──────────────────────────────── */}
+        <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
           {NAV.map((item, i) => {
-            if (item.section) {
-              return expanded
-                ? <div key={i} className="px-2 pt-5 pb-1.5 first:pt-1">
-                    <span className="text-[10px] font-bold text-gray-600 uppercase tracking-[0.12em]">
-                      {item.section}
-                    </span>
-                  </div>
-                : <div key={i} className="my-3 mx-1 border-t border-white/[0.06]"/>;
+            if (item.divider) {
+              return wide
+                ? <div key={i} className="mx-2 my-2 border-t border-gray-100"/>
+                : <div key={i} className="my-2 border-t border-gray-100 mx-1"/>;
             }
 
             const Icon = item.icon;
@@ -218,20 +201,20 @@ export default function Layout() {
                 end={item.to === '/sms/dashboard'}
                 onClick={() => setMobileOpen(false)}
                 className={({ isActive }) => `
-                  group flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13.5px] font-medium
-                  transition-all duration-150 relative
+                  group relative flex items-center gap-3
+                  ${wide ? 'px-3 py-2.5' : 'px-0 py-2.5 justify-center'}
+                  rounded-xl text-[13.5px] font-medium transition-all duration-150
                   ${isActive
-                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40'
-                    : 'text-gray-400 hover:text-white hover:bg-white/[0.06]'}
+                    ? 'bg-[#0a2156] text-white shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'}
                 `}>
-                {/* Active indicator bar */}
-                <Icon className="w-[17px] h-[17px] shrink-0"/>
-                {expanded && <span className="truncate">{item.label}</span>}
-                {/* Tooltip when collapsed */}
-                {!expanded && (
-                  <div className="absolute left-full ml-2 px-2.5 py-1.5 bg-gray-800 text-white text-xs rounded-lg
+                <Icon className={`shrink-0 ${wide ? 'w-[18px] h-[18px]' : 'w-5 h-5'}`}/>
+                {wide && <span className="truncate">{item.label}</span>}
+                {/* Tooltip for collapsed */}
+                {!wide && (
+                  <div className="absolute left-full ml-3 px-3 py-1.5 bg-gray-900 text-white text-xs font-semibold rounded-xl
                     opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 shadow-xl
-                    translate-x-1 group-hover:translate-x-0 transition-all duration-200">
+                    translate-x-1 group-hover:translate-x-0 transition-all duration-150">
                     {item.label}
                   </div>
                 )}
@@ -240,87 +223,47 @@ export default function Layout() {
           })}
         </nav>
 
-        {/* ── User footer ─────────────────────────────────────── */}
-        <div className="border-t border-white/[0.06] p-2 shrink-0">
-          {expanded ? (
-            <div className="relative">
-              <button onClick={() => setUserMenuOpen(!userMenuOpen)}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/[0.06] transition-all">
-                {/* Avatar */}
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[13px] font-bold text-white shrink-0 uppercase
-                  bg-gradient-to-br ${role === 'admin' ? 'from-rose-500 to-pink-600' :
-                    role === 'secretary' ? 'from-emerald-500 to-teal-600' :
-                    role === 'teacher'   ? 'from-sky-500 to-blue-600' :
-                    role === 'finance'   ? 'from-amber-500 to-orange-600' :
-                                           'from-violet-500 to-purple-600'}`}>
-                  {session.initial}
-                </div>
-                <div className="flex-1 min-w-0 text-left">
-                  <p className="text-[13px] font-semibold text-white truncate leading-tight">
-                    {session.displayName}
-                  </p>
-                  <p className="text-[11px] text-gray-500 truncate mt-0.5">{roleMeta.label}</p>
-                </div>
-                <ChevronDown className={`w-3.5 h-3.5 text-gray-500 transition-transform shrink-0 ${userMenuOpen ? 'rotate-180' : ''}`}/>
-              </button>
-
-              {/* Dropdown */}
-              {userMenuOpen && (
-                <div className="absolute bottom-full left-0 right-0 mb-1 bg-[#1a1d27] border border-white/10 rounded-2xl overflow-hidden shadow-2xl z-50">
-                  {!session.isStaff && (
-                    <>
-                      <NavLink to="/profile" onClick={() => setUserMenuOpen(false)}
-                        className="flex items-center gap-3 px-4 py-3 text-[13px] text-gray-300 hover:bg-white/[0.06] hover:text-white transition-all">
-                        <UserCircle className="w-4 h-4 text-gray-500"/> School Profile
-                      </NavLink>
-                      <NavLink to="/settings" onClick={() => setUserMenuOpen(false)}
-                        className="flex items-center gap-3 px-4 py-3 text-[13px] text-gray-300 hover:bg-white/[0.06] hover:text-white transition-all">
-                        <Settings className="w-4 h-4 text-gray-500"/> School Settings
-                      </NavLink>
-                      <div className="mx-3 border-t border-white/[0.06]"/>
-                    </>
-                  )}
-                  <button onClick={handleLogout}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-[13px] text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-all">
-                    <LogOut className="w-4 h-4"/> Sign Out
-                  </button>
-                </div>
-              )}
-            </div>
-          ) : (
-            /* Collapsed: just logout icon */
-            <button onClick={handleLogout} title="Sign Out"
-              className="w-full flex items-center justify-center py-2.5 rounded-xl text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-all">
-              <LogOut className="w-[17px] h-[17px]"/>
-            </button>
+        {/* ── Footer: settings + logout ───────────────── */}
+        <div className="border-t border-gray-100 p-2 shrink-0 space-y-0.5">
+          {!session.isStaff && wide && (
+            <>
+              <NavLink to="/settings" onClick={() => setMobileOpen(false)}
+                className={({isActive}) => `flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all
+                  ${isActive ? 'bg-[#0a2156] text-white' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'}`}>
+                <Settings className="w-4 h-4 shrink-0"/> Settings
+              </NavLink>
+            </>
           )}
+          <button onClick={handleLogout}
+            className={`w-full flex items-center ${wide ? 'gap-3 px-3 py-2.5' : 'justify-center py-2.5'} rounded-xl text-[13px] font-medium text-red-500 hover:bg-red-50 transition-all`}
+            title="Sign Out">
+            <LogOut className="w-4 h-4 shrink-0"/>
+            {wide && <span>Sign Out</span>}
+          </button>
         </div>
       </aside>
 
-      {/* ══════════════════════════════════════════════════════════
+      {/* ════════════════════════════════════════════════════
           MAIN CONTENT
-      ══════════════════════════════════════════════════════════ */}
-      <main className="flex-1 overflow-hidden flex flex-col bg-gray-50">
+      ════════════════════════════════════════════════════ */}
+      <main className="flex-1 overflow-hidden flex flex-col bg-gray-50 min-w-0">
 
         {/* Mobile top bar */}
         <div className="lg:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200 sticky top-0 z-20 shadow-sm shrink-0">
-          <button onClick={() => setMobileOpen(true)}
-            className="p-2 rounded-xl hover:bg-gray-100 transition-colors">
+          <button onClick={() => setMobileOpen(true)} className="p-2 rounded-xl hover:bg-gray-100 transition-colors">
             <Menu className="w-5 h-5 text-gray-700"/>
           </button>
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
+            <div className="w-7 h-7 rounded-xl bg-[#0a2156] flex items-center justify-center">
               <GraduationCap className="w-4 h-4 text-white"/>
             </div>
             <span className="font-bold text-sm text-gray-900">SchoolMS</span>
           </div>
-          <button onClick={handleLogout}
-            className="p-2 rounded-xl hover:bg-red-50 text-red-400 transition-colors">
+          <button onClick={handleLogout} className="p-2 rounded-xl hover:bg-red-50 text-red-400 transition-colors">
             <LogOut className="w-5 h-5"/>
           </button>
         </div>
 
-        {/* Page */}
         <div className="flex-1 overflow-y-auto">
           <Outlet />
         </div>
