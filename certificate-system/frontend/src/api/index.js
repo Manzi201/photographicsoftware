@@ -189,3 +189,6 @@ export const deleteTtSlot         = (id)    => sms.delete(`/timetable/slots/${id
 export const clearClassTimetable  = (d)     => sms.post('/timetable/clear', d);
 export const getTtWorkload        = (p)     => sms.get('/timetable/reports/workload',  { params: p });
 export const getTtConflicts       = (p)     => sms.get('/timetable/reports/conflicts', { params: p });
+export const exportClassTimetable   = (p)   => sms.get('/timetable/export/class',   { params: p, responseType: 'blob' });
+export const exportTeacherTimetable = (p)   => sms.get('/timetable/export/teacher', { params: p, responseType: 'blob' });
+export const exportSchoolTimetable  = (p)   => sms.get('/timetable/export/school',  { params: p, responseType: 'blob' });

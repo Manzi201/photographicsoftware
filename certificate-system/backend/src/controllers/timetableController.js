@@ -226,3 +226,297 @@ exports.conflictReport = async (req, res) => {
     res.json({ success: true, data: conflicts, count: conflicts.length });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 };
+
+// ══════════════════════════════════════════════════════════════
+// EXCEL EXPORT HELPERS
+// ══════════════════════════════════════════════════════════════
+const ExcelJS = require('exceljs');
+
+const NAVY  = 'FF0A2156';
+const WHITE = 'FFFFFFFF';
+const LGRAY = 'FFEEEFF5';
+const LBLUE = 'FFD6E4F7';
+const DAY_NAMES = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+function navyFill() { return { type:'pattern', pattern:'solid', fgColor:{ argb: NAVY } }; }
+function lgrayFill(){ return { type:'pattern', pattern:'solid', fgColor:{ argb: LGRAY} }; }
+function lblueFill(){ return { type:'pattern', pattern:'solid', fgColor:{ argb: LBLUE} }; }
+function whiteFill(){ return { type:'pattern', pattern:'solid', fgColor:{ argb: WHITE} }; }
+function nBold(sz=10){ return { name:'Calibri', bold:true,  size:sz, color:{ argb:WHITE} }; }
+function dFont(sz=9,  bold=false){ return { name:'Calibri', bold, size:sz, color:{ argb:'FF111111'} }; }
+function thin(){ const s={style:'thin',color:{argb:'FFBBBBBB'}}; return{top:s,left:s,bottom:s,right:s}; }
+function medBot(){ return { bottom:{style:'medium',color:{argb:NAVY}}, top:thin().top, left:thin().left, right:thin().right }; }
+function centre(){ return { horizontal:'center', vertical:'middle', wrapText:true }; }
+function left()  { return { horizontal:'left',   vertical:'middle', wrapText:true }; }
+
+// Fetch all data needed for a timetable
+async function fetchTimetableData(schoolId, academicYearId, termId) {
+  const params = { school_id: schoolId };
+  const [
+    { data: periodsRaw },
+    { data: slotsRaw  },
+    { data: school    },
+    { data: yearInfo  },
+    { data: termInfo  },
+  ] = await Promise.all([
+    supabase.from('school_periods').select('*').eq('school_id', schoolId)
+      .match(termId ? { term_id: termId } : { academic_year_id: academicYearId })
+      .order('period_number'),
+    supabase.from('timetable_slots')
+      .select('*, class:classes(id,name,level), subject:subjects(id,name,code), teacher:staff(id,full_name), room:rooms(id,name), period:school_periods(id,period_number)')
+      .eq('school_id', schoolId)
+      .match(termId ? { term_id: termId, academic_year_id: academicYearId }
+                    : { academic_year_id: academicYearId }),
+    supabase.from('schools').select('school_name,city,phone,address,logo_url').eq('id', schoolId).single(),
+    supabase.from('academic_years').select('name').eq('id', academicYearId).single(),
+    termId
+      ? supabase.from('terms').select('name,number').eq('id', termId).single()
+      : Promise.resolve({ data: null }),
+  ]);
+  const periods = (periodsRaw || []).sort((a,b) => a.period_number - b.period_number);
+  const slots   = slotsRaw || [];
+  return { periods, slots, school: school || {}, yearInfo: yearInfo || {}, termInfo: termInfo || {} };
+}
+
+// Draw the standard timetable header (school name, year, term) on a worksheet
+function drawTimetableHeader(ws, school, yearInfo, termInfo, title, totalCols) {
+  // Row 1: school name
+  ws.mergeCells(1, 1, 1, totalCols);
+  const r1 = ws.getRow(1);
+  r1.height = 22;
+  const c1 = r1.getCell(1);
+  c1.value = (school.school_name || 'SCHOOL').toUpperCase();
+  c1.font  = { name:'Calibri', bold:true, size:14, color:{ argb: NAVY } };
+  c1.alignment = centre();
+
+  // Row 2: title bar
+  ws.mergeCells(2, 1, 2, totalCols);
+  const r2 = ws.getRow(2);
+  r2.height = 18;
+  const c2 = r2.getCell(1);
+  c2.value = `${title}  |  ${yearInfo.name || ''}${termInfo?.name ? '  ·  ' + termInfo.name : ''}`;
+  c2.font  = nBold(11);
+  c2.fill  = navyFill();
+  c2.alignment = centre();
+
+  // Row 3: spacer
+  ws.getRow(3).height = 5;
+}
+
+// ── GENERATE CLASS TIMETABLE ──────────────────────────────────
+exports.generateClassTimetable = async (req, res) => {
+  try {
+    const { class_id, academic_year_id, term_id } = req.query;
+    if (!class_id || !academic_year_id) return res.status(400).json({ success:false, error:'class_id and academic_year_id required' });
+
+    const { periods, slots, school, yearInfo, termInfo } = await fetchTimetableData(req.schoolId, academic_year_id, term_id);
+    const { data: cls } = await supabase.from('classes').select('name,level').eq('id', class_id).single();
+    const clsSlots = slots.filter(s => s.class_id === class_id);
+
+    // Days that have any slot
+    const usedDays = [...new Set(clsSlots.map(s => s.day_of_week))].sort();
+    const days = usedDays.length > 0 ? usedDays : [1,2,3,4,5];
+    const lessonPeriods = periods.filter(p => !p.is_break);
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = school.school_name || 'SchoolMS';
+    const ws = wb.addWorksheet(`${cls?.name || 'Class'} Timetable`, {
+      pageSetup: { paperSize:9, orientation:'landscape', fitToPage:true, fitToWidth:1, fitToHeight:0 }
+    });
+
+    const totalCols = 2 + days.length; // Period# | Period Name | Day1..DayN
+    ws.getColumn(1).width = 6;
+    ws.getColumn(2).width = 18;
+    days.forEach((_, i) => { ws.getColumn(3 + i).width = 22; });
+
+    drawTimetableHeader(ws, school, yearInfo, termInfo, `CLASS TIMETABLE — ${(cls?.name || '').toUpperCase()}`, totalCols);
+
+    // Row 4: column headers
+    const hr = ws.getRow(4); hr.height = 20;
+    [['#', 1], ['Period', 2], ...days.map((d, i) => [DAY_NAMES[d-1], 3+i])].forEach(([label, col]) => {
+      const c = hr.getCell(col);
+      c.value = label; c.font = nBold(9); c.fill = navyFill(); c.alignment = centre(); c.border = thin();
+    });
+
+    // Data rows
+    let rowNum = 5;
+    periods.forEach((p, pi) => {
+      const row = ws.getRow(rowNum++);
+      row.height = p.is_break ? 12 : 28;
+      const isBrk = p.is_break;
+
+      // # and Period name
+      const nc = row.getCell(1);
+      nc.value = p.period_number; nc.font = dFont(8, true); nc.fill = isBrk ? lgrayFill() : lblueFill();
+      nc.alignment = centre(); nc.border = thin();
+
+      const pn = row.getCell(2);
+      const timeStr = `${(p.start_time||'').slice(0,5)}–${(p.end_time||'').slice(0,5)}`;
+      pn.value = `${p.name}\n${timeStr}`; pn.font = dFont(8, true); pn.fill = isBrk ? lgrayFill() : lblueFill();
+      pn.alignment = left(); pn.border = thin();
+
+      days.forEach((day, di) => {
+        const cell = row.getCell(3 + di);
+        if (isBrk) {
+          cell.value = p.name; cell.font = dFont(8); cell.fill = lgrayFill();
+          cell.alignment = centre(); cell.border = thin();
+          return;
+        }
+        const slot = clsSlots.find(s => s.period_id === p.id && s.day_of_week === day);
+        if (slot) {
+          const lines = [
+            slot.subject?.name || '—',
+            slot.teacher?.full_name || '',
+            slot.room?.name || '',
+          ].filter(Boolean).join('\n');
+          cell.value = lines;
+          cell.font  = dFont(9, true);
+          cell.fill  = whiteFill();
+        } else {
+          cell.fill = whiteFill();
+        }
+        cell.alignment = { horizontal:'center', vertical:'middle', wrapText:true };
+        cell.border = thin();
+      });
+    });
+
+    ws.views = [{ state:'frozen', xSplit:2, ySplit:4, activeCell:'C5' }];
+
+    const fname = `timetable_${(cls?.name||'class').replace(/[^a-z0-9]/gi,'_')}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${fname}"`);
+    await wb.xlsx.write(res); res.end();
+  } catch (err) { console.error('generateClassTimetable:', err); res.status(500).json({ success:false, error:err.message }); }
+};
+
+// ── GENERATE TEACHER TIMETABLE ────────────────────────────────
+exports.generateTeacherTimetable = async (req, res) => {
+  try {
+    const { teacher_id, academic_year_id, term_id } = req.query;
+    if (!teacher_id || !academic_year_id) return res.status(400).json({ success:false, error:'teacher_id and academic_year_id required' });
+
+    const { periods, slots, school, yearInfo, termInfo } = await fetchTimetableData(req.schoolId, academic_year_id, term_id);
+    const { data: teacher } = await supabase.from('staff').select('full_name,role').eq('id', teacher_id).single();
+    const tSlots = slots.filter(s => s.teacher_id === teacher_id);
+
+    const usedDays = [...new Set(tSlots.map(s => s.day_of_week))].sort();
+    const days = usedDays.length > 0 ? usedDays : [1,2,3,4,5];
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = school.school_name || 'SchoolMS';
+    const ws = wb.addWorksheet('Teacher Timetable', {
+      pageSetup: { paperSize:9, orientation:'landscape', fitToPage:true, fitToWidth:1, fitToHeight:0 }
+    });
+
+    const totalCols = 2 + days.length;
+    ws.getColumn(1).width = 6; ws.getColumn(2).width = 18;
+    days.forEach((_, i) => { ws.getColumn(3+i).width = 22; });
+
+    drawTimetableHeader(ws, school, yearInfo, termInfo, `TEACHER TIMETABLE — ${(teacher?.full_name||'').toUpperCase()}`, totalCols);
+
+    const hr = ws.getRow(4); hr.height = 20;
+    [['#',1],['Period',2],...days.map((d,i)=>[DAY_NAMES[d-1],3+i])].forEach(([label,col])=>{
+      const c=hr.getCell(col); c.value=label; c.font=nBold(9); c.fill=navyFill(); c.alignment=centre(); c.border=thin();
+    });
+
+    let rowNum = 5;
+    periods.forEach(p => {
+      const row = ws.getRow(rowNum++);
+      row.height = p.is_break ? 12 : 28;
+      const nc = row.getCell(1); nc.value = p.period_number; nc.font=dFont(8,true); nc.fill=p.is_break?lgrayFill():lblueFill(); nc.alignment=centre(); nc.border=thin();
+      const pn = row.getCell(2); pn.value=`${p.name}\n${(p.start_time||'').slice(0,5)}–${(p.end_time||'').slice(0,5)}`; pn.font=dFont(8,true); pn.fill=p.is_break?lgrayFill():lblueFill(); pn.alignment=left(); pn.border=thin();
+      days.forEach((day,di)=>{
+        const cell = row.getCell(3+di);
+        if (p.is_break) { cell.value=p.name; cell.font=dFont(8); cell.fill=lgrayFill(); cell.alignment=centre(); cell.border=thin(); return; }
+        const slot = tSlots.find(s=>s.period_id===p.id&&s.day_of_week===day);
+        if (slot) { cell.value=`${slot.subject?.name||'—'}\n${slot.class?.name||''}\n${slot.room?.name||''}`; cell.font=dFont(9,true); cell.fill=whiteFill(); }
+        else { cell.fill=whiteFill(); }
+        cell.alignment={horizontal:'center',vertical:'middle',wrapText:true}; cell.border=thin();
+      });
+    });
+
+    // Workload summary below
+    rowNum++;
+    const smRow = ws.getRow(rowNum);
+    ws.mergeCells(rowNum, 1, rowNum, totalCols);
+    smRow.getCell(1).value = `Total periods per week: ${tSlots.length}`;
+    smRow.getCell(1).font = dFont(9, true);
+    smRow.getCell(1).fill = lblueFill();
+    smRow.getCell(1).alignment = left();
+
+    ws.views=[{state:'frozen',xSplit:2,ySplit:4,activeCell:'C5'}];
+    const fname=`teacher_timetable_${(teacher?.full_name||'teacher').replace(/[^a-z0-9]/gi,'_')}.xlsx`;
+    res.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition',`attachment; filename="${fname}"`);
+    await wb.xlsx.write(res); res.end();
+  } catch (err) { console.error('generateTeacherTimetable:',err); res.status(500).json({success:false,error:err.message}); }
+};
+
+// ── GENERATE SCHOOL TIMETABLE (all classes, one sheet per class) ──
+exports.generateSchoolTimetable = async (req, res) => {
+  try {
+    const { academic_year_id, term_id } = req.query;
+    if (!academic_year_id) return res.status(400).json({ success:false, error:'academic_year_id required' });
+
+    const { periods, slots, school, yearInfo, termInfo } = await fetchTimetableData(req.schoolId, academic_year_id, term_id);
+    const { data: classes } = await supabase.from('classes').select('id,name,level').eq('school_id', req.schoolId).order('level_order').order('name');
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = school.school_name || 'SchoolMS';
+
+    // One sheet per class
+    for (const cls of (classes || [])) {
+      const clsSlots = slots.filter(s => s.class_id === cls.id);
+      const usedDays = [...new Set(clsSlots.map(s=>s.day_of_week))].sort();
+      const days = usedDays.length > 0 ? usedDays : [1,2,3,4,5];
+      const sheetName = (cls.name || 'Class').substring(0, 31);
+      const ws = wb.addWorksheet(sheetName, { pageSetup:{paperSize:9,orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:0} });
+      const totalCols = 2 + days.length;
+      ws.getColumn(1).width=6; ws.getColumn(2).width=18;
+      days.forEach((_,i)=>{ ws.getColumn(3+i).width=20; });
+
+      drawTimetableHeader(ws, school, yearInfo, termInfo, `${cls.name.toUpperCase()}${cls.level?` (${cls.level})`:''}`, totalCols);
+
+      const hr=ws.getRow(4); hr.height=20;
+      [['#',1],['Period',2],...days.map((d,i)=>[DAY_NAMES[d-1],3+i])].forEach(([label,col])=>{
+        const c=hr.getCell(col); c.value=label; c.font=nBold(9); c.fill=navyFill(); c.alignment=centre(); c.border=thin();
+      });
+
+      let rowNum=5;
+      periods.forEach(p=>{
+        const row=ws.getRow(rowNum++); row.height=p.is_break?12:26;
+        const nc=row.getCell(1); nc.value=p.period_number; nc.font=dFont(8,true); nc.fill=p.is_break?lgrayFill():lblueFill(); nc.alignment=centre(); nc.border=thin();
+        const pn=row.getCell(2); pn.value=`${p.name}\n${(p.start_time||'').slice(0,5)}–${(p.end_time||'').slice(0,5)}`; pn.font=dFont(8,true); pn.fill=p.is_break?lgrayFill():lblueFill(); pn.alignment=left(); pn.border=thin();
+        days.forEach((day,di)=>{
+          const cell=row.getCell(3+di);
+          if(p.is_break){cell.value=p.name;cell.font=dFont(8);cell.fill=lgrayFill();cell.alignment=centre();cell.border=thin();return;}
+          const slot=clsSlots.find(s=>s.period_id===p.id&&s.day_of_week===day);
+          if(slot){cell.value=`${slot.subject?.name||'—'}\n${slot.teacher?.full_name||''}`; cell.font=dFont(9,true); cell.fill=whiteFill();}
+          else{cell.fill=whiteFill();}
+          cell.alignment={horizontal:'center',vertical:'middle',wrapText:true}; cell.border=thin();
+        });
+      });
+      ws.views=[{state:'frozen',xSplit:2,ySplit:4,activeCell:'C5'}];
+    }
+
+    // Summary sheet
+    const sumWs = wb.addWorksheet('Summary');
+    sumWs.getColumn(1).width=20; sumWs.getColumn(2).width=12; sumWs.getColumn(3).width=12;
+    ['Class','Total Slots','Days Used'].forEach((h,i)=>{
+      const c=sumWs.getRow(1).getCell(i+1); c.value=h; c.font=nBold(10); c.fill=navyFill(); c.alignment=centre(); c.border=thin();
+    });
+    (classes||[]).forEach((cls,ri)=>{
+      const clsSlots=slots.filter(s=>s.class_id===cls.id);
+      const usedDays=[...new Set(clsSlots.map(s=>s.day_of_week))].length;
+      [cls.name, clsSlots.length, usedDays].forEach((v,ci)=>{
+        const c=sumWs.getRow(ri+2).getCell(ci+1); c.value=v; c.font=dFont(9); c.alignment=ci===0?left():centre(); c.border=thin();
+        c.fill={type:'pattern',pattern:'solid',fgColor:{argb:ri%2===0?WHITE:LGRAY}};
+      });
+    });
+
+    const fname=`school_timetable_${(yearInfo.name||'').replace(/[^a-z0-9]/gi,'_')}.xlsx`;
+    res.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition',`attachment; filename="${fname}"`);
+    await wb.xlsx.write(res); res.end();
+  } catch(err){console.error('generateSchoolTimetable:',err);res.status(500).json({success:false,error:err.message});}
+};

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   Calendar, Plus, Trash2, Edit2, X, Check, ChevronDown,
   Clock, Users, BookOpen, MapPin, AlertTriangle, RefreshCw,
-  BarChart2, Grid3X3, List, Layers, User
+  BarChart2, Grid3X3, List, Layers, User, Download, FileSpreadsheet
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
@@ -11,6 +11,7 @@ import {
   getTtPeriods, createTtPeriod, updateTtPeriod, deleteTtPeriod,
   getTtSlots, upsertTtSlot, deleteTtSlot, clearClassTimetable,
   getTtWorkload, getTtConflicts,
+  exportClassTimetable, exportTeacherTimetable, exportSchoolTimetable,
 } from '../../api';
 
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
@@ -219,6 +220,7 @@ export default function Timetable() {
   const [workload, setWorkload] = useState([]);
   const [conflicts,setConflicts]= useState([]);
   const [loading,  setLoading]  = useState(false);
+  const [dlState,  setDlState]  = useState(''); // 'class'|'teacher'|'school'
 
   // Filters
   const [selYear,  setSelYear]  = useState('');
@@ -226,11 +228,52 @@ export default function Timetable() {
   const [selClass, setSelClass] = useState('');
 
   // UI
-  const [tab,         setTab]         = useState('timetable'); // timetable|periods|rooms|workload|conflicts
-  const [slotModal,   setSlotModal]   = useState(null);  // { periodId, dayOfWeek, slot|null }
+  const [tab,         setTab]         = useState('timetable'); // timetable|periods|rooms|workload|conflicts|generate
+  const [slotModal,   setSlotModal]   = useState(null);
   const [roomModal,   setRoomModal]   = useState(null);
   const [periodModal, setPeriodModal] = useState(null);
-  const [showDays,    setShowDays]    = useState([1,2,3,4,5]); // which days to show (1=Mon)
+  const [showDays,    setShowDays]    = useState([1,2,3,4,5]);
+  const [genTeacher,  setGenTeacher]  = useState(''); // for teacher timetable export
+
+  const downloadFile = async (fn, params, filename) => {
+    try {
+      const res = await fn(params);
+      const url = URL.createObjectURL(new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+      const a = document.createElement('a'); a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); URL.revokeObjectURL(url); document.body.removeChild(a);
+      toast.success('Downloaded!');
+    } catch (err) { toast.error(err.response?.data?.error || 'Download failed'); }
+  };
+
+  const handleExportClass = async () => {
+    if (!selClass || !selYear) { toast.error('Select class and academic year first'); return; }
+    setDlState('class');
+    await downloadFile(exportClassTimetable,
+      { class_id: selClass, academic_year_id: selYear, ...(selTerm ? { term_id: selTerm } : {}) },
+      `class_timetable.xlsx`
+    );
+    setDlState('');
+  };
+
+  const handleExportTeacher = async () => {
+    if (!genTeacher || !selYear) { toast.error('Select teacher and academic year'); return; }
+    setDlState('teacher');
+    await downloadFile(exportTeacherTimetable,
+      { teacher_id: genTeacher, academic_year_id: selYear, ...(selTerm ? { term_id: selTerm } : {}) },
+      `teacher_timetable.xlsx`
+    );
+    setDlState('');
+  };
+
+  const handleExportSchool = async () => {
+    if (!selYear) { toast.error('Select academic year first'); return; }
+    setDlState('school');
+    await downloadFile(exportSchoolTimetable,
+      { academic_year_id: selYear, ...(selTerm ? { term_id: selTerm } : {}) },
+      `school_timetable.xlsx`
+    );
+    setDlState('');
+  };
 
   // Boot
   useEffect(() => {
@@ -299,11 +342,12 @@ export default function Timetable() {
   const selTrmObj     = terms.find(t => t.id === selTerm);
 
   const TABS = [
-    { key:'timetable', label:'Timetable Grid', icon: Grid3X3 },
-    { key:'periods',   label:'Time Periods',   icon: Clock },
-    { key:'rooms',     label:'Rooms',          icon: MapPin },
-    { key:'workload',  label:'Teacher Workload', icon: BarChart2 },
-    { key:'conflicts', label:'Conflicts',       icon: AlertTriangle },
+    { key:'timetable', label:'Timetable Grid',    icon: Grid3X3 },
+    { key:'periods',   label:'Time Periods',      icon: Clock },
+    { key:'rooms',     label:'Rooms',             icon: MapPin },
+    { key:'generate',  label:'Generate / Export', icon: FileSpreadsheet },
+    { key:'workload',  label:'Teacher Workload',  icon: BarChart2 },
+    { key:'conflicts', label:'Conflicts',         icon: AlertTriangle },
   ];
 
   return (
@@ -555,6 +599,101 @@ export default function Timetable() {
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════
+            TAB: GENERATE / EXPORT
+        ══════════════════════════════════════════════════ */}
+        {tab === 'generate' && (
+          <div className="space-y-4">
+
+            {/* Class Timetable */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-50">
+                <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center">
+                  <Grid3X3 className="w-4.5 h-4.5 w-5 h-5 text-blue-600"/>
+                </div>
+                <div>
+                  <p className="font-bold text-gray-900 text-sm">Class Timetable</p>
+                  <p className="text-xs text-gray-400">Export the full week schedule for one class</p>
+                </div>
+              </div>
+              <div className="p-5">
+                <p className="text-xs text-gray-500 mb-3">
+                  Uses the <span className="font-semibold text-gray-700">Class</span> selected in the filter bar above.
+                  {selCls ? <span className="ml-1 text-blue-600 font-semibold">→ {selCls.name}</span> : <span className="ml-1 text-amber-600"> Select a class first.</span>}
+                </p>
+                <button onClick={handleExportClass} disabled={!!dlState || !selClass || !selYear}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold disabled:opacity-50 transition-colors shadow-sm">
+                  {dlState === 'class'
+                    ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/>
+                    : <Download className="w-4 h-4"/>}
+                  Download Class Timetable (.xlsx)
+                </button>
+              </div>
+            </div>
+
+            {/* Teacher Timetable */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-50">
+                <div className="w-9 h-9 rounded-xl bg-violet-50 flex items-center justify-center">
+                  <User className="w-5 h-5 text-violet-600"/>
+                </div>
+                <div>
+                  <p className="font-bold text-gray-900 text-sm">Teacher's Timetable</p>
+                  <p className="text-xs text-gray-400">All classes &amp; periods assigned to one teacher</p>
+                </div>
+              </div>
+              <div className="p-5 space-y-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">Select Teacher</label>
+                  <div className="relative max-w-xs">
+                    <select value={genTeacher} onChange={e => setGenTeacher(e.target.value)} className={SEL}>
+                      <option value="">— Select Teacher —</option>
+                      {staff.filter(s => s.role === 'teacher' || s.role === 'dos').map(s => (
+                        <option key={s.id} value={s.id}>{s.full_name}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none"/>
+                  </div>
+                </div>
+                <button onClick={handleExportTeacher} disabled={!!dlState || !genTeacher || !selYear}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-sm font-bold disabled:opacity-50 transition-colors shadow-sm">
+                  {dlState === 'teacher'
+                    ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/>
+                    : <Download className="w-4 h-4"/>}
+                  Download Teacher Timetable (.xlsx)
+                </button>
+              </div>
+            </div>
+
+            {/* School Timetable */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-50">
+                <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center">
+                  <FileSpreadsheet className="w-5 h-5 text-emerald-600"/>
+                </div>
+                <div>
+                  <p className="font-bold text-gray-900 text-sm">Full School Timetable</p>
+                  <p className="text-xs text-gray-400">One sheet per class — complete school overview</p>
+                </div>
+              </div>
+              <div className="p-5">
+                <p className="text-xs text-gray-500 mb-3">
+                  Generates a workbook with <span className="font-semibold text-gray-700">one sheet per class</span> + a summary sheet.
+                  Requires academic year to be selected.
+                </p>
+                <button onClick={handleExportSchool} disabled={!!dlState || !selYear}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold disabled:opacity-50 transition-colors shadow-sm">
+                  {dlState === 'school'
+                    ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/>
+                    : <Download className="w-4 h-4"/>}
+                  Download Full School Timetable (.xlsx)
+                </button>
+              </div>
+            </div>
+
           </div>
         )}
 
