@@ -606,51 +606,53 @@ export default function Timetable() {
             TAB: GENERATE / EXPORT
         ══════════════════════════════════════════════════ */}
         {tab === 'generate' && (
-          <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
 
             {/* Class Timetable */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col overflow-hidden">
               <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-50">
-                <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center">
-                  <Grid3X3 className="w-4.5 h-4.5 w-5 h-5 text-blue-600"/>
+                <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+                  <Grid3X3 className="w-5 h-5 text-blue-600"/>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="font-bold text-gray-900 text-sm">Class Timetable</p>
-                  <p className="text-xs text-gray-400">Export the full week schedule for one class</p>
+                  <p className="text-xs text-gray-400">Full week for one class</p>
                 </div>
               </div>
-              <div className="p-5">
-                <p className="text-xs text-gray-500 mb-3">
-                  Uses the <span className="font-semibold text-gray-700">Class</span> selected in the filter bar above.
-                  {selCls ? <span className="ml-1 text-blue-600 font-semibold">→ {selCls.name}</span> : <span className="ml-1 text-amber-600"> Select a class first.</span>}
+              <div className="p-5 flex flex-col gap-4 flex-1">
+                <p className="text-xs text-gray-500">
+                  Class selected above:
+                  {selCls
+                    ? <span className="ml-1 font-bold text-blue-600">{selCls.name}</span>
+                    : <span className="ml-1 text-amber-600">None selected</span>}
                 </p>
                 <button onClick={handleExportClass} disabled={!!dlState || !selClass || !selYear}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold disabled:opacity-50 transition-colors shadow-sm">
+                  className="mt-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold disabled:opacity-50 transition-colors shadow-sm w-full">
                   {dlState === 'class'
                     ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/>
                     : <Download className="w-4 h-4"/>}
-                  Download Class Timetable (.xlsx)
+                  Download .xlsx
                 </button>
               </div>
             </div>
 
             {/* Teacher Timetable */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col overflow-hidden">
               <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-50">
-                <div className="w-9 h-9 rounded-xl bg-violet-50 flex items-center justify-center">
+                <div className="w-9 h-9 rounded-xl bg-violet-50 flex items-center justify-center shrink-0">
                   <User className="w-5 h-5 text-violet-600"/>
                 </div>
-                <div>
-                  <p className="font-bold text-gray-900 text-sm">Teacher's Timetable</p>
-                  <p className="text-xs text-gray-400">All classes &amp; periods assigned to one teacher</p>
+                <div className="min-w-0">
+                  <p className="font-bold text-gray-900 text-sm">Teacher Timetable</p>
+                  <p className="text-xs text-gray-400">All classes for one teacher</p>
                 </div>
               </div>
-              <div className="p-5 space-y-3">
+              <div className="p-5 flex flex-col gap-4 flex-1">
                 <div>
-                  <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">Select Teacher</label>
-                  <div className="relative max-w-xs">
+                  <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">Teacher</label>
+                  <div className="relative">
                     <select value={genTeacher} onChange={e => setGenTeacher(e.target.value)} className={SEL}>
-                      <option value="">— Select Teacher —</option>
+                      <option value="">— Select —</option>
                       {staff.filter(s => s.role === 'teacher' || s.role === 'dos').map(s => (
                         <option key={s.id} value={s.id}>{s.full_name}</option>
                       ))}
@@ -659,37 +661,41 @@ export default function Timetable() {
                   </div>
                 </div>
                 <button onClick={handleExportTeacher} disabled={!!dlState || !genTeacher || !selYear}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-sm font-bold disabled:opacity-50 transition-colors shadow-sm">
+                  className="mt-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-sm font-bold disabled:opacity-50 transition-colors shadow-sm w-full">
                   {dlState === 'teacher'
                     ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/>
                     : <Download className="w-4 h-4"/>}
-                  Download Teacher Timetable (.xlsx)
+                  Download .xlsx
                 </button>
               </div>
             </div>
 
-            {/* School Timetable */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            {/* Full School Timetable */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col overflow-hidden">
               <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-50">
-                <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center">
+                <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0">
                   <FileSpreadsheet className="w-5 h-5 text-emerald-600"/>
                 </div>
-                <div>
-                  <p className="font-bold text-gray-900 text-sm">Full School Timetable</p>
-                  <p className="text-xs text-gray-400">One sheet per class — complete school overview</p>
+                <div className="min-w-0">
+                  <p className="font-bold text-gray-900 text-sm">Full School</p>
+                  <p className="text-xs text-gray-400">One sheet per class</p>
                 </div>
               </div>
-              <div className="p-5">
-                <p className="text-xs text-gray-500 mb-3">
-                  Generates a workbook with <span className="font-semibold text-gray-700">one sheet per class</span> + a summary sheet.
-                  Requires academic year to be selected.
+              <div className="p-5 flex flex-col gap-4 flex-1">
+                <p className="text-xs text-gray-500">
+                  All classes in
+                  {selYear
+                    ? <span className="ml-1 font-bold text-emerald-600">{years.find(y=>y.id===selYear)?.name}</span>
+                    : <span className="ml-1 text-amber-600"> no year selected</span>}
+                  {selTerm && <span className="text-gray-400"> · {selTrmObj?.name}</span>}
+                  <span className="block mt-1">Includes summary sheet.</span>
                 </p>
                 <button onClick={handleExportSchool} disabled={!!dlState || !selYear}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold disabled:opacity-50 transition-colors shadow-sm">
+                  className="mt-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold disabled:opacity-50 transition-colors shadow-sm w-full">
                   {dlState === 'school'
                     ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/>
                     : <Download className="w-4 h-4"/>}
-                  Download Full School Timetable (.xlsx)
+                  Download .xlsx
                 </button>
               </div>
             </div>
