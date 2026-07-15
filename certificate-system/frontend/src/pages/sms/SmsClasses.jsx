@@ -231,6 +231,55 @@ function ClassModal({ cls, years, staffList, onSave, onClose }) {
   );
 }
 
+// ── Predefined subject list (Rwanda Primary curriculum) ───────
+const PREDEFINED_SUBJECTS = [
+  {
+    group: '★ Core Academic Subjects',
+    items: [
+      { name:'Kinyarwanda',                          code:'KINY', is_core:true,  maxPW:8, order:1  },
+      { name:'English',                              code:'ENG',  is_core:true,  maxPW:8, order:2  },
+      { name:'Mathematics',                          code:'MATH', is_core:true,  maxPW:8, order:3  },
+      { name:'French',                               code:'FRA',  is_core:false, maxPW:5, order:4  },
+      { name:'Science and Elementary Technology',    code:'SET',  is_core:true,  maxPW:6, order:5  },
+      { name:'Social and Religious Studies',         code:'SRS',  is_core:true,  maxPW:5, order:6  },
+      { name:'Creative Arts',                        code:'CA',   is_core:false, maxPW:1, order:7  },
+      { name:'Physical Education and Sports',        code:'PES',  is_core:false, maxPW:1, order:8  },
+      { name:'ICT',                                  code:'ICT',  is_core:false, maxPW:2, order:9  },
+    ],
+  },
+  {
+    group: 'Cross-Cutting & Integrated Subjects',
+    items: [
+      { name:'Genocide Studies',                     code:'GEN',  is_core:false, maxPW:1, order:10 },
+      { name:'Environment and Sustainability',       code:'ENV',  is_core:false, maxPW:1, order:11 },
+      { name:'Financial Education',                  code:'FIN',  is_core:false, maxPW:1, order:12 },
+      { name:'Comprehensive Sexuality Education',    code:'CSE',  is_core:false, maxPW:1, order:13 },
+      { name:'Peace and Values Education',           code:'PVE',  is_core:false, maxPW:1, order:14 },
+      { name:'Standardization Culture',              code:'STD',  is_core:false, maxPW:1, order:15 },
+      { name:'Inclusive Education',                  code:'INC',  is_core:false, maxPW:1, order:16 },
+      { name:'Gender and Family Promotion',          code:'GFP',  is_core:false, maxPW:1, order:17 },
+      { name:'Guidance and Counselling',             code:'GNC',  is_core:false, maxPW:1, order:18 },
+      { name:'Assembly',                             code:'ASM',  is_core:false, maxPW:1, order:19 },
+    ],
+  },
+  {
+    group: 'Co-curricular & Club Activities',
+    items: [
+      { name:'Debate Club',                          code:'DEB',  is_core:false, maxPW:1, order:20 },
+      { name:'Reading Club',                         code:'RDG',  is_core:false, maxPW:1, order:21 },
+      { name:'ICT Club',                             code:'ICLB', is_core:false, maxPW:1, order:22 },
+      { name:'Science Club',                         code:'SCL',  is_core:false, maxPW:1, order:23 },
+      { name:'Environment Club',                     code:'ECL',  is_core:false, maxPW:1, order:24 },
+      { name:'Sports and Games',                     code:'SPT',  is_core:false, maxPW:1, order:25 },
+      { name:'Music, Dance and Drama',               code:'MDD',  is_core:false, maxPW:1, order:26 },
+      { name:'Scouting',                             code:'SCT',  is_core:false, maxPW:1, order:27 },
+      { name:'School Choir',                         code:'CHR',  is_core:false, maxPW:1, order:28 },
+      { name:'Itorero',                              code:'ITO',  is_core:false, maxPW:1, order:29 },
+      { name:'Patriotism Activities',                code:'PAT',  is_core:false, maxPW:1, order:30 },
+    ],
+  },
+];
+
 // ── Subject Modal (create + edit) ────────────────────────────
 function SubjectModal({ subject, onSave, onClose }) {
   const [form, setForm] = useState({
@@ -271,8 +320,45 @@ function SubjectModal({ subject, onSave, onClose }) {
       <div className="p-6 space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2">
-            <label className="block text-xs font-semibold text-gray-600 mb-1">Subject Name *</label>
-            <input className="input-field" value={form.name} onChange={f('name')} placeholder="e.g. Mathematics" autoFocus/>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Subject *</label>
+            {subject?.id ? (
+              // Editing: keep the current name but allow changing
+              <input className="input-field" value={form.name} onChange={f('name')} placeholder="Subject name"/>
+            ) : (
+              // Creating: pick from predefined list OR type custom
+              <div className="space-y-2">
+                <div className="relative">
+                  <select
+                    className="select-field appearance-none"
+                    value={PREDEFINED_SUBJECTS.some(g => g.items.some(i => i.name === form.name)) ? form.name : '__custom'}
+                    onChange={e => {
+                      if (e.target.value === '__custom') return;
+                      const found = PREDEFINED_SUBJECTS.flatMap(g => g.items).find(i => i.name === e.target.value);
+                      if (found) setForm(p => ({
+                        ...p,
+                        name:             found.name,
+                        code:             found.code  || p.code,
+                        is_core:          found.is_core ?? p.is_core,
+                        max_periods_week: found.maxPW  ?? p.max_periods_week,
+                        sort_order:       found.order  ?? p.sort_order,
+                      }));
+                    }}
+                    autoFocus>
+                    <option value="__custom">— Select from list —</option>
+                    {PREDEFINED_SUBJECTS.map(grp => (
+                      <optgroup key={grp.group} label={grp.group}>
+                        {grp.items.map(item => (
+                          <option key={item.name} value={item.name}>{item.name}</option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none"/>
+                </div>
+                <input className="input-field text-sm" value={form.name} onChange={f('name')}
+                  placeholder="Or type a custom subject name…"/>
+              </div>
+            )}
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Short Code</label>
