@@ -676,17 +676,29 @@ exports.autoGenerate = async (req, res) => {
       });
 
       // ── Step 3: build ordered slot queue per day ─────────────
-      // queue[day] = array of subject_ids to place (in order, duplicated per daySlots)
+      // Each day's queue lists subjects to place (duplicated per daySlots count)
+      // INTERLEAVED so subjects alternate instead of bunching
       const dayQueues = {};
       days.forEach(day => {
+        // Build a round-robin interleaved queue
+        // e.g. if MATH=2, KINY=1, SRS=2 → [MATH, SRS, KINY, MATH, SRS]
+        const buckets = subs
+          .map(s => ({ s, n: subDaySlots[s.sid]?.[day] || 0 }))
+          .filter(b => b.n > 0)
+          .sort((a,b) => b.s.sortOrder - a.s.sortOrder); // reverse for pop()
+
         const q = [];
-        subs.forEach(s => {
-          const n = subDaySlots[s.sid]?.[day] || 0;
-          for (let k = 0; k < n; k++) q.push(s);
-        });
-        // Shuffle slightly to avoid same order every day while keeping priority
-        // (sort by sortOrder + small offset to interleave)
-        q.sort((a,b) => a.sortOrder - b.sortOrder);
+        let remaining = [...buckets.map(b => ({ ...b }))];
+        while (remaining.some(b => b.n > 0)) {
+          // Each round: pick one from each subject (round-robin by priority)
+          const round = remaining
+            .filter(b => b.n > 0)
+            .sort((a,b) => a.s.sortOrder - b.s.sortOrder); // high-priority first
+          for (const b of round) {
+            q.push(b.s);
+            b.n--;
+          }
+        }
         dayQueues[day] = q;
       });
 
@@ -710,11 +722,12 @@ exports.autoGenerate = async (req, res) => {
               cs = queue[(qIdx + attempt) % queue.length];
             } else {
               // Fallback: pick subject with most remaining quota that fits
+              // STRICT: still enforce max-2-per-day
               cs = [...subs]
                 .filter(s => {
                   const wc = weekCount[s.sid] || 0;
                   const dc = dayCount[day][s.sid] || 0;
-                  return wc < targetMap[s.sid] && dc < 2;
+                  return dc < 2 && wc < targetMap[s.sid];
                 })
                 .sort((a,b) => {
                   const remA = targetMap[a.sid] - (weekCount[a.sid]||0);
@@ -727,6 +740,7 @@ exports.autoGenerate = async (req, res) => {
 
             const dc = dayCount[day][cs.sid] || 0;
             const wc = weekCount[cs.sid]     || 0;
+            // STRICT: enforce max 2 per day per subject
             if (dc >= 2) continue;
             if (wc >= targetMap[cs.sid]) continue;
 
@@ -740,34 +754,62 @@ exports.autoGenerate = async (req, res) => {
             if (attempt < queue.length) qIdx = (qIdx + attempt + 1) % queue.length;
 
             slotsToInsert.push({
-              school_id:       schoolId,
-              academic_year_id,
-              term_id:         term_id || null,
-              class_id:        cls.id,
-              subject_id:      cs.sid,
-              teacher_id:      cs.tid,
-              period_id:       period.id,
-              day_of_week:     day,
-              room_id:         null,
+              school_id: schoolId, academic_year_id,
+              term_id:   term_id || null,
+              class_id:  cls.id,
+              subject_id: cs.sid,
+              teacher_id: cs.tid,
+              period_id:  period.id,
+              day_of_week: day,
+              room_id:    null,
             });
             placed = true;
             break;
           }
 
           if (!placed) {
-            // Absolute fallback: ignore quota, just fill with teacher-free subject
-            const fb = subs.find(s => !s.tid || !teacherBusy.has(tKey(s.tid, day, period.id)));
+            // Last-resort fallback: STILL respect max-2-per-day, ignore weekly quota
+            // Pick subject with fewest appearances today that has a free teacher
+            const fb = [...subs]
+              .filter(s => {
+                const dc = dayCount[day][s.sid] || 0;
+                return dc < 2 && (!s.tid || !teacherBusy.has(tKey(s.tid, day, period.id)));
+              })
+              .sort((a,b) => (dayCount[day][a.sid]||0) - (dayCount[day][b.sid]||0))[0];
+
             if (fb) {
               if (fb.tid) teacherBusy.add(tKey(fb.tid, day, period.id));
               dayCount[day][fb.sid] = (dayCount[day][fb.sid] || 0) + 1;
               weekCount[fb.sid]     = (weekCount[fb.sid] || 0) + 1;
               slotsToInsert.push({
                 school_id: schoolId, academic_year_id,
-                term_id: term_id || null, class_id: cls.id,
-                subject_id: fb.sid, teacher_id: fb.tid,
-                period_id: period.id, day_of_week: day, room_id: null,
+                term_id:   term_id || null,
+                class_id:  cls.id,
+                subject_id: fb.sid,
+                teacher_id: fb.tid,
+                period_id:  period.id,
+                day_of_week: day,
+                room_id:    null,
               });
-            } else { totalConflicts++; }
+            } else {
+              // Absolute last resort: ignore day limit but not teacher conflict
+              const fb2 = subs.find(s => !s.tid || !teacherBusy.has(tKey(s.tid, day, period.id)));
+              if (fb2) {
+                if (fb2.tid) teacherBusy.add(tKey(fb2.tid, day, period.id));
+                dayCount[day][fb2.sid] = (dayCount[day][fb2.sid] || 0) + 1;
+                weekCount[fb2.sid]     = (weekCount[fb2.sid] || 0) + 1;
+                slotsToInsert.push({
+                  school_id: schoolId, academic_year_id,
+                  term_id:   term_id || null,
+                  class_id:  cls.id,
+                  subject_id: fb2.sid,
+                  teacher_id: fb2.tid,
+                  period_id:  period.id,
+                  day_of_week: day,
+                  room_id:    null,
+                });
+              } else { totalConflicts++; }
+            }
           }
         }
       }
