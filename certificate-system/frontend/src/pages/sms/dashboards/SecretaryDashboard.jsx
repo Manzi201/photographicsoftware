@@ -71,9 +71,9 @@ export default function SecretaryDashboard() {
           {/* Stats strip */}
           <div className="grid grid-cols-3 gap-2 mt-4">
             {[
-              { label: 'Students',    value: loading ? '…' : students.length },
-              { label: 'Classes',     value: loading ? '…' : classes.length  },
-              { label: 'Fee Issues',  value: loading ? '…' : issues           },
+              { label: 'Students', value: loading ? '…' : students.length },
+              { label: 'Classes',  value: loading ? '…' : classes.length  },
+              { label: 'Terms',    value: loading ? '…' : terms.length    },
             ].map(s => (
               <div key={s.label} className="bg-white/10 border border-white/10 rounded-xl px-3 py-2.5 text-center">
                 <p className="text-lg font-bold text-white leading-tight">{s.value}</p>
