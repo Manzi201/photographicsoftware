@@ -462,25 +462,53 @@ ALTER TABLE subjects ADD COLUMN IF NOT EXISTS is_core            BOOLEAN DEFAULT
 ALTER TABLE subjects ADD COLUMN IF NOT EXISTS max_periods_week   INT     DEFAULT 7;
 
 -- Fix max_periods_week for existing subjects by code
--- Mathematics can have 8-9, all other core subjects max 7
-UPDATE subjects SET max_periods_week = 9 WHERE UPPER(code) IN ('MATH','MTH')           AND (max_periods_week IS NULL OR max_periods_week > 9);
-UPDATE subjects SET max_periods_week = 7 WHERE UPPER(code) IN ('KINY','KIN')           AND (max_periods_week IS NULL OR max_periods_week > 7);
-UPDATE subjects SET max_periods_week = 7 WHERE UPPER(code) IN ('ENG','ENGL')           AND (max_periods_week IS NULL OR max_periods_week > 7);
-UPDATE subjects SET max_periods_week = 6 WHERE UPPER(code) IN ('SET','SCI')            AND (max_periods_week IS NULL OR max_periods_week > 6);
-UPDATE subjects SET max_periods_week = 5 WHERE UPPER(code) IN ('SRS','SOC')            AND (max_periods_week IS NULL OR max_periods_week > 5);
-UPDATE subjects SET max_periods_week = 3 WHERE UPPER(code) IN ('FRA','FRE','FRENCH')   AND (max_periods_week IS NULL OR max_periods_week > 3);
-UPDATE subjects SET max_periods_week = 1 WHERE UPPER(code) IN ('CA','ART','ARTS')      AND (max_periods_week IS NULL OR max_periods_week > 1);
-UPDATE subjects SET max_periods_week = 1 WHERE UPPER(code) IN ('PES','PE','SPORT')     AND (max_periods_week IS NULL OR max_periods_week > 1);
-UPDATE subjects SET max_periods_week = 2 WHERE UPPER(code) IN ('ICT','COMP')           AND (max_periods_week IS NULL OR max_periods_week > 2);
--- Also cap by name for schools that didn't set codes
-UPDATE subjects SET max_periods_week = 9 WHERE LOWER(name) LIKE '%math%'               AND (max_periods_week IS NULL OR max_periods_week > 9);
-UPDATE subjects SET max_periods_week = 7 WHERE LOWER(name) LIKE '%kinyarwanda%'        AND (max_periods_week IS NULL OR max_periods_week > 7);
-UPDATE subjects SET max_periods_week = 7 WHERE LOWER(name) LIKE '%english%'            AND (max_periods_week IS NULL OR max_periods_week > 7);
-UPDATE subjects SET max_periods_week = 6 WHERE LOWER(name) LIKE '%science%'            AND (max_periods_week IS NULL OR max_periods_week > 6);
-UPDATE subjects SET max_periods_week = 5 WHERE LOWER(name) LIKE '%social%'             AND (max_periods_week IS NULL OR max_periods_week > 5);
-UPDATE subjects SET max_periods_week = 3 WHERE LOWER(name) LIKE '%french%'             AND (max_periods_week IS NULL OR max_periods_week > 3);
-UPDATE subjects SET max_periods_week = 1 WHERE LOWER(name) LIKE '%creative%'           AND (max_periods_week IS NULL OR max_periods_week > 1);
-UPDATE subjects SET max_periods_week = 1 WHERE LOWER(name) LIKE '%physical%'           AND (max_periods_week IS NULL OR max_periods_week > 1);
+-- Run these one by one if you hit deadlock, or use the DO block below
+DO $$
+BEGIN
+  -- Mathematics: max 9
+  UPDATE subjects SET max_periods_week = 9
+    WHERE max_periods_week > 9
+      AND (UPPER(code) IN ('MATH','MTH') OR LOWER(name) LIKE '%math%');
+  -- Kinyarwanda: max 7
+  UPDATE subjects SET max_periods_week = 7
+    WHERE max_periods_week > 7
+      AND (UPPER(code) IN ('KINY','KIN') OR LOWER(name) LIKE '%kinyarwanda%');
+  -- English: max 7
+  UPDATE subjects SET max_periods_week = 7
+    WHERE max_periods_week > 7
+      AND (UPPER(code) IN ('ENG','ENGL') OR LOWER(name) LIKE '%english%');
+  -- Science: max 6
+  UPDATE subjects SET max_periods_week = 6
+    WHERE max_periods_week > 6
+      AND (UPPER(code) IN ('SET','SCI') OR LOWER(name) LIKE '%science%');
+  -- Social: max 5
+  UPDATE subjects SET max_periods_week = 5
+    WHERE max_periods_week > 5
+      AND (UPPER(code) IN ('SRS','SOC') OR LOWER(name) LIKE '%social%');
+  -- French: max 3
+  UPDATE subjects SET max_periods_week = 3
+    WHERE max_periods_week > 3
+      AND (UPPER(code) IN ('FRA','FRE','FRENCH') OR LOWER(name) LIKE '%french%');
+  -- Creative Arts: max 1
+  UPDATE subjects SET max_periods_week = 1
+    WHERE max_periods_week > 1
+      AND (UPPER(code) IN ('CA','ART','ARTS') OR LOWER(name) LIKE '%creative%');
+  -- PE: max 1
+  UPDATE subjects SET max_periods_week = 1
+    WHERE max_periods_week > 1
+      AND (UPPER(code) IN ('PES','PE','SPORT') OR LOWER(name) LIKE '%physical%');
+  -- Also set defaults that are NULL
+  UPDATE subjects SET max_periods_week = 9
+    WHERE max_periods_week IS NULL
+      AND (UPPER(code) IN ('MATH','MTH') OR LOWER(name) LIKE '%math%');
+  UPDATE subjects SET max_periods_week = 7
+    WHERE max_periods_week IS NULL
+      AND (LOWER(name) LIKE '%kinyarwanda%' OR LOWER(name) LIKE '%english%');
+  UPDATE subjects SET max_periods_week = 7
+    WHERE max_periods_week IS NULL AND is_core = true;
+  UPDATE subjects SET max_periods_week = 2
+    WHERE max_periods_week IS NULL AND (is_core = false OR is_core IS NULL);
+END $$;
 
 -- class_subjects: per-class sort order override + core flag override
 ALTER TABLE class_subjects ADD COLUMN IF NOT EXISTS sort_order INT DEFAULT 999;
