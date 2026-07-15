@@ -290,10 +290,10 @@ const PREDEFINED_SUBJECTS = [
   {
     group: '★ Core Academic Subjects',
     items: [
-      { name:'Kinyarwanda',                          code:'KINY', is_core:true,  maxPW:8, order:1  },
-      { name:'English',                              code:'ENG',  is_core:true,  maxPW:8, order:2  },
-      { name:'Mathematics',                          code:'MATH', is_core:true,  maxPW:8, order:3  },
-      { name:'French',                               code:'FRA',  is_core:false, maxPW:5, order:4  },
+      { name:'Kinyarwanda',                          code:'KINY', is_core:true,  maxPW:7, order:1  },
+      { name:'English',                              code:'ENG',  is_core:true,  maxPW:7, order:2  },
+      { name:'Mathematics',                          code:'MATH', is_core:true,  maxPW:9, order:3  },
+      { name:'French',                               code:'FRA',  is_core:false, maxPW:3, order:4  },
       { name:'Science and Elementary Technology',    code:'SET',  is_core:true,  maxPW:6, order:5  },
       { name:'Social and Religious Studies',         code:'SRS',  is_core:true,  maxPW:5, order:6  },
       { name:'Creative Arts',                        code:'CA',   is_core:false, maxPW:1, order:7  },

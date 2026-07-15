@@ -461,6 +461,27 @@ ALTER TABLE subjects ADD COLUMN IF NOT EXISTS sort_order         INT     DEFAULT
 ALTER TABLE subjects ADD COLUMN IF NOT EXISTS is_core            BOOLEAN DEFAULT false;
 ALTER TABLE subjects ADD COLUMN IF NOT EXISTS max_periods_week   INT     DEFAULT 7;
 
+-- Fix max_periods_week for existing subjects by code
+-- Mathematics can have 8-9, all other core subjects max 7
+UPDATE subjects SET max_periods_week = 9 WHERE UPPER(code) IN ('MATH','MTH')           AND (max_periods_week IS NULL OR max_periods_week > 9);
+UPDATE subjects SET max_periods_week = 7 WHERE UPPER(code) IN ('KINY','KIN')           AND (max_periods_week IS NULL OR max_periods_week > 7);
+UPDATE subjects SET max_periods_week = 7 WHERE UPPER(code) IN ('ENG','ENGL')           AND (max_periods_week IS NULL OR max_periods_week > 7);
+UPDATE subjects SET max_periods_week = 6 WHERE UPPER(code) IN ('SET','SCI')            AND (max_periods_week IS NULL OR max_periods_week > 6);
+UPDATE subjects SET max_periods_week = 5 WHERE UPPER(code) IN ('SRS','SOC')            AND (max_periods_week IS NULL OR max_periods_week > 5);
+UPDATE subjects SET max_periods_week = 3 WHERE UPPER(code) IN ('FRA','FRE','FRENCH')   AND (max_periods_week IS NULL OR max_periods_week > 3);
+UPDATE subjects SET max_periods_week = 1 WHERE UPPER(code) IN ('CA','ART','ARTS')      AND (max_periods_week IS NULL OR max_periods_week > 1);
+UPDATE subjects SET max_periods_week = 1 WHERE UPPER(code) IN ('PES','PE','SPORT')     AND (max_periods_week IS NULL OR max_periods_week > 1);
+UPDATE subjects SET max_periods_week = 2 WHERE UPPER(code) IN ('ICT','COMP')           AND (max_periods_week IS NULL OR max_periods_week > 2);
+-- Also cap by name for schools that didn't set codes
+UPDATE subjects SET max_periods_week = 9 WHERE LOWER(name) LIKE '%math%'               AND (max_periods_week IS NULL OR max_periods_week > 9);
+UPDATE subjects SET max_periods_week = 7 WHERE LOWER(name) LIKE '%kinyarwanda%'        AND (max_periods_week IS NULL OR max_periods_week > 7);
+UPDATE subjects SET max_periods_week = 7 WHERE LOWER(name) LIKE '%english%'            AND (max_periods_week IS NULL OR max_periods_week > 7);
+UPDATE subjects SET max_periods_week = 6 WHERE LOWER(name) LIKE '%science%'            AND (max_periods_week IS NULL OR max_periods_week > 6);
+UPDATE subjects SET max_periods_week = 5 WHERE LOWER(name) LIKE '%social%'             AND (max_periods_week IS NULL OR max_periods_week > 5);
+UPDATE subjects SET max_periods_week = 3 WHERE LOWER(name) LIKE '%french%'             AND (max_periods_week IS NULL OR max_periods_week > 3);
+UPDATE subjects SET max_periods_week = 1 WHERE LOWER(name) LIKE '%creative%'           AND (max_periods_week IS NULL OR max_periods_week > 1);
+UPDATE subjects SET max_periods_week = 1 WHERE LOWER(name) LIKE '%physical%'           AND (max_periods_week IS NULL OR max_periods_week > 1);
+
 -- class_subjects: per-class sort order override + core flag override
 ALTER TABLE class_subjects ADD COLUMN IF NOT EXISTS sort_order INT DEFAULT 999;
 ALTER TABLE class_subjects ADD COLUMN IF NOT EXISTS is_core    BOOLEAN DEFAULT false;

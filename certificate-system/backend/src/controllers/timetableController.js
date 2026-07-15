@@ -99,8 +99,7 @@ exports.getSlots = async (req, res) => {
         teacher:staff(id,full_name),
         room:rooms(id,name),
         period:school_periods(id,name,period_number,start_time,end_time,is_break)
-      `)
-      .eq('school_id', req.schoolId);
+      `)      .eq('school_id', req.schoolId);
     if (class_id)         q = q.eq('class_id', class_id);
     if (teacher_id)       q = q.eq('teacher_id', teacher_id);
     if (term_id)          q = q.eq('term_id', term_id);
@@ -364,9 +363,13 @@ exports.generateClassTimetable = async (req, res) => {
         }
         const slot = clsSlots.find(s => s.period_id === p.id && s.day_of_week === day);
         if (slot) {
+          const subCode = slot.subject?.code || slot.subject?.name?.slice(0,6) || '—';
+          const teacherInitials = slot.teacher?.full_name
+            ? slot.teacher.full_name.split(' ').map(w=>w[0]).join('').slice(0,3).toUpperCase()
+            : '';
           const lines = [
-            slot.subject?.name || '—',
-            slot.teacher?.full_name || '',
+            subCode.toUpperCase(),
+            teacherInitials,
             slot.room?.name || '',
           ].filter(Boolean).join('\n');
           cell.value = lines;
@@ -429,7 +432,13 @@ exports.generateTeacherTimetable = async (req, res) => {
         const cell = row.getCell(3+di);
         if (p.is_break) { cell.value=p.name; cell.font=dFont(8); cell.fill=lgrayFill(); cell.alignment=centre(); cell.border=thin(); return; }
         const slot = tSlots.find(s=>s.period_id===p.id&&s.day_of_week===day);
-        if (slot) { cell.value=`${slot.subject?.name||'—'}\n${slot.class?.name||''}\n${slot.room?.name||''}`; cell.font=dFont(9,true); cell.fill=whiteFill(); }
+        if (slot) {
+          const subCode = slot.subject?.code || slot.subject?.name?.slice(0,6) || '—';
+          const teacherInitials = slot.teacher?.full_name
+            ? slot.teacher.full_name.split(' ').map(w=>w[0]).join('').slice(0,3).toUpperCase()
+            : '';
+          cell.value=`${subCode.toUpperCase()}\n${slot.class?.name||''}${teacherInitials?' ('+teacherInitials+')':''}${slot.room?.name?'\n'+slot.room.name:''}`;
+          cell.font=dFont(9,true); cell.fill=whiteFill(); }
         else { cell.fill=whiteFill(); }
         cell.alignment={horizontal:'center',vertical:'middle',wrapText:true}; cell.border=thin();
       });
@@ -491,7 +500,14 @@ exports.generateSchoolTimetable = async (req, res) => {
           const cell=row.getCell(3+di);
           if(p.is_break){cell.value=p.name;cell.font=dFont(8);cell.fill=lgrayFill();cell.alignment=centre();cell.border=thin();return;}
           const slot=clsSlots.find(s=>s.period_id===p.id&&s.day_of_week===day);
-          if(slot){cell.value=`${slot.subject?.name||'—'}\n${slot.teacher?.full_name||''}`; cell.font=dFont(9,true); cell.fill=whiteFill();}
+          if(slot){
+            const subCode = slot.subject?.code || slot.subject?.name?.slice(0,6) || '—';
+            const teacherInitials = slot.teacher?.full_name
+              ? slot.teacher.full_name.split(' ').map(w=>w[0]).join('').slice(0,3).toUpperCase()
+              : '';
+            cell.value=`${subCode.toUpperCase()}${teacherInitials?'\n'+teacherInitials:''}`;
+            cell.font=dFont(9,true); cell.fill=whiteFill();
+          }
           else{cell.fill=whiteFill();}
           cell.alignment={horizontal:'center',vertical:'middle',wrapText:true}; cell.border=thin();
         });
@@ -597,18 +613,25 @@ exports.autoGenerate = async (req, res) => {
       if (!rawSubs.length) continue;
 
       // Build subject descriptors with their exact weekly targets
+      // POLICY: Math ≤ 9, other core ≤ 7, non-core ≤ 3
       const subs = rawSubs.map(cs => {
         const sub    = cs.subject || {};
         const isCore = cs.is_core ?? sub.is_core ?? false;
-        // max_periods_week from subject config — default: core=6, non-core=2
-        const maxPW  = (sub.max_periods_week != null && sub.max_periods_week > 0)
+        const code   = (sub.code || '').toUpperCase();
+        const sname  = (sub.name || '').toLowerCase();
+        const isMath = ['MATH','MTH'].includes(code) || sname.includes('math');
+        const policyCap = isMath ? 9 : (isCore ? 7 : 3);
+        const rawPW  = (sub.max_periods_week != null && sub.max_periods_week > 0)
           ? parseInt(sub.max_periods_week)
           : (isCore ? 6 : 2);
+        const maxPW  = Math.min(rawPW, policyCap);
         return {
           sid:       cs.subject_id,
           tid:       cs.teacher_id || null,
+          code:      sub.code || sub.name || '', // for display
           isCore,
-          maxPW,     // EXACT weekly target from subject settings
+          isMath,
+          maxPW,
           sortOrder: cs.sort_order ?? sub.sort_order ?? 999,
         };
       }).sort((a,b) => {
