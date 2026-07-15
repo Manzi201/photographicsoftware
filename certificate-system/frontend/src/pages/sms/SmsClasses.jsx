@@ -231,6 +231,60 @@ function ClassModal({ cls, years, staffList, onSave, onClose }) {
   );
 }
 
+// ── In-app Confirm Dialog (replaces window.confirm) ──────────
+function ConfirmDialog({ title, message, bullets, onConfirm, onCancel, danger = true }) {
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+        {/* Header */}
+        <div className={`px-6 py-5 ${danger ? 'bg-red-50 border-b border-red-100' : 'bg-amber-50 border-b border-amber-100'}`}>
+          <div className="flex items-start gap-3">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${danger ? 'bg-red-100' : 'bg-amber-100'}`}>
+              <span className="text-xl">{danger ? '⚠️' : '❓'}</span>
+            </div>
+            <div>
+              <h2 className={`font-bold text-sm ${danger ? 'text-red-800' : 'text-amber-800'}`}>{title}</h2>
+              {message && <p className="text-xs text-gray-600 mt-1">{message}</p>}
+            </div>
+          </div>
+        </div>
+
+        {/* Body */}
+        {bullets && bullets.length > 0 && (
+          <div className="px-6 py-4">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2.5">This will also delete:</p>
+            <ul className="space-y-1.5">
+              {bullets.map((b, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                  <span className="text-red-400 mt-0.5 shrink-0">•</span>
+                  <span>{b}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-red-600 font-semibold mt-4 flex items-center gap-1.5">
+              <span className="w-4 h-4 rounded-full bg-red-100 flex items-center justify-center text-red-600 shrink-0">!</span>
+              This cannot be undone.
+            </p>
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="flex gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50">
+          <button onClick={onCancel}
+            className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-600 hover:bg-gray-100 transition-colors">
+            Cancel
+          </button>
+          <button onClick={onConfirm}
+            className={`flex-1 px-4 py-2.5 rounded-xl text-sm font-bold text-white transition-colors
+              ${danger ? 'bg-red-600 hover:bg-red-700' : 'bg-amber-500 hover:bg-amber-600'}`}>
+            {danger ? 'Delete Permanently' : 'Confirm'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Predefined subject list (Rwanda Primary curriculum) ───────
 const PREDEFINED_SUBJECTS = [
   {
@@ -667,6 +721,10 @@ export default function SmsClasses() {
   const [termModal,    setTermModal]    = useState(null);
   const [subjectModal, setSubjectModal] = useState(false);
   const [assignModal,  setAssignModal]  = useState(null);
+  const [confirmDlg,   setConfirmDlg]   = useState(null);
+
+  const askConfirm = (title, bullets, onConfirm) =>
+    setConfirmDlg({ title, bullets, onConfirm });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -708,32 +766,48 @@ export default function SmsClasses() {
   useEffect(()=>{ load(); },[load]);
 
   const delYear = async y => {
-    if (!window.confirm(
-      `⚠️ DELETE Academic Year "${y.name}" PERMANENTLY?\n\nThis will also delete:\n• All terms in this year\n• All classes in this year\n• All marks and report cards\n• All fee structures\n\nThis cannot be undone.`
-    )) return;
-    try { await deleteAcademicYear(y.id); toast.success(`"${y.name}" deleted permanently`); load(); }
-    catch (err) { toast.error(err.response?.data?.error || 'Delete failed'); }
+    askConfirm(
+      `DELETE Academic Year "${y.name}" PERMANENTLY?`,
+      ['All terms in this year', 'All classes in this year', 'All marks and report cards', 'All fee structures'],
+      async () => {
+        setConfirmDlg(null);
+        try { await deleteAcademicYear(y.id); toast.success(`"${y.name}" deleted`); load(); }
+        catch (err) { toast.error(err.response?.data?.error || 'Delete failed'); }
+      }
+    );
   };
   const delClass = async c => {
-    if (!window.confirm(
-      `⚠️ DELETE Class "${c.name}" PERMANENTLY?\n\nThis will also delete:\n• All subject assignments\n• All marks for this class\n• All report cards\n\nThis cannot be undone.`
-    )) return;
-    try { await deleteSmsClass(c.id); toast.success(`Class "${c.name}" deleted permanently`); load(); }
-    catch (err) { toast.error(err.response?.data?.error || 'Delete failed'); }
+    askConfirm(
+      `DELETE Class "${c.name}" PERMANENTLY?`,
+      ['All subject assignments', 'All marks for this class', 'All report cards'],
+      async () => {
+        setConfirmDlg(null);
+        try { await deleteSmsClass(c.id); toast.success(`Class "${c.name}" deleted`); load(); }
+        catch (err) { toast.error(err.response?.data?.error || 'Delete failed'); }
+      }
+    );
   };
   const delTerm = async t => {
-    if (!window.confirm(
-      `⚠️ DELETE Term "${t.name}" PERMANENTLY?\n\nThis will also delete:\n• All marks entered for this term\n• All report cards for this term\n• All payments linked to this term\n\nThis cannot be undone.`
-    )) return;
-    try { await deleteTerm(t.id); toast.success(`"${t.name}" deleted permanently`); load(); }
-    catch (err) { toast.error(err.response?.data?.error || 'Delete failed'); }
+    askConfirm(
+      `DELETE Term "${t.name}" PERMANENTLY?`,
+      ['All marks entered for this term', 'All report cards for this term', 'All payments linked to this term'],
+      async () => {
+        setConfirmDlg(null);
+        try { await deleteTerm(t.id); toast.success(`"${t.name}" deleted`); load(); }
+        catch (err) { toast.error(err.response?.data?.error || 'Delete failed'); }
+      }
+    );
   };
   const delSubject = async s => {
-    if (!window.confirm(
-      `⚠️ DELETE Subject "${s.name}" PERMANENTLY?\n\nThis will also delete:\n• All marks for this subject across all classes\n• All class assignments for this subject\n\nThis cannot be undone.`
-    )) return;
-    try { await deleteSmsSubject(s.id); toast.success(`Subject "${s.name}" deleted permanently`); load(); }
-    catch (err) { toast.error(err.response?.data?.error || 'Delete failed'); }
+    askConfirm(
+      `DELETE Subject "${s.name}" PERMANENTLY?`,
+      ['All marks for this subject across all classes', 'All class assignments for this subject'],
+      async () => {
+        setConfirmDlg(null);
+        try { await deleteSmsSubject(s.id); toast.success(`Subject "${s.name}" deleted`); load(); }
+        catch (err) { toast.error(err.response?.data?.error || 'Delete failed'); }
+      }
+    );
   };
 
   const classesForYear = id => classes.filter(c=>c.academic_year_id===id);
@@ -1014,6 +1088,16 @@ export default function SmsClasses() {
       {canWrite && termModal    && <TermModal    term={termModal?._preset_year?null:termModal}   years={years} onSave={()=>{setTermModal(null);load();}}  onClose={()=>setTermModal(null)}/>}
       {canWrite && subjectModal && <SubjectModal subject={subjectModal===true?null:subjectModal} onSave={()=>{setSubjectModal(false);load();}} onClose={()=>setSubjectModal(false)}/>}
       {canWrite && assignModal  && <AssignModal  cls={assignModal} subjects={subjects} staffList={staffList} allClasses={classes} onSave={()=>load()} onClose={()=>setAssignModal(null)}/>}
+
+      {/* In-app confirm dialog */}
+      {confirmDlg && (
+        <ConfirmDialog
+          title={confirmDlg.title}
+          bullets={confirmDlg.bullets}
+          onConfirm={confirmDlg.onConfirm}
+          onCancel={() => setConfirmDlg(null)}
+        />
+      )}
     </div>
   );
 }
