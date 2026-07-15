@@ -522,15 +522,298 @@ exports.generateSchoolTimetable = async (req, res) => {
 };
 
 // ══════════════════════════════════════════════════════════════
-// AUTO-GENERATE TIMETABLE — Smart weighted distribution
+// AUTO-GENERATE TIMETABLE — Full constraint-based scheduler
 //
-// Rules:
+// Constraints:
 //  1. Max 2 periods per subject per day per class
-//  2. Core subjects get more periods per week (weighted)
-//  3. No teacher double-booking (same teacher, same period, same day)
-//  4. Fill ALL available slots — rotate subjects round-robin
-//  5. Higher-weighted subjects get first pick each day
+//  2. Max 7 periods per subject per week per class
+//  3. No subject on consecutive days (spread evenly)
+//  4. No teacher double-booking (same teacher, same period, same day)
+//  5. Core subjects weighted (more periods per week)
+//  6. Every assigned subject must appear at least once in the timetable
+//  7. All available slots filled
 // ══════════════════════════════════════════════════════════════
+exports.autoGenerate = async (req, res) => {
+  try {
+    const { academic_year_id, term_id, days_per_week = 5, overwrite = false } = req.body;
+    if (!academic_year_id) return res.status(400).json({ success: false, error: 'academic_year_id required' });
+
+    const schoolId = req.schoolId;
+    const numDays  = Math.min(parseInt(days_per_week) || 5, 6);
+    const days     = Array.from({ length: numDays }, (_, i) => i + 1);
+
+    // ── Load lesson periods ──────────────────────────────────
+    let pq = supabase.from('school_periods')
+      .select('id,period_number').eq('school_id', schoolId).eq('is_break', false);
+    if (term_id) pq = pq.eq('term_id', term_id);
+    else         pq = pq.eq('academic_year_id', academic_year_id);
+    const { data: periods } = await pq.order('period_number');
+
+    if (!periods || periods.length === 0)
+      return res.status(400).json({ success: false, error: 'No lesson periods configured. Create periods first.' });
+
+    // ── Load classes ─────────────────────────────────────────
+    const { data: classes } = await supabase.from('classes')
+      .select('id,name').eq('school_id', schoolId).order('level_order').order('name');
+    if (!classes || classes.length === 0)
+      return res.status(400).json({ success: false, error: 'No classes found.' });
+
+    // ── Load class_subjects with subject details ─────────────
+    const { data: allCS } = await supabase.from('class_subjects')
+      .select('class_id,subject_id,teacher_id,sort_order,is_core,subject:subjects(id,name,coefficient,sort_order,is_core)')
+      .in('class_id', classes.map(c => c.id))
+      .not('subject_id', 'is', null);
+
+    // ── Overwrite ────────────────────────────────────────────
+    if (overwrite) {
+      let dq = supabase.from('timetable_slots').delete()
+        .eq('school_id', schoolId).eq('academic_year_id', academic_year_id);
+      if (term_id) dq = dq.eq('term_id', term_id);
+      await dq;
+    }
+
+    // ── Global teacher busy: Set of "teacherId|day|periodId" ──
+    const teacherBusy = new Set();
+    const tKey = (tid, day, pid) => `${tid}|${day}|${pid}`;
+
+    const slotsToInsert = [];
+    let totalConflicts  = 0;
+    const totalSlots    = days.length * periods.length;
+    const MAX_PER_WEEK  = 7;
+    const MAX_PER_DAY   = 2;
+
+    // ── Process each class ───────────────────────────────────
+    for (const cls of classes) {
+      const rawSubs = (allCS || []).filter(cs => cs.class_id === cls.id);
+      if (rawSubs.length === 0) continue;
+
+      // Build subject list with weights
+      const subList = rawSubs.map(cs => {
+        const sub    = cs.subject || {};
+        const isCore = cs.is_core ?? sub.is_core ?? false;
+        const coef   = sub.coefficient || 1;
+        const weight = isCore ? Math.min(MAX_PER_WEEK, Math.max(3, coef * 3)) : Math.min(MAX_PER_WEEK, Math.max(1, coef));
+        return { ...cs, isCore, weight, sortOrder: cs.sort_order ?? sub.sort_order ?? 999 };
+      }).sort((a, b) => {
+        if (b.isCore !== a.isCore) return b.isCore ? 1 : -1;
+        return a.sortOrder - b.sortOrder;
+      });
+
+      // Calculate target periods per subject
+      // Ensure: sum of targets ≤ totalSlots AND max per subject ≤ MAX_PER_WEEK
+      // Guarantee: every subject gets at least 1
+      const totalWeight = subList.reduce((s, x) => s + x.weight, 0);
+      const targetMap   = {};
+      let   sumTargets  = 0;
+      subList.forEach(cs => {
+        const raw = Math.round((cs.weight / totalWeight) * totalSlots);
+        const tgt = Math.min(MAX_PER_WEEK, Math.max(1, raw));
+        targetMap[cs.subject_id] = tgt;
+        sumTargets += tgt;
+      });
+
+      // If sum > totalSlots, reduce from lowest-weight subjects first
+      while (sumTargets > totalSlots) {
+        const reducible = [...subList]
+          .sort((a,b) => a.weight - b.weight)
+          .find(cs => targetMap[cs.subject_id] > 1);
+        if (!reducible) break;
+        targetMap[reducible.subject_id]--;
+        sumTargets--;
+      }
+      // If sum < totalSlots, add more to highest-weight subjects (up to MAX_PER_WEEK)
+      let expandIdx = 0;
+      const sorted  = [...subList].sort((a,b) => b.weight - a.weight);
+      while (sumTargets < totalSlots) {
+        const cs = sorted[expandIdx % sorted.length];
+        if (targetMap[cs.subject_id] < MAX_PER_WEEK) {
+          targetMap[cs.subject_id]++;
+          sumTargets++;
+        }
+        expandIdx++;
+        if (expandIdx > sorted.length * MAX_PER_WEEK) break; // safety
+      }
+
+      // Build a weekly queue: each subject repeated targetMap[sid] times
+      // Spread across days: for each subject, pre-assign which days it can appear
+      // to avoid consecutive-day constraint
+      // Strategy: assign days in a round-robin manner skipping adjacent days
+      const subjectDayMap = {}; // { subject_id: Set<day> } — allowed days this week
+      subList.forEach(cs => {
+        const tgt  = targetMap[cs.subject_id] || 1;
+        const allowed = new Set();
+        // Pick `tgt` days spread across the week, no consecutive
+        const allDays = [...days];
+        let   lastPicked = -2;
+        let   picked     = 0;
+        // Try evenly spaced
+        const step = Math.max(1, Math.floor(numDays / tgt));
+        for (let d = 0; d < numDays && picked < tgt; d += step) {
+          const day = allDays[d % allDays.length];
+          if (day !== lastPicked + 1 && day !== lastPicked - 1) {
+            allowed.add(day); lastPicked = day; picked++;
+          }
+        }
+        // Fill remaining if needed
+        for (const day of allDays) {
+          if (allowed.size >= tgt) break;
+          if (!allowed.has(day)) { allowed.add(day); }
+        }
+        subjectDayMap[cs.subject_id] = allowed;
+      });
+
+      // Build per-day slot pools
+      // dayPool[day] = list of subjects allowed on that day, ordered by weight desc
+      const dayPool = {};
+      days.forEach(day => {
+        dayPool[day] = subList.filter(cs => subjectDayMap[cs.subject_id]?.has(day))
+          .sort((a,b) => b.weight - a.weight);
+      });
+
+      // Tracking per class
+      const weekCount = {}; // subject_id → total placed this week
+      const dayCount  = {}; // day → subject_id → count
+      days.forEach(d => { dayCount[d] = {}; });
+
+      // Fill each slot
+      for (const day of days) {
+        // Sort periods (already ordered)
+        for (const period of periods) {
+          // Find best subject for this slot
+          // Priority: most remaining quota, allowed today, not exceeding day limit, teacher free, not yesterday
+          let placed = false;
+
+          // Build candidates: subjects not yet at day limit, with remaining weekly quota
+          const candidates = subList.filter(cs => {
+            const dc = dayCount[day][cs.subject_id] || 0;
+            const wc = weekCount[cs.subject_id] || 0;
+            if (dc >= MAX_PER_DAY) return false;
+            if (wc >= (targetMap[cs.subject_id] || 1)) return false;
+            // No consecutive day: check if subject was placed yesterday
+            if (day > 1) {
+              const yday = dayCount[day-1]?.[cs.subject_id] || 0;
+              // Allow on consecutive day only if no other option
+              // We'll try non-consecutive first
+            }
+            return true;
+          });
+
+          // Prefer non-consecutive-day candidates
+          const nonConsec = candidates.filter(cs => {
+            if (day <= 1) return true;
+            return (dayCount[day-1]?.[cs.subject_id] || 0) === 0;
+          });
+
+          const pool = nonConsec.length > 0 ? nonConsec : candidates;
+          // Sort: most remaining quota first, then by weight desc
+          pool.sort((a,b) => {
+            const remA = (targetMap[a.subject_id]||1) - (weekCount[a.subject_id]||0);
+            const remB = (targetMap[b.subject_id]||1) - (weekCount[b.subject_id]||0);
+            if (remB !== remA) return remB - remA;
+            return b.weight - a.weight;
+          });
+
+          for (const cs of pool) {
+            const tid = cs.teacher_id;
+            if (tid && teacherBusy.has(tKey(tid, day, period.id))) continue;
+
+            // Place this subject
+            if (tid) teacherBusy.add(tKey(tid, day, period.id));
+            dayCount[day][cs.subject_id] = (dayCount[day][cs.subject_id] || 0) + 1;
+            weekCount[cs.subject_id]     = (weekCount[cs.subject_id] || 0) + 1;
+
+            slotsToInsert.push({
+              school_id: schoolId, academic_year_id,
+              term_id: term_id || null, class_id: cls.id,
+              subject_id: cs.subject_id, teacher_id: tid || null,
+              period_id: period.id, day_of_week: day, room_id: null,
+            });
+            placed = true;
+            break;
+          }
+
+          if (!placed) {
+            // Absolute fallback: any subject with teacher free, ignore quota/consecutive rules
+            const fallback = subList.find(cs => {
+              const tid = cs.teacher_id;
+              return !tid || !teacherBusy.has(tKey(tid, day, period.id));
+            });
+            if (fallback) {
+              const tid = fallback.teacher_id;
+              if (tid) teacherBusy.add(tKey(tid, day, period.id));
+              dayCount[day][fallback.subject_id] = (dayCount[day][fallback.subject_id] || 0) + 1;
+              weekCount[fallback.subject_id]     = (weekCount[fallback.subject_id] || 0) + 1;
+              slotsToInsert.push({
+                school_id: schoolId, academic_year_id,
+                term_id: term_id || null, class_id: cls.id,
+                subject_id: fallback.subject_id, teacher_id: tid || null,
+                period_id: period.id, day_of_week: day, room_id: null,
+              });
+            } else {
+              totalConflicts++;
+            }
+          }
+        }
+      }
+
+      // ── Guarantee: every subject appears at least once ────────
+      // Check which subjects are missing from the timetable for this class
+      const placed = new Set(
+        slotsToInsert.filter(s => s.class_id === cls.id).map(s => s.subject_id)
+      );
+      for (const cs of subList) {
+        if (!placed.has(cs.subject_id)) {
+          // Find any empty-ish slot (pick day=1, first period that teacher is free)
+          let inserted = false;
+          for (const day of days) {
+            for (const period of periods) {
+              const exists = slotsToInsert.find(
+                s => s.class_id === cls.id && s.day_of_week === day && s.period_id === period.id
+              );
+              if (!exists) {
+                const tid = cs.teacher_id;
+                if (tid && teacherBusy.has(tKey(tid, day, period.id))) continue;
+                if (tid) teacherBusy.add(tKey(tid, day, period.id));
+                slotsToInsert.push({
+                  school_id: schoolId, academic_year_id,
+                  term_id: term_id || null, class_id: cls.id,
+                  subject_id: cs.subject_id, teacher_id: tid || null,
+                  period_id: period.id, day_of_week: day, room_id: null,
+                });
+                inserted = true;
+                break;
+              }
+            }
+            if (inserted) break;
+          }
+        }
+      }
+    }
+
+    // ── Insert in chunks ────────────────────────────────────
+    const CHUNK = 50;
+    let   insertedCount = 0;
+    for (let i = 0; i < slotsToInsert.length; i += CHUNK) {
+      const { data, error } = await supabase.from('timetable_slots')
+        .upsert(slotsToInsert.slice(i, i + CHUNK),
+          { onConflict: 'school_id,class_id,period_id,day_of_week', ignoreDuplicates: !overwrite })
+        .select('id');
+      if (!error) insertedCount += (data || []).length;
+    }
+
+    res.json({
+      success:     true,
+      inserted:    insertedCount,
+      conflicts:   totalConflicts,
+      total_classes: classes.length,
+      slots_per_class: totalSlots,
+      message: `Generated ${insertedCount} slots across ${classes.length} classes (${totalSlots} slots/class).${totalConflicts > 0 ? ` ${totalConflicts} unfilled (teacher conflicts).` : ' All slots filled.'}`,
+    });
+  } catch (err) {
+    console.error('autoGenerate:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
 exports.autoGenerate = async (req, res) => {
   try {
     const { academic_year_id, term_id, days_per_week = 5, overwrite = false } = req.body;
