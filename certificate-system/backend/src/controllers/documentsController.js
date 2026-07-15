@@ -220,9 +220,57 @@ exports.uploadDocument = async (req, res) => {
     const safeName = file.name.replace(/[^a-z0-9._-]/gi, '_');
     const filePath = `${req.schoolId}/${folder_id}/${Date.now()}_${safeName}`;
 
+    // Resolve correct MIME type — browsers often send wrong type for zip files
+    const MIME_MAP = {
+      'zip': 'application/zip',
+      'rar': 'application/x-rar-compressed',
+      '7z':  'application/x-7z-compressed',
+      'tar': 'application/x-tar',
+      'gz':  'application/gzip',
+      'pdf': 'application/pdf',
+      'doc': 'application/msword',
+      'docx':'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'xls': 'application/vnd.ms-excel',
+      'xlsx':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'ppt': 'application/vnd.ms-powerpoint',
+      'pptx':'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      'jpg': 'image/jpeg',
+      'jpeg':'image/jpeg',
+      'png': 'image/png',
+      'gif': 'image/gif',
+      'webp':'image/webp',
+    };
+    const contentType = MIME_MAP[ext] || file.mimetype || 'application/octet-stream';
+
+    // Upload to Supabase Storage with correct MIME type and upsert=false
     const { error: upErr } = await supabase.storage
-      .from('documents').upload(filePath, file.data, { contentType: file.mimetype, upsert: false });
-    if (upErr) throw new Error(`Storage upload failed: ${upErr.message}`);
+      .from('documents')
+      .upload(filePath, file.data, {
+        contentType,
+        upsert:      false,
+        duplex:      'half', // required for Node.js streams
+      });
+
+    if (upErr) {
+      // If file already exists, try with a new timestamp
+      if (upErr.message?.includes('already exists') || upErr.statusCode === '409') {
+        const retryPath = `${req.schoolId}/${folder_id}/${Date.now()}_${Math.random().toString(36).slice(2)}_${safeName}`;
+        const { error: retryErr } = await supabase.storage
+          .from('documents')
+          .upload(retryPath, file.data, { contentType, upsert: true });
+        if (retryErr) throw new Error(`Storage upload failed: ${retryErr.message}`);
+        const { data: retryUrl } = supabase.storage.from('documents').getPublicUrl(retryPath);
+        const { data: retryDoc, error: dbErr } = await supabase.from('school_documents').insert([{
+          school_id: req.schoolId, folder_id,
+          name: name?.trim() || file.name,
+          file_url: retryUrl.publicUrl, file_type: fileType,
+          file_size: file.size, uploaded_by: req.staff?.id || null,
+        }]).select('*, uploader:staff(full_name)').single();
+        if (dbErr) throw dbErr;
+        return res.status(201).json({ success: true, data: retryDoc });
+      }
+      throw new Error(`Storage upload failed: ${upErr.message}`);
+    }
 
     const { data: urlData } = supabase.storage.from('documents').getPublicUrl(filePath);
 
@@ -237,7 +285,10 @@ exports.uploadDocument = async (req, res) => {
     }]).select('*, uploader:staff(full_name)').single();
     if (error) throw error;
     res.status(201).json({ success: true, data });
-  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+  } catch (err) {
+    console.error('uploadDocument error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
 };
 
 exports.deleteDocument = async (req, res) => {

@@ -40,11 +40,13 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 app.use(fileUpload({
-  limits:       { fileSize: 50 * 1024 * 1024 },  // 50MB — supports large zip archives
-  useTempFiles: false,
+  limits:          { fileSize: 100 * 1024 * 1024 }, // 100MB
+  useTempFiles:    false,
+  abortOnLimit:    true,
+  responseOnLimit: JSON.stringify({ success: false, error: 'File too large. Maximum 100MB.' }),
 }));
 
 // ── PUBLIC ROUTES ─────────────────────────────────────────────
