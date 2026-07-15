@@ -457,8 +457,9 @@ ALTER TABLE subjects ADD COLUMN IF NOT EXISTS max_test   INT DEFAULT 0;
 ALTER TABLE subjects ADD COLUMN IF NOT EXISTS max_exam   INT DEFAULT 0;
 
 -- subjects: display order + core subject flag
-ALTER TABLE subjects ADD COLUMN IF NOT EXISTS sort_order INT DEFAULT 999;
-ALTER TABLE subjects ADD COLUMN IF NOT EXISTS is_core    BOOLEAN DEFAULT false;
+ALTER TABLE subjects ADD COLUMN IF NOT EXISTS sort_order         INT     DEFAULT 999;
+ALTER TABLE subjects ADD COLUMN IF NOT EXISTS is_core            BOOLEAN DEFAULT false;
+ALTER TABLE subjects ADD COLUMN IF NOT EXISTS max_periods_week   INT     DEFAULT 7;
 
 -- class_subjects: per-class sort order override + core flag override
 ALTER TABLE class_subjects ADD COLUMN IF NOT EXISTS sort_order INT DEFAULT 999;

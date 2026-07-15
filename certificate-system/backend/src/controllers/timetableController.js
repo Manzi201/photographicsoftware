@@ -560,7 +560,7 @@ exports.autoGenerate = async (req, res) => {
 
     // ── Load class_subjects with subject details ─────────────
     const { data: allCS } = await supabase.from('class_subjects')
-      .select('class_id,subject_id,teacher_id,sort_order,is_core,subject:subjects(id,name,coefficient,sort_order,is_core)')
+      .select('class_id,subject_id,teacher_id,sort_order,is_core,subject:subjects(id,name,coefficient,sort_order,is_core,max_periods_week)')
       .in('class_id', classes.map(c => c.id))
       .not('subject_id', 'is', null);
 
@@ -587,52 +587,69 @@ exports.autoGenerate = async (req, res) => {
       const rawSubs = (allCS || []).filter(cs => cs.class_id === cls.id);
       if (rawSubs.length === 0) continue;
 
-      // Build subject list with weights
+      // Build subject list — use max_periods_week as EXACT target
+      // The school has set these values per subject — respect them exactly
       const subList = rawSubs.map(cs => {
         const sub    = cs.subject || {};
         const isCore = cs.is_core ?? sub.is_core ?? false;
-        const coef   = sub.coefficient || 1;
-        const weight = isCore ? Math.min(MAX_PER_WEEK, Math.max(3, coef * 3)) : Math.min(MAX_PER_WEEK, Math.max(1, coef));
-        return { ...cs, isCore, weight, sortOrder: cs.sort_order ?? sub.sort_order ?? 999 };
+        // max_periods_week IS the exact weekly target set by the school admin
+        // Default: core=6, non-core=2 if not set
+        const maxPW  = sub.max_periods_week != null && sub.max_periods_week > 0
+          ? parseInt(sub.max_periods_week)
+          : (isCore ? 6 : 2);
+        return {
+          ...cs,
+          isCore,
+          maxPW,
+          weight:    maxPW, // weight = target so sorting is correct
+          sortOrder: cs.sort_order ?? sub.sort_order ?? 999,
+        };
       }).sort((a, b) => {
         if (b.isCore !== a.isCore) return b.isCore ? 1 : -1;
         return a.sortOrder - b.sortOrder;
       });
 
-      // Calculate target periods per subject
-      // Ensure: sum of targets ≤ totalSlots AND max per subject ≤ MAX_PER_WEEK
-      // Guarantee: every subject gets at least 1
-      const totalWeight = subList.reduce((s, x) => s + x.weight, 0);
-      const targetMap   = {};
-      let   sumTargets  = 0;
+      // targetMap: use max_periods_week EXACTLY as the target
+      const targetMap  = {};
+      let   sumTargets = 0;
       subList.forEach(cs => {
-        const raw = Math.round((cs.weight / totalWeight) * totalSlots);
-        const tgt = Math.min(MAX_PER_WEEK, Math.max(1, raw));
-        targetMap[cs.subject_id] = tgt;
-        sumTargets += tgt;
+        targetMap[cs.subject_id] = cs.maxPW;
+        sumTargets += cs.maxPW;
       });
 
-      // If sum > totalSlots, reduce from lowest-weight subjects first
-      while (sumTargets > totalSlots) {
-        const reducible = [...subList]
-          .sort((a,b) => a.weight - b.weight)
-          .find(cs => targetMap[cs.subject_id] > 1);
-        if (!reducible) break;
-        targetMap[reducible.subject_id]--;
-        sumTargets--;
-      }
-      // If sum < totalSlots, add more to highest-weight subjects (up to MAX_PER_WEEK)
-      let expandIdx = 0;
-      const sorted  = [...subList].sort((a,b) => b.weight - a.weight);
-      while (sumTargets < totalSlots) {
-        const cs = sorted[expandIdx % sorted.length];
-        if (targetMap[cs.subject_id] < MAX_PER_WEEK) {
-          targetMap[cs.subject_id]++;
-          sumTargets++;
+      // If sum > totalSlots: proportionally scale down keeping relative ratios
+      if (sumTargets > totalSlots) {
+        const scale = totalSlots / sumTargets;
+        sumTargets  = 0;
+        subList.forEach(cs => {
+          const scaled = Math.max(1, Math.round(cs.maxPW * scale));
+          targetMap[cs.subject_id] = scaled;
+          sumTargets += scaled;
+        });
+        // Fix rounding drift
+        const sortedAdj = [...subList].sort((a,b) => b.maxPW - a.maxPW);
+        for (let i = 0, diff = totalSlots - sumTargets; diff > 0; i++, diff--)
+          targetMap[sortedAdj[i % sortedAdj.length].subject_id]++;
+        for (let i = 0, diff = sumTargets - totalSlots; diff > 0; i++, diff--) {
+          const s = sortedAdj[i % sortedAdj.length];
+          if (targetMap[s.subject_id] > 1) targetMap[s.subject_id]--;
         }
-        expandIdx++;
-        if (expandIdx > sorted.length * MAX_PER_WEEK) break; // safety
       }
+
+      // If sum < totalSlots: distribute remaining to highest-maxPW subjects (≤ maxPW+3)
+      if (sumTargets < totalSlots) {
+        let rem = totalSlots - sumTargets;
+        const sortedExp = [...subList].sort((a,b) => b.maxPW - a.maxPW);
+        for (let i = 0; rem > 0; i++) {
+          const cs = sortedExp[i % sortedExp.length];
+          if (targetMap[cs.subject_id] <= cs.maxPW + 2) {
+            targetMap[cs.subject_id]++; rem--;
+          }
+          if (i > sortedExp.length * 5) break;
+        }
+      }
+
+      const sorted = [...subList].sort((a,b) => b.maxPW - a.maxPW);
 
       // Build a weekly queue: each subject repeated targetMap[sid] times
       // Spread across days: for each subject, pre-assign which days it can appear
@@ -688,13 +705,8 @@ exports.autoGenerate = async (req, res) => {
             const dc = dayCount[day][cs.subject_id] || 0;
             const wc = weekCount[cs.subject_id] || 0;
             if (dc >= MAX_PER_DAY) return false;
-            if (wc >= (targetMap[cs.subject_id] || 1)) return false;
-            // No consecutive day: check if subject was placed yesterday
-            if (day > 1) {
-              const yday = dayCount[day-1]?.[cs.subject_id] || 0;
-              // Allow on consecutive day only if no other option
-              // We'll try non-consecutive first
-            }
+            // Use per-subject weekly cap strictly
+            if (wc >= Math.min(cs.maxPW, targetMap[cs.subject_id] || 1)) return false;
             return true;
           });
 

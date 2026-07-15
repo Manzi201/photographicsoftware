@@ -234,14 +234,15 @@ function ClassModal({ cls, years, staffList, onSave, onClose }) {
 // ── Subject Modal (create + edit) ────────────────────────────
 function SubjectModal({ subject, onSave, onClose }) {
   const [form, setForm] = useState({
-    name:          subject?.name          || '',
-    code:          subject?.code          || '',
-    max_test:      subject?.max_test      ?? 0,
-    max_exam:      subject?.max_exam      ?? 0,
-    passing_marks: subject?.passing_marks || 50,
-    coefficient:   subject?.coefficient   || 1,
-    sort_order:    subject?.sort_order    ?? 999,
-    is_core:       subject?.is_core       ?? false,
+    name:             subject?.name             || '',
+    code:             subject?.code             || '',
+    max_test:         subject?.max_test         ?? 0,
+    max_exam:         subject?.max_exam         ?? 0,
+    passing_marks:    subject?.passing_marks    || 50,
+    coefficient:      subject?.coefficient      || 1,
+    sort_order:       subject?.sort_order       ?? 999,
+    is_core:          subject?.is_core          ?? false,
+    max_periods_week: subject?.max_periods_week ?? 7,
   });
   const [loading, setLoading] = useState(false);
   const f = k => e => setForm(p => ({ ...p, [k]: e.target.value }));
@@ -285,6 +286,11 @@ function SubjectModal({ subject, onSave, onClose }) {
             <label className="block text-xs font-semibold text-gray-600 mb-1">Display Order</label>
             <input type="number" className="input-field" value={form.sort_order} onChange={f('sort_order')} min={1} max={999} placeholder="1, 2, 3…"/>
             <p className="text-xs text-gray-400 mt-0.5">Order on report card (1 = first)</p>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Max periods / week</label>
+            <input type="number" className="input-field" value={form.max_periods_week} onChange={f('max_periods_week')} min={1} max={20} placeholder="7"/>
+            <p className="text-xs text-gray-400 mt-0.5">For timetable (e.g. 1 for PE/Art)</p>
           </div>
           <div className="flex flex-col justify-end pb-1">
             <label className="flex items-center gap-2.5 cursor-pointer select-none">

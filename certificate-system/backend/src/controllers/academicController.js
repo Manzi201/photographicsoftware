@@ -341,7 +341,7 @@ exports.getSubjects = async (req, res) => {
 
 exports.createSubject = async (req, res) => {
   try {
-    const { name, code, max_test, max_exam, passing_marks, coefficient, sort_order, is_core } = req.body;
+    const { name, code, max_test, max_exam, passing_marks, coefficient, sort_order, is_core, max_periods_week } = req.body;
     if (!name) return res.status(400).json({ success:false, error:'name required' });
     const mTest = parseInt(max_test)||0;
     const mExam = parseInt(max_exam)||0;
@@ -353,6 +353,7 @@ exports.createSubject = async (req, res) => {
       coefficient: parseInt(coefficient)||1,
       sort_order: sort_order != null ? parseInt(sort_order) : 999,
       is_core: !!is_core,
+      max_periods_week: max_periods_week != null ? parseInt(max_periods_week) : 7,
     }]).select().single();
     if (error) throw error;
 
@@ -385,7 +386,7 @@ exports.createSubject = async (req, res) => {
 
 exports.updateSubject = async (req, res) => {
   try {
-    const { name, code, max_test, max_exam, passing_marks, coefficient, sort_order, is_core } = req.body;
+    const { name, code, max_test, max_exam, passing_marks, coefficient, sort_order, is_core, max_periods_week } = req.body;
     const mTest = parseInt(max_test)||0;
     const mExam = parseInt(max_exam)||0;
     const max_marks = mTest + mExam || 100;
@@ -396,6 +397,7 @@ exports.updateSubject = async (req, res) => {
         coefficient: parseInt(coefficient)||1,
         sort_order: sort_order != null ? parseInt(sort_order) : 999,
         is_core: !!is_core,
+        max_periods_week: max_periods_week != null ? parseInt(max_periods_week) : 7,
       })
       .eq('id', req.params.id).eq('school_id', req.schoolId)
       .select().single();
