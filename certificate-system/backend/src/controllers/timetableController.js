@@ -569,8 +569,23 @@ exports.autoGenerate = async (req, res) => {
     }
 
     // ── Global teacher busy tracker ──────────────────────────
-    const teacherBusy = new Set(); // "teacherId|day|periodId"
-    const tKey = (tid, day, pid) => `${tid}|${day}|${pid}`;
+    const teacherBusy    = new Set(); // "teacherId|day|periodId" — exact period conflict
+    const teacherDayLoad = {};        // "teacherId|day" → count (max 3 per day across all classes)
+    const tKey  = (tid, day, pid) => `${tid}|${day}|${pid}`;
+    const tdKey = (tid, day)       => `${tid}|${day}`;
+
+    const teacherCanTeach = (tid, day, pid) => {
+      if (!tid) return true;
+      if (teacherBusy.has(tKey(tid, day, pid))) return false;         // already in this period
+      const load = teacherDayLoad[tdKey(tid, day)] || 0;
+      return load < 3; // max 3 periods per teacher per day across all classes
+    };
+
+    const markTeacherBusy = (tid, day, pid) => {
+      if (!tid) return;
+      teacherBusy.add(tKey(tid, day, pid));
+      teacherDayLoad[tdKey(tid, day)] = (teacherDayLoad[tdKey(tid, day)] || 0) + 1;
+    };
 
     const slotsToInsert = [];
     let   totalConflicts = 0;
@@ -716,18 +731,16 @@ exports.autoGenerate = async (req, res) => {
 
           // Try subjects from today's queue first
           for (let attempt = 0; attempt < queue.length + subs.length; attempt++) {
-            // First half: try from queue; second half: try any subject
             let cs;
             if (attempt < queue.length) {
               cs = queue[(qIdx + attempt) % queue.length];
             } else {
-              // Fallback: pick subject with most remaining quota that fits
-              // STRICT: still enforce max-2-per-day
+              // Secondary: pick subject with most remaining quota that strictly fits
               cs = [...subs]
                 .filter(s => {
-                  const wc = weekCount[s.sid] || 0;
                   const dc = dayCount[day][s.sid] || 0;
-                  return dc < 2 && wc < targetMap[s.sid];
+                  const wc = weekCount[s.sid]     || 0;
+                  return dc < 2 && wc < targetMap[s.sid] && teacherCanTeach(s.tid, day, period.id);
                 })
                 .sort((a,b) => {
                   const remA = targetMap[a.sid] - (weekCount[a.sid]||0);
@@ -740,73 +753,56 @@ exports.autoGenerate = async (req, res) => {
 
             const dc = dayCount[day][cs.sid] || 0;
             const wc = weekCount[cs.sid]     || 0;
-            // STRICT: enforce max 2 per day per subject
-            if (dc >= 2) continue;
-            if (wc >= targetMap[cs.sid]) continue;
+            if (dc >= 2) continue;                           // max 2 per subject per day
+            if (wc >= targetMap[cs.sid]) continue;           // weekly quota
+            if (!teacherCanTeach(cs.tid, day, period.id)) continue; // teacher limit
 
-            // Check teacher availability
-            if (cs.tid && teacherBusy.has(tKey(cs.tid, day, period.id))) continue;
-
-            // ✅ Place it
-            if (cs.tid) teacherBusy.add(tKey(cs.tid, day, period.id));
+            // ✅ Place
+            markTeacherBusy(cs.tid, day, period.id);
             dayCount[day][cs.sid] = dc + 1;
             weekCount[cs.sid]     = wc + 1;
             if (attempt < queue.length) qIdx = (qIdx + attempt + 1) % queue.length;
 
             slotsToInsert.push({
               school_id: schoolId, academic_year_id,
-              term_id:   term_id || null,
-              class_id:  cls.id,
-              subject_id: cs.sid,
-              teacher_id: cs.tid,
-              period_id:  period.id,
-              day_of_week: day,
-              room_id:    null,
+              term_id:   term_id || null, class_id: cls.id,
+              subject_id: cs.sid, teacher_id: cs.tid,
+              period_id: period.id, day_of_week: day, room_id: null,
             });
             placed = true;
             break;
           }
 
           if (!placed) {
-            // Last-resort fallback: STILL respect max-2-per-day, ignore weekly quota
-            // Pick subject with fewest appearances today that has a free teacher
-            const fb = [...subs]
-              .filter(s => {
-                const dc = dayCount[day][s.sid] || 0;
-                return dc < 2 && (!s.tid || !teacherBusy.has(tKey(s.tid, day, period.id)));
-              })
+            // Fallback 1: respect max-2-per-day but ignore weekly quota
+            const fb1 = [...subs]
+              .filter(s => (dayCount[day][s.sid]||0) < 2 && teacherCanTeach(s.tid, day, period.id))
               .sort((a,b) => (dayCount[day][a.sid]||0) - (dayCount[day][b.sid]||0))[0];
 
-            if (fb) {
-              if (fb.tid) teacherBusy.add(tKey(fb.tid, day, period.id));
-              dayCount[day][fb.sid] = (dayCount[day][fb.sid] || 0) + 1;
-              weekCount[fb.sid]     = (weekCount[fb.sid] || 0) + 1;
+            if (fb1) {
+              markTeacherBusy(fb1.tid, day, period.id);
+              dayCount[day][fb1.sid] = (dayCount[day][fb1.sid]||0) + 1;
+              weekCount[fb1.sid]     = (weekCount[fb1.sid]||0) + 1;
               slotsToInsert.push({
                 school_id: schoolId, academic_year_id,
-                term_id:   term_id || null,
-                class_id:  cls.id,
-                subject_id: fb.sid,
-                teacher_id: fb.tid,
-                period_id:  period.id,
-                day_of_week: day,
-                room_id:    null,
+                term_id: term_id||null, class_id: cls.id,
+                subject_id: fb1.sid, teacher_id: fb1.tid,
+                period_id: period.id, day_of_week: day, room_id: null,
               });
             } else {
-              // Absolute last resort: ignore day limit but not teacher conflict
-              const fb2 = subs.find(s => !s.tid || !teacherBusy.has(tKey(s.tid, day, period.id)));
+              // Fallback 2: ignore both day limit AND weekly quota — only keep teacher conflict check
+              const fb2 = subs
+                .filter(s => teacherCanTeach(s.tid, day, period.id))
+                .sort((a,b) => (dayCount[day][a.sid]||0) - (dayCount[day][b.sid]||0))[0];
               if (fb2) {
-                if (fb2.tid) teacherBusy.add(tKey(fb2.tid, day, period.id));
-                dayCount[day][fb2.sid] = (dayCount[day][fb2.sid] || 0) + 1;
-                weekCount[fb2.sid]     = (weekCount[fb2.sid] || 0) + 1;
+                markTeacherBusy(fb2.tid, day, period.id);
+                dayCount[day][fb2.sid] = (dayCount[day][fb2.sid]||0) + 1;
+                weekCount[fb2.sid]     = (weekCount[fb2.sid]||0) + 1;
                 slotsToInsert.push({
                   school_id: schoolId, academic_year_id,
-                  term_id:   term_id || null,
-                  class_id:  cls.id,
-                  subject_id: fb2.sid,
-                  teacher_id: fb2.tid,
-                  period_id:  period.id,
-                  day_of_week: day,
-                  room_id:    null,
+                  term_id: term_id||null, class_id: cls.id,
+                  subject_id: fb2.sid, teacher_id: fb2.tid,
+                  period_id: period.id, day_of_week: day, room_id: null,
                 });
               } else { totalConflicts++; }
             }
@@ -820,25 +816,29 @@ exports.autoGenerate = async (req, res) => {
       );
       for (const s of subs) {
         if (placedSids.has(s.sid)) continue;
-        // Force into first slot where teacher is free (replace existing if needed)
-        let forced = false;
         outerForce:
         for (const day of days) {
           for (const period of periods) {
-            if (s.tid && teacherBusy.has(tKey(s.tid, day, period.id))) continue;
-            if (s.tid) teacherBusy.add(tKey(s.tid, day, period.id));
-            // Remove any existing slot for this class+day+period
+            if (!teacherCanTeach(s.tid, day, period.id)) continue;
+            // Replace existing slot for this class+day+period
             const existIdx = slotsToInsert.findIndex(
               x => x.class_id === cls.id && x.day_of_week === day && x.period_id === period.id
             );
-            if (existIdx >= 0) slotsToInsert.splice(existIdx, 1);
+            if (existIdx >= 0) {
+              const old = slotsToInsert[existIdx];
+              if (old.teacher_id) {
+                teacherBusy.delete(tKey(old.teacher_id, day, period.id));
+                teacherDayLoad[tdKey(old.teacher_id, day)] = Math.max(0, (teacherDayLoad[tdKey(old.teacher_id, day)]||1) - 1);
+              }
+              slotsToInsert.splice(existIdx, 1);
+            }
+            markTeacherBusy(s.tid, day, period.id);
             slotsToInsert.push({
               school_id: schoolId, academic_year_id,
               term_id: term_id || null, class_id: cls.id,
               subject_id: s.sid, teacher_id: s.tid,
               period_id: period.id, day_of_week: day, room_id: null,
             });
-            forced = true;
             break outerForce;
           }
         }
