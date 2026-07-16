@@ -132,6 +132,8 @@ router.delete('/documents/folders/:id',      requireRole('admin','secretary'), d
 router.post  ('/documents/folders/:id/unlock', requireRole('admin','secretary','dos','teacher','finance'), docs.unlockFolder);
 router.get   ('/documents',                  requireRole('admin','secretary'), docs.getDocuments);
 router.post  ('/documents',                  requireRole('admin','secretary'), docs.uploadDocument);
+router.post  ('/documents/upload-url',       requireRole('admin','secretary'), docs.getUploadUrl);
+router.post  ('/documents/confirm-upload',   requireRole('admin','secretary'), docs.confirmUpload);
 router.delete('/documents/:id',              requireRole('admin','secretary'), docs.deleteDocument);
 
 module.exports = router;

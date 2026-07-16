@@ -220,73 +220,94 @@ exports.uploadDocument = async (req, res) => {
     const safeName = file.name.replace(/[^a-z0-9._-]/gi, '_');
     const filePath = `${req.schoolId}/${folder_id}/${Date.now()}_${safeName}`;
 
-    // Resolve correct MIME type — browsers often send wrong type for zip files
     const MIME_MAP = {
-      'zip': 'application/zip',
-      'rar': 'application/x-rar-compressed',
-      '7z':  'application/x-7z-compressed',
-      'tar': 'application/x-tar',
-      'gz':  'application/gzip',
-      'pdf': 'application/pdf',
-      'doc': 'application/msword',
+      'zip':'application/zip','rar':'application/x-rar-compressed',
+      '7z':'application/x-7z-compressed','tar':'application/x-tar','gz':'application/gzip',
+      'pdf':'application/pdf','doc':'application/msword',
       'docx':'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'xls': 'application/vnd.ms-excel',
+      'xls':'application/vnd.ms-excel',
       'xlsx':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'ppt': 'application/vnd.ms-powerpoint',
+      'ppt':'application/vnd.ms-powerpoint',
       'pptx':'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-      'jpg': 'image/jpeg',
-      'jpeg':'image/jpeg',
-      'png': 'image/png',
-      'gif': 'image/gif',
-      'webp':'image/webp',
+      'jpg':'image/jpeg','jpeg':'image/jpeg','png':'image/png','gif':'image/gif','webp':'image/webp',
     };
     const contentType = MIME_MAP[ext] || file.mimetype || 'application/octet-stream';
 
-    // Upload to Supabase Storage with correct MIME type and upsert=false
     const { error: upErr } = await supabase.storage
       .from('documents')
-      .upload(filePath, file.data, {
-        contentType,
-        upsert:      false,
-        duplex:      'half', // required for Node.js streams
-      });
+      .upload(filePath, file.data, { contentType, upsert: true });
 
-    if (upErr) {
-      // If file already exists, try with a new timestamp
-      if (upErr.message?.includes('already exists') || upErr.statusCode === '409') {
-        const retryPath = `${req.schoolId}/${folder_id}/${Date.now()}_${Math.random().toString(36).slice(2)}_${safeName}`;
-        const { error: retryErr } = await supabase.storage
-          .from('documents')
-          .upload(retryPath, file.data, { contentType, upsert: true });
-        if (retryErr) throw new Error(`Storage upload failed: ${retryErr.message}`);
-        const { data: retryUrl } = supabase.storage.from('documents').getPublicUrl(retryPath);
-        const { data: retryDoc, error: dbErr } = await supabase.from('school_documents').insert([{
-          school_id: req.schoolId, folder_id,
-          name: name?.trim() || file.name,
-          file_url: retryUrl.publicUrl, file_type: fileType,
-          file_size: file.size, uploaded_by: req.staff?.id || null,
-        }]).select('*, uploader:staff(full_name)').single();
-        if (dbErr) throw dbErr;
-        return res.status(201).json({ success: true, data: retryDoc });
-      }
-      throw new Error(`Storage upload failed: ${upErr.message}`);
-    }
+    if (upErr) throw new Error(`Storage upload failed: ${upErr.message}`);
 
     const { data: urlData } = supabase.storage.from('documents').getPublicUrl(filePath);
 
     const { data, error } = await supabase.from('school_documents').insert([{
-      school_id:   req.schoolId,
-      folder_id,
-      name:        name?.trim() || file.name,
-      file_url:    urlData.publicUrl,
-      file_type:   fileType,
-      file_size:   file.size,
-      uploaded_by: req.staff?.id || null,
+      school_id: req.schoolId, folder_id,
+      name: name?.trim() || file.name,
+      file_url: urlData.publicUrl, file_type: fileType,
+      file_size: file.size, uploaded_by: req.staff?.id || null,
     }]).select('*, uploader:staff(full_name)').single();
     if (error) throw error;
     res.status(201).json({ success: true, data });
   } catch (err) {
     console.error('uploadDocument error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+// POST /sms/documents/upload-url — get a signed URL for direct browser→Supabase upload
+// Used for large files (zip, etc.) that would timeout through the backend
+exports.getUploadUrl = async (req, res) => {
+  try {
+    const { folder_id, file_name, file_size, file_type_hint } = req.body;
+    if (!folder_id || !file_name) return res.status(400).json({ success: false, error: 'folder_id and file_name required' });
+
+    const ext      = file_name.split('.').pop().toLowerCase();
+    const safeName = file_name.replace(/[^a-z0-9._-]/gi, '_');
+    const filePath = `${req.schoolId}/${folder_id}/${Date.now()}_${safeName}`;
+
+    // Create a signed upload URL valid for 10 minutes
+    const { data: signedData, error: signErr } = await supabase.storage
+      .from('documents')
+      .createSignedUploadUrl(filePath);
+
+    if (signErr) throw new Error(`Failed to create upload URL: ${signErr.message}`);
+
+    res.json({
+      success:    true,
+      signed_url: signedData.signedUrl,
+      token:      signedData.token,
+      path:       filePath,
+      public_url: supabase.storage.from('documents').getPublicUrl(filePath).data.publicUrl,
+    });
+  } catch (err) {
+    console.error('getUploadUrl error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+// POST /sms/documents/confirm-upload — save DB record after direct upload completes
+exports.confirmUpload = async (req, res) => {
+  try {
+    const { folder_id, name, file_url, file_size, file_name } = req.body;
+    if (!folder_id || !file_url) return res.status(400).json({ success: false, error: 'folder_id and file_url required' });
+
+    const ext      = (file_name || file_url).split('.').pop().toLowerCase();
+    const fileType = getFileType(ext);
+
+    const { data, error } = await supabase.from('school_documents').insert([{
+      school_id:   req.schoolId,
+      folder_id,
+      name:        name?.trim() || file_name || 'Uploaded file',
+      file_url,
+      file_type:   fileType,
+      file_size:   file_size || 0,
+      uploaded_by: req.staff?.id || null,
+    }]).select('*, uploader:staff(full_name)').single();
+    if (error) throw error;
+    res.status(201).json({ success: true, data });
+  } catch (err) {
+    console.error('confirmUpload error:', err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 };

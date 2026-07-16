@@ -100,33 +100,73 @@ function UnlockModal({ folder, onUnlocked, onClose }) {
 }
 
 // ── Upload Modal ──────────────────────────────────────────────
+// Files ≤ 10MB → backend proxy
+// Files > 10MB → signed URL direct to Supabase (supports up to 500MB)
 function UploadModal({ folder, onSave, onClose }) {
-  const [files, setFiles] = useState([]);
-  const [uploading, setUploading] = useState(false);
+  const [files,    setFiles]    = useState([]);
+  const [uploading,setUploading]= useState(false);
   const [progress, setProgress] = useState('');
+  const [progPct,  setProgPct]  = useState(0);
   const inputRef = useRef();
+
+  const LARGE = 10 * 1024 * 1024; // 10 MB threshold
 
   const addFiles = fs => setFiles(p => {
     const ex = new Set(p.map(f => f.name+f.size));
     return [...p, ...Array.from(fs).filter(f => !ex.has(f.name+f.size))];
   });
 
+  const uploadOne = async (file, idx, total) => {
+    setProgress(`${idx+1}/${total}: ${file.name}`);
+    setProgPct(Math.round((idx / total) * 100));
+
+    if (file.size > LARGE) {
+      // ── Direct browser → Supabase upload (large files) ──────
+      const urlRes = await SMS.post('/sms/documents/upload-url', {
+        folder_id: folder.id, file_name: file.name,
+        file_size: file.size, file_type_hint: file.type,
+      });
+      const { signed_url, public_url } = urlRes.data;
+
+      await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.upload.onprogress = e => {
+          if (e.lengthComputable) {
+            const pct = Math.round(((idx + e.loaded/e.total) / total) * 100);
+            setProgPct(pct);
+            setProgress(`${idx+1}/${total}: ${file.name} — ${Math.round(e.loaded/e.total*100)}%`);
+          }
+        };
+        xhr.onload  = () => (xhr.status >= 200 && xhr.status < 300) ? resolve() : reject(new Error(`${xhr.status} ${xhr.statusText}`));
+        xhr.onerror = () => reject(new Error('Network error'));
+        xhr.open('PUT', signed_url);
+        xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+        xhr.send(file);
+      });
+
+      await SMS.post('/sms/documents/confirm-upload', {
+        folder_id: folder.id, name: file.name,
+        file_url: public_url, file_size: file.size, file_name: file.name,
+      });
+    } else {
+      // ── Small file: backend proxy ────────────────────────────
+      const fd = new FormData();
+      fd.append('file', file); fd.append('folder_id', folder.id); fd.append('name', file.name);
+      await SMS.post('/sms/documents', fd, { headers: {'Content-Type':'multipart/form-data'} });
+    }
+  };
+
   const handleUpload = async () => {
     if (!files.length) { toast.error('Select files first'); return; }
     setUploading(true);
     let ok=0, fail=0;
     for (let i=0; i<files.length; i++) {
-      setProgress(`Uploading ${i+1}/${files.length}: ${files[i].name}`);
-      try {
-        const fd = new FormData();
-        fd.append('file', files[i]); fd.append('folder_id', folder.id); fd.append('name', files[i].name);
-        await SMS.post('/sms/documents', fd, { headers: {'Content-Type':'multipart/form-data'} });
-        ok++;
-      } catch { fail++; }
+      try { await uploadOne(files[i], i, files.length); ok++; }
+      catch(err) { console.error('upload error:', err.message); fail++; }
     }
-    setUploading(false);
+    setUploading(false); setProgPct(100);
     if (ok)   toast.success(`${ok} file${ok>1?'s':''} uploaded!`);
-    if (fail) toast.error(`${fail} failed`);
+    if (fail) toast.error(`${fail} file${fail>1?'s':''} failed — check console`);
     onSave();
   };
 
@@ -151,29 +191,44 @@ function UploadModal({ folder, onSave, onClose }) {
             className="border-2 border-dashed border-gray-200 hover:border-blue-400 bg-gray-50 hover:bg-blue-50/30 rounded-xl p-8 text-center cursor-pointer transition-all">
             <Upload className="w-8 h-8 text-gray-300 mx-auto mb-2"/>
             <p className="text-sm font-semibold text-gray-600">Click or drag &amp; drop</p>
-            <p className="text-xs text-gray-400 mt-1">PDF, Word, Excel, Images, ZIP, RAR…</p>
+            <p className="text-xs text-gray-400 mt-1">PDF, Word, Excel, Images, ZIP, RAR — up to 500 MB</p>
           </div>
           <input ref={inputRef} type="file" multiple className="hidden"
             accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.webp,.zip,.rar,.7z,.tar,.gz"
             onChange={e=>addFiles(e.target.files)}/>
+
           {files.length>0 && (
-            <div className="space-y-1.5 max-h-40 overflow-y-auto">
+            <div className="space-y-1.5 max-h-44 overflow-y-auto">
               {files.map((f,i) => (
                 <div key={i} className="flex items-center gap-2 bg-gray-50 border border-gray-100 rounded-xl px-3 py-2">
                   <FileIcon type={f.name.split('.').pop()?.toLowerCase()} size={4}/>
                   <span className="text-xs flex-1 truncate font-medium text-gray-700">{f.name}</span>
-                  <span className="text-[10px] text-gray-400">{fmtSize(f.size)}</span>
-                  <button onClick={()=>setFiles(p=>p.filter((_,j)=>j!==i))} className="text-gray-300 hover:text-red-500">
+                  <span className="text-[10px] text-gray-400 shrink-0">{fmtSize(f.size)}</span>
+                  {f.size > LARGE && (
+                    <span className="text-[9px] text-blue-500 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded-full font-bold shrink-0">
+                      Direct
+                    </span>
+                  )}
+                  <button onClick={()=>setFiles(p=>p.filter((_,j)=>j!==i))}
+                    className="text-gray-300 hover:text-red-500 transition-colors shrink-0">
                     <X className="w-3.5 h-3.5"/>
                   </button>
                 </div>
               ))}
             </div>
           )}
+
           {uploading && (
-            <div className="flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-xl p-3">
-              <span className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin shrink-0"/>
-              <p className="text-xs text-blue-700 truncate">{progress}</p>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2.5 bg-blue-50 border border-blue-100 rounded-xl p-3">
+                <span className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin shrink-0"/>
+                <p className="text-xs text-blue-700 truncate flex-1">{progress}</p>
+              </div>
+              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-full bg-blue-500 rounded-full transition-all duration-300"
+                  style={{width:`${progPct}%`}}/>
+              </div>
+              <p className="text-[11px] text-gray-400 text-right">{progPct}%</p>
             </div>
           )}
         </div>
