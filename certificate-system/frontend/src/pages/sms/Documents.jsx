@@ -121,33 +121,50 @@ function UploadModal({ folder, onSave, onClose }) {
     setProgPct(Math.round((idx / total) * 100));
 
     if (file.size > LARGE) {
-      // ── Direct browser → Supabase upload (large files) ──────
-      const urlRes = await SMS.post('/sms/documents/upload-url', {
-        folder_id: folder.id, file_name: file.name,
-        file_size: file.size, file_type_hint: file.type,
-      });
-      const { signed_url, public_url } = urlRes.data;
+      // ── Try direct browser → Supabase upload (large files) ──
+      try {
+        const urlRes = await SMS.post('/sms/documents/upload-url', {
+          folder_id: folder.id, file_name: file.name,
+          file_size: file.size,
+        });
+        const { signed_url, public_url } = urlRes.data;
 
-      await new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.upload.onprogress = e => {
-          if (e.lengthComputable) {
-            const pct = Math.round(((idx + e.loaded/e.total) / total) * 100);
-            setProgPct(pct);
-            setProgress(`${idx+1}/${total}: ${file.name} — ${Math.round(e.loaded/e.total*100)}%`);
-          }
-        };
-        xhr.onload  = () => (xhr.status >= 200 && xhr.status < 300) ? resolve() : reject(new Error(`${xhr.status} ${xhr.statusText}`));
-        xhr.onerror = () => reject(new Error('Network error'));
-        xhr.open('PUT', signed_url);
-        xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
-        xhr.send(file);
-      });
+        // Upload directly with progress
+        await new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.upload.onprogress = e => {
+            if (e.lengthComputable) {
+              const pct = Math.round(((idx + e.loaded/e.total) / total) * 100);
+              setProgPct(pct);
+              setProgress(`${idx+1}/${total}: ${file.name} — ${Math.round(e.loaded/e.total*100)}%`);
+            }
+          };
+          xhr.onload  = () => {
+            if (xhr.status >= 200 && xhr.status < 300) resolve();
+            else reject(new Error(`Upload failed: HTTP ${xhr.status} — ${xhr.responseText?.slice(0,200)}`));
+          };
+          xhr.onerror = () => reject(new Error('Network error during upload'));
+          xhr.open('PUT', signed_url);
+          // Supabase signed upload uses PUT with the token in the URL — no auth header needed
+          xhr.setRequestHeader('x-upsert', 'true');
+          xhr.send(file);
+        });
 
-      await SMS.post('/sms/documents/confirm-upload', {
-        folder_id: folder.id, name: file.name,
-        file_url: public_url, file_size: file.size, file_name: file.name,
-      });
+        // Confirm: save DB record
+        await SMS.post('/sms/documents/confirm-upload', {
+          folder_id: folder.id, name: file.name,
+          file_url: public_url, file_size: file.size, file_name: file.name,
+        });
+      } catch (directErr) {
+        // Fallback: try through backend (may timeout for very large files)
+        console.warn('Direct upload failed, trying backend:', directErr.message);
+        const fd = new FormData();
+        fd.append('file', file); fd.append('folder_id', folder.id); fd.append('name', file.name);
+        await SMS.post('/sms/documents', fd, {
+          headers: {'Content-Type':'multipart/form-data'},
+          timeout: 120000, // 2 min
+        });
+      }
     } else {
       // ── Small file: backend proxy ────────────────────────────
       const fd = new FormData();
@@ -160,13 +177,18 @@ function UploadModal({ folder, onSave, onClose }) {
     if (!files.length) { toast.error('Select files first'); return; }
     setUploading(true);
     let ok=0, fail=0;
+    const errors = [];
     for (let i=0; i<files.length; i++) {
       try { await uploadOne(files[i], i, files.length); ok++; }
-      catch(err) { console.error('upload error:', err.message); fail++; }
+      catch(err) {
+        console.error('upload error:', err.message);
+        errors.push(`${files[i].name}: ${err.response?.data?.error || err.message}`);
+        fail++;
+      }
     }
     setUploading(false); setProgPct(100);
     if (ok)   toast.success(`${ok} file${ok>1?'s':''} uploaded!`);
-    if (fail) toast.error(`${fail} file${fail>1?'s':''} failed — check console`);
+    if (fail) toast.error(errors[0] || `${fail} file${fail>1?'s':''} failed`, { duration: 8000 });
     onSave();
   };
 

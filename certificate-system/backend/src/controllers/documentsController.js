@@ -256,29 +256,33 @@ exports.uploadDocument = async (req, res) => {
 };
 
 // POST /sms/documents/upload-url — get a signed URL for direct browser→Supabase upload
-// Used for large files (zip, etc.) that would timeout through the backend
 exports.getUploadUrl = async (req, res) => {
   try {
-    const { folder_id, file_name, file_size, file_type_hint } = req.body;
+    const { folder_id, file_name, file_size } = req.body;
     if (!folder_id || !file_name) return res.status(400).json({ success: false, error: 'folder_id and file_name required' });
 
-    const ext      = file_name.split('.').pop().toLowerCase();
     const safeName = file_name.replace(/[^a-z0-9._-]/gi, '_');
     const filePath = `${req.schoolId}/${folder_id}/${Date.now()}_${safeName}`;
 
-    // Create a signed upload URL valid for 10 minutes
+    // Create a signed upload URL valid for 60 minutes
     const { data: signedData, error: signErr } = await supabase.storage
       .from('documents')
       .createSignedUploadUrl(filePath);
 
-    if (signErr) throw new Error(`Failed to create upload URL: ${signErr.message}`);
+    if (signErr) {
+      console.error('createSignedUploadUrl error:', signErr);
+      // Fallback: return the path so frontend can use presigned URL approach
+      return res.status(500).json({ success: false, error: `Signed URL failed: ${signErr.message}` });
+    }
+
+    const publicUrl = supabase.storage.from('documents').getPublicUrl(filePath).data.publicUrl;
 
     res.json({
       success:    true,
       signed_url: signedData.signedUrl,
       token:      signedData.token,
       path:       filePath,
-      public_url: supabase.storage.from('documents').getPublicUrl(filePath).data.publicUrl,
+      public_url: publicUrl,
     });
   } catch (err) {
     console.error('getUploadUrl error:', err.message);
