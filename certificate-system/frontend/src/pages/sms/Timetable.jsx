@@ -398,7 +398,7 @@ export default function Timetable() {
           <div className="flex flex-wrap items-end gap-4">
             <div className="flex-1 min-w-40">
               <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">Academic Year</label>
-              <div className="relative"><select value={selYear} onChange={e => { setSelYear(e.target.value); setSelTerm(''); }} className={SEL}>
+              <div className="relative"><select value={selYear} onChange={e => { setSelYear(e.target.value); setSelTerm(''); setSelClass(''); }} className={SEL}>
                 <option value="">— Select Year —</option>
                 {years.map(y => <option key={y.id} value={y.id}>{y.name}{y.is_current?' (current)':''}</option>)}
               </select><ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none"/></div>
@@ -414,7 +414,9 @@ export default function Timetable() {
               <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">Class</label>
               <div className="relative"><select value={selClass} onChange={e => setSelClass(e.target.value)} className={SEL}>
                 <option value="">— Select Class —</option>
-                {classes.map(c => <option key={c.id} value={c.id}>{c.name}{c.level?` (${c.level})`:''}</option>)}
+                {classes
+                  .filter(c => !selYear || !c.academic_year_id || c.academic_year_id === selYear)
+                  .map(c => <option key={c.id} value={c.id}>{c.name}{c.level?` (${c.level})`:''}</option>)}
               </select><ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none"/></div>
             </div>
             <button onClick={loadSlots} disabled={loading} className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors shadow-sm self-end">
