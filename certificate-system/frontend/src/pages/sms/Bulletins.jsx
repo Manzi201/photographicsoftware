@@ -167,7 +167,9 @@ export default function SmsBulletins() {
               <div className="relative">
                 <select value={selClass} onChange={e => setSelClass(e.target.value)} className={SEL}>
                   <option value="">— Select Class —</option>
-                  {classes.map(c => <option key={c.id} value={c.id}>{c.name}{c.level ? ` (${c.level})` : ''}</option>)}
+                  {classes
+                    .filter(c => !selYear || !c.academic_year_id || c.academic_year_id === selYear)
+                    .map(c => <option key={c.id} value={c.id}>{c.name}{c.level ? ` (${c.level})` : ''}</option>)}
                 </select>
                 <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
               </div>
