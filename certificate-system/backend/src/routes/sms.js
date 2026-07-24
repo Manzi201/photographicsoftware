@@ -124,6 +124,11 @@ router.get   ('/timetable/export/class',            requireRole('admin','dos','t
 router.get   ('/timetable/export/teacher',          requireRole('admin','dos','teacher'), tt.generateTeacherTimetable);
 router.get   ('/timetable/export/school',           requireRole('admin','dos'),           tt.generateSchoolTimetable);
 
+// ── AI Assistant ──────────────────────────────────────────────
+const ai = require('../controllers/aiController');
+router.post('/ai/timetable-chat', requireRole('admin','dos'), ai.timetableChat);
+router.post('/ai/check-slot',     requireRole('admin','dos'), ai.checkSlot);
+
 // ── Documents (Secretary + Admin) ─────────────────────────────
 const docs = require('../controllers/documentsController');router.get   ('/documents/folders',          requireRole('admin','secretary'), docs.getFolders);
 router.post  ('/documents/folders',          requireRole('admin','secretary'), docs.createFolder);

@@ -195,3 +195,7 @@ export const getTtConflicts       = (p)     => sms.get('/timetable/reports/confl
 export const exportClassTimetable   = (p)   => sms.get('/timetable/export/class',   { params: p, responseType: 'blob' });
 export const exportTeacherTimetable = (p)   => sms.get('/timetable/export/teacher', { params: p, responseType: 'blob' });
 export const exportSchoolTimetable  = (p)   => sms.get('/timetable/export/school',  { params: p, responseType: 'blob' });
+
+// ── AI Timetable Assistant ────────────────────────────────────
+export const aiTimetableChat = (d) => sms.post('/ai/timetable-chat', d, { timeout: 30000 });
+export const aiCheckSlot     = (d) => sms.post('/ai/check-slot', d);
