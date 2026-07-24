@@ -204,19 +204,25 @@ export default function Layout() {
                 <div className={`
                   group relative flex items-center rounded-xl transition-all duration-200 select-none cursor-pointer
                   ${wide ? 'gap-3 px-3 py-2.5' : 'justify-center px-0 py-2.5'}
-                  ${isActive ? 'text-white' : 'text-white/50 hover:text-white/90 hover:bg-white/[0.06]'}
+                  ${isActive ? 'text-white' : 'text-white/45 hover:text-white hover:bg-white/[0.07]'}
                 `}
                 style={isActive ? {
-                  background: `linear-gradient(135deg, ${meta.color}28, ${meta.color}14)`,
-                  boxShadow: `inset 0 0 0 1px ${meta.color}30`,
+                  background: `linear-gradient(135deg, ${meta.color}35 0%, ${meta.color}1a 100%)`,
+                  boxShadow: `inset 0 0 0 1px ${meta.color}40, 0 2px 8px ${meta.color}18`,
                 } : {}}>
                   {/* Active left accent bar */}
-                  {isActive && (
-                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full"
-                      style={{ background: meta.color }}/>
+                  <span className={`absolute left-0 top-1/2 -translate-y-1/2 w-[3px] rounded-r-full transition-all duration-300
+                    ${isActive ? 'h-6 opacity-100' : 'h-0 opacity-0'}`}
+                    style={{ background: meta.color }}/>
+                  {/* Icon */}
+                  <Icon className={`shrink-0 transition-colors ${wide ? 'w-[17px] h-[17px]' : 'w-5 h-5'}`}
+                    style={isActive ? { color: meta.color } : {}}/>
+                  {wide && (
+                    <span className={`text-[13.5px] truncate leading-none transition-all
+                      ${isActive ? 'font-bold' : 'font-medium'}`}>
+                      {item.label}
+                    </span>
                   )}
-                  <Icon className={`shrink-0 ${wide ? 'w-[17px] h-[17px]' : 'w-5 h-5'}`}/>
-                  {wide && <span className="text-[13.5px] font-semibold truncate leading-none">{item.label}</span>}
                   {/* Collapsed tooltip */}
                   {!wide && (
                     <div className="absolute left-full ml-3 px-3 py-2 bg-gray-900 text-white text-xs font-bold rounded-xl
