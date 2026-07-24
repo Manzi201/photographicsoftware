@@ -160,7 +160,69 @@ function SlotModal({ slot, classId, periodId, dayOfWeek, termId, yearId, subject
   );
 }
 
-/* ── AI Smart Panel (right sidebar, like screenshot) ─────────── */
+/* ── Simple markdown renderer for AI messages ─────────────── */
+function renderMarkdown(text) {
+  if (!text) return null;
+  // Split into lines for block-level handling
+  const lines = text.split('\n');
+  const elements = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Empty line → spacer
+    if (line.trim() === '') {
+      elements.push(<div key={i} className="h-2"/>);
+      i++; continue;
+    }
+
+    // Bullet point: lines starting with - or •
+    if (/^[-•]\s/.test(line.trim())) {
+      const bullets = [];
+      while (i < lines.length && /^[-•]\s/.test(lines[i].trim())) {
+        bullets.push(<li key={i} className="ml-3 list-disc">{inlineFormat(lines[i].replace(/^[-•]\s/,''))}</li>);
+        i++;
+      }
+      elements.push(<ul key={`ul-${i}`} className="space-y-0.5 my-1">{bullets}</ul>);
+      continue;
+    }
+
+    // Numbered list: 1. 2. etc
+    if (/^\d+\.\s/.test(line.trim())) {
+      const items = [];
+      while (i < lines.length && /^\d+\.\s/.test(lines[i].trim())) {
+        items.push(<li key={i} className="ml-3 list-decimal">{inlineFormat(lines[i].replace(/^\d+\.\s/,''))}</li>);
+        i++;
+      }
+      elements.push(<ol key={`ol-${i}`} className="space-y-0.5 my-1">{items}</ol>);
+      continue;
+    }
+
+    // Normal paragraph line
+    elements.push(<p key={i} className="leading-relaxed">{inlineFormat(line)}</p>);
+    i++;
+  }
+  return elements;
+}
+
+function inlineFormat(text) {
+  // Split by **bold**, *italic*, `code`
+  const parts = [];
+  const regex = /(\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`)/g;
+  let last = 0;
+  let m;
+  let key = 0;
+  while ((m = regex.exec(text)) !== null) {
+    if (m.index > last) parts.push(<span key={key++}>{text.slice(last, m.index)}</span>);
+    if (m[2] != null) parts.push(<strong key={key++} className="font-bold text-current">{m[2]}</strong>);
+    else if (m[3] != null) parts.push(<em key={key++} className="italic">{m[3]}</em>);
+    else if (m[4] != null) parts.push(<code key={key++} className="bg-black/10 rounded px-1 font-mono text-[10px]">{m[4]}</code>);
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push(<span key={key++}>{text.slice(last)}</span>);
+  return parts.length > 0 ? parts : text;
+}
 function AISmartPanel({ onClose, selYear, selTerm, selClass, dragging, slots, subjects, staff, workload, conflicts, colorMap }) {
   const [messages,setMessages]=useState([{role:'assistant',content:"Muraho! 👋 I'm your Smart Timetable Assistant. I can analyze your schedule, detect conflicts, and suggest improvements. Ask me anything!"}]);
   const [input,setInput]=useState('');
@@ -303,7 +365,9 @@ function AISmartPanel({ onClose, selYear, selTerm, selClass, dragging, slots, su
               )}
               <div className={`max-w-[82%] rounded-2xl px-3 py-2 text-xs leading-relaxed
                 ${m.role==='user'?'bg-[#0a2156] text-white rounded-br-sm':'bg-gray-100 text-gray-800 rounded-bl-sm'}`}>
-                {m.content}
+                {m.role === 'assistant' ? (
+                  <div className="space-y-0.5">{renderMarkdown(m.content)}</div>
+                ) : m.content}
               </div>
             </div>
           ))}
