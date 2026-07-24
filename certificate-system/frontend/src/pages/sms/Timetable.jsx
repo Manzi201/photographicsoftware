@@ -206,7 +206,14 @@ function AISmartPanel({ onClose, selYear, selTerm, selClass, dragging, slots, su
       const r=await aiTimetableChat({message:msg,history,academic_year_id:selYear,term_id:selTerm});
       setMessages(p=>[...p,{role:'assistant',content:r.data.reply}]);
     }catch(e){
-      setMessages(p=>[...p,{role:'assistant',content:`Error: ${e.response?.data?.error||e.message}`}]);
+      const errMsg = e.response?.data?.error || e.message;
+      const isKeyError = errMsg?.toLowerCase().includes('mistral') || errMsg?.toLowerCase().includes('api key');
+      setMessages(p=>[...p,{
+        role:'assistant',
+        content: isKeyError
+          ? `⚠️ AI not configured: ${errMsg}\n\nTo fix: Go to Render dashboard → your backend service → Environment tab → add MISTRAL_API_KEY.`
+          : `Sorry, I couldn't connect: ${errMsg}`
+      }]);
     }finally{setBusy(false);}
   };
 

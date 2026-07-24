@@ -138,7 +138,10 @@ Keep responses concise — max 4-5 paragraphs.`,
   } catch (err) {
     console.error('AI timetable chat error:', err.response?.data || err.message);
     if (err.response?.status === 401) {
-      return res.status(500).json({ success: false, error: 'Mistral API key invalid or expired.' });
+      return res.status(500).json({ success: false, error: 'Mistral API key invalid or not set. Go to Render dashboard → Environment → add MISTRAL_API_KEY.' });
+    }
+    if (err.response?.status === 422) {
+      return res.status(500).json({ success: false, error: 'Mistral API request format error: ' + (err.response?.data?.message || err.message) });
     }
     res.status(500).json({ success: false, error: err.message });
   }

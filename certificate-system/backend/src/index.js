@@ -131,6 +131,13 @@ app.listen(PORT, '0.0.0.0', async () => {
       }
     }
     console.log('✅ Schema checks done');
+
+    // Check Mistral AI key
+    if (process.env.MISTRAL_API_KEY) {
+      console.log('✅ Mistral AI key configured');
+    } else {
+      console.warn('⚠️  MISTRAL_API_KEY not set — AI timetable assistant will not work. Add it in Render Environment settings.');
+    }
   } catch (e) {
     console.error('⚠️  Startup check error:', e.message);
   }
