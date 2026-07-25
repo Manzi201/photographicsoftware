@@ -206,34 +206,54 @@ ${emptyClasses.length === 0 ? '  NONE' : '  ' + emptyClasses.join(', ')}
 - Every assigned subject must appear in timetable
 `.trim();
 
-    // ── 4. Call Mistral ───────────────────────────────────────
+    // ── 4. Call Mistral (with optional image) ────────────────
+    const { imageBase64, imageMime } = req.body; // optional image from user
+
     const systemPrompt = `You are a highly intelligent school timetable analyst for SchoolMS, a Rwandan primary school management system.
 
 Your role:
-- Analyze the EXACT timetable data provided in every message — never invent data
-- Give precise, fact-based answers referring to actual teacher names, class names, subject codes, and period counts from the data
-- Detect and explain real problems: conflicts, overloaded teachers, missing subjects, unbalanced days
-- Suggest specific, actionable fixes (e.g., "Move Math from Redempta on P1-Monday to Dieudonne on P2-Tuesday")
-- Follow Rwanda Primary School curriculum rules strictly
-- Format responses clearly with **bold** for names/numbers, bullet points for lists
-- Be concise but thorough — 3-6 sentences or a short list per answer
-- Respond in the same language the user writes in (English, French, or Kinyarwanda)
-- NEVER say you cannot access the timetable — the full data is provided to you`;
+- Analyze the EXACT timetable data provided — never invent data
+- Give precise, fact-based answers with actual teacher names, class names, subject codes, period counts
+- Detect problems: conflicts, overloaded teachers, missing subjects, unbalanced days
+- Suggest specific actionable fixes (e.g., "Move MATH from Redempta on P1-Monday to Dieudonne on P2-Tuesday")
+- When asked to "fix" or "fill" the timetable, respond with a JSON block like:
+  \`\`\`json
+  {"action":"fix_slots","slots":[{"class":"P1","subject":"MATH","teacher":"Jean Bosco","day":1,"period":3},{"class":"P1","subject":"ENG","teacher":"Alice","day":2,"period":1}]}
+  \`\`\`
+  Day: 1=Monday 2=Tuesday 3=Wednesday 4=Thursday 5=Friday. Include only NEW slots to add (not existing ones).
+- When analyzing an uploaded image/photo of a timetable, extract and analyze its content
+- Format responses with **bold** for names/numbers, bullet lists for multiple items
+- Be concise but thorough — respond in the same language the user writes in (English, French, Kinyarwanda)
+- NEVER say you cannot access the data — everything is provided`;
+
+    // Build user content — supports text + optional image
+    let userContent;
+    if (imageBase64 && imageMime) {
+      userContent = [
+        { type: 'text',       text: `${context}\n\n---\nQUESTION: ${message}` },
+        { type: 'image_url',  image_url: { url: `data:${imageMime};base64,${imageBase64}` } },
+      ];
+    } else {
+      userContent = `${context}\n\n---\nQUESTION: ${message}`;
+    }
 
     const messages = [
       { role: 'system', content: systemPrompt },
       ...history.slice(-6).map(m => ({ role: m.role, content: m.content })),
-      { role: 'user', content: `${context}\n\n---\nQUESTION: ${message}` },
+      { role: 'user', content: userContent },
     ];
 
+    // Use vision model if image attached, otherwise small model
+    const model = (imageBase64 && imageMime) ? 'pixtral-12b-2409' : 'mistral-small-latest';
+
     const response = await axios.post(MISTRAL_URL, {
-      model:       'mistral-small-latest',
+      model,
       messages,
-      max_tokens:  700,
+      max_tokens:  800,
       temperature: 0.3,
     }, {
       headers: { 'Authorization': `Bearer ${MISTRAL_KEY}`, 'Content-Type': 'application/json' },
-      timeout: 25000,
+      timeout: 30000,
     });
 
     const reply = response.data.choices?.[0]?.message?.content || 'No response.';
@@ -246,8 +266,6 @@ Your role:
     res.status(500).json({ success: false, error: err.message });
   }
 };
-
-// ── POST /api/sms/ai/check-slot ───────────────────────────────
 exports.checkSlot = async (req, res) => {
   try {
     const { teacher_id, period_id, day_of_week, class_id, subject_id, academic_year_id } = req.body;
@@ -349,6 +367,167 @@ exports.checkSlot = async (req, res) => {
       ok: warnings.filter(w => w.severity === 'error').length === 0,
     });
   } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+// ── POST /api/sms/ai/fix-timetable ───────────────────────────
+// AI analyses the timetable and auto-applies suggested fixes
+// Body: { academic_year_id, term_id, instruction? }
+exports.fixTimetable = async (req, res) => {
+  try {
+    const { academic_year_id, term_id, instruction } = req.body;
+    if (!MISTRAL_KEY) return res.status(500).json({ success: false, error: 'MISTRAL_API_KEY not set.' });
+    const schoolId = req.schoolId;
+
+    // ── 1. Load full data ─────────────────────────────────────
+    let slotQuery = supabase.from('timetable_slots')
+      .select('id, day_of_week, period_id, class_id, subject_id, teacher_id')
+      .eq('school_id', schoolId);
+    if (academic_year_id) slotQuery = slotQuery.eq('academic_year_id', academic_year_id);
+    if (term_id)          slotQuery = slotQuery.eq('term_id', term_id);
+
+    const [
+      { data: classes },
+      { data: teachers },
+      { data: subjects },
+      { data: periods },
+      { data: slots },
+      { data: classSubjectsRaw },
+    ] = await Promise.all([
+      supabase.from('classes').select('id,name').eq('school_id', schoolId)
+        .eq('academic_year_id', academic_year_id).order('name'),
+      supabase.from('staff').select('id,full_name,role').eq('school_id', schoolId)
+        .eq('is_active', true).in('role', ['teacher','dos']),
+      supabase.from('subjects').select('id,name,code,max_periods_week,is_core').eq('school_id', schoolId),
+      supabase.from('school_periods').select('id,name,period_number,is_break')
+        .eq('school_id', schoolId).eq('is_break', false).order('period_number'),
+      slotQuery,
+    ]);
+
+    const clsList   = classes  || [];
+    const teachList = teachers || [];
+    const subList   = subjects || [];
+    const prdList   = periods  || [];
+    const slotList  = slots    || [];
+
+    // Get class_subjects
+    let cssList = [];
+    if (clsList.length > 0) {
+      const { data: cs } = await supabase.from('class_subjects')
+        .select('class_id, subject_id, teacher_id, subject:subjects(name,code,max_periods_week), teacher:staff(full_name)')
+        .in('class_id', clsList.map(c => c.id));
+      cssList = cs || [];
+    }
+
+    // ── 2. Find missing subjects & empty slots ────────────────
+    const occupied = new Set(slotList.map(s => `${s.class_id}:${s.day_of_week}:${s.period_id}`));
+    const DAYS_N = [1,2,3,4,5];
+
+    // Subject count per class
+    const subCount = {};
+    slotList.forEach(s => {
+      const k = `${s.class_id}:${s.subject_id}`;
+      subCount[k] = (subCount[k] || 0) + 1;
+    });
+
+    // Teacher busy map: "tid:day:periodId" → true
+    const teacherBusy = new Set(
+      slotList.filter(s => s.teacher_id).map(s => `${s.teacher_id}:${s.day_of_week}:${s.period_id}`)
+    );
+    const teacherDayLoad = {};
+    slotList.forEach(s => {
+      if (!s.teacher_id) return;
+      const k = `${s.teacher_id}:${s.day_of_week}`;
+      teacherDayLoad[k] = (teacherDayLoad[k] || 0) + 1;
+    });
+
+    const newSlots = [];
+    let skipped = 0;
+
+    // For each class, find subjects that still need more periods
+    for (const cls of clsList) {
+      const clsAssignments = cssList.filter(cs => cs.class_id === cls.id);
+
+      for (const cs of clsAssignments) {
+        const sub     = subList.find(s => s.id === cs.subject_id);
+        if (!sub) continue;
+        const maxW    = sub.max_periods_week || 7;
+        const current = subCount[`${cls.id}:${cs.subject_id}`] || 0;
+        let needed    = Math.max(0, maxW - current);
+        if (needed === 0) continue;
+
+        const tid = cs.teacher_id;
+
+        // Try to place `needed` more slots for this subject
+        for (const day of DAYS_N) {
+          if (needed <= 0) break;
+
+          // Max 2 per day per subject per class
+          const dayAlready = slotList.filter(s =>
+            s.class_id === cls.id && s.subject_id === cs.subject_id && s.day_of_week === day
+          ).length;
+          if (dayAlready >= 2) continue;
+
+          for (const prd of prdList) {
+            if (needed <= 0) break;
+            const cellKey = `${cls.id}:${day}:${prd.id}`;
+            if (occupied.has(cellKey)) continue; // slot already taken
+
+            // Teacher conflict check
+            if (tid) {
+              if (teacherBusy.has(`${tid}:${day}:${prd.id}`)) { skipped++; continue; }
+              const dayLoad = teacherDayLoad[`${tid}:${day}`] || 0;
+              if (dayLoad >= 3) { skipped++; continue; }
+            }
+
+            // Place it
+            newSlots.push({
+              school_id:        schoolId,
+              class_id:         cls.id,
+              subject_id:       cs.subject_id,
+              teacher_id:       tid || null,
+              period_id:        prd.id,
+              day_of_week:      day,
+              term_id:          term_id          || null,
+              academic_year_id: academic_year_id || null,
+            });
+            occupied.add(cellKey);
+            if (tid) {
+              teacherBusy.add(`${tid}:${day}:${prd.id}`);
+              teacherDayLoad[`${tid}:${day}`] = (teacherDayLoad[`${tid}:${day}`] || 0) + 1;
+            }
+            subCount[`${cls.id}:${cs.subject_id}`] = (subCount[`${cls.id}:${cs.subject_id}`] || 0) + 1;
+            needed--;
+          }
+        }
+      }
+    }
+
+    // ── 3. Insert in batches of 50 ────────────────────────────
+    let inserted = 0;
+    const CHUNK = 50;
+    for (let i = 0; i < newSlots.length; i += CHUNK) {
+      const chunk = newSlots.slice(i, i + CHUNK);
+      const { data, error } = await supabase.from('timetable_slots')
+        .upsert(chunk, { onConflict: 'school_id,class_id,period_id,day_of_week' })
+        .select('id');
+      if (!error) inserted += (data || []).length;
+    }
+
+    // ── 4. Summary reply via AI ───────────────────────────────
+    const summary = `Fixed timetable: inserted ${inserted} new slots, skipped ${skipped} due to teacher conflicts. ${newSlots.length - inserted} slots could not be placed.`;
+
+    res.json({
+      success:  true,
+      inserted,
+      skipped,
+      total_attempted: newSlots.length,
+      message: summary,
+    });
+
+  } catch (err) {
+    console.error('fixTimetable error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 };

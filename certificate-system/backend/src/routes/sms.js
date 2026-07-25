@@ -128,6 +128,7 @@ router.get   ('/timetable/export/school',           requireRole('admin','dos'), 
 const ai = require('../controllers/aiController');
 router.post('/ai/timetable-chat', requireRole('admin','dos'), ai.timetableChat);
 router.post('/ai/check-slot',     requireRole('admin','dos'), ai.checkSlot);
+router.post('/ai/fix-timetable',  requireRole('admin','dos'), ai.fixTimetable);
 
 // ── Documents (Secretary + Admin) ─────────────────────────────
 const docs = require('../controllers/documentsController');router.get   ('/documents/folders',          requireRole('admin','secretary'), docs.getFolders);

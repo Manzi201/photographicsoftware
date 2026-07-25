@@ -14,7 +14,7 @@ import {
   getTtSlots, upsertTtSlot, deleteTtSlot,
   getTtWorkload, getTtConflicts,
   exportClassTimetable, exportTeacherTimetable, exportSchoolTimetable,
-  autoGenerateTimetable, aiTimetableChat, aiCheckSlot,
+  autoGenerateTimetable, aiTimetableChat, aiCheckSlot, aiFixTimetable,
 } from '../../api';
 
 /* ── Constants ───────────────────────────────────────────────── */
@@ -223,13 +223,43 @@ function inlineFormat(text) {
   if (last < text.length) parts.push(<span key={key++}>{text.slice(last)}</span>);
   return parts.length > 0 ? parts : text;
 }
-function AISmartPanel({ onClose, selYear, selTerm, selClass, dragging, slots, subjects, staff, workload, conflicts, colorMap }) {
-  const [messages,setMessages]=useState([{role:'assistant',content:"Muraho! 👋 I'm your Smart Timetable Assistant. I can analyze your schedule, detect conflicts, and suggest improvements. Ask me anything!"}]);
+function AISmartPanel({ onClose, selYear, selTerm, selClass, dragging, slots, subjects, staff, workload, conflicts, colorMap, onSlotsFixed }) {
+  const [messages,setMessages]=useState([{role:'assistant',content:"Muraho! 👋 I'm your Smart Timetable Assistant. I can analyze your schedule, detect conflicts, suggest improvements, and **fix the timetable automatically**. Upload a photo or ask me anything!"}]);
   const [input,setInput]=useState('');
   const [busy,setBusy]=useState(false);
+  const [fixing,setFixing]=useState(false);
   const [posCheck,setPosCheck]=useState(null);
+  const [image,setImage]=useState(null); // {base64, mime, name, preview}
   const bottomRef=useRef(null);
   const inputRef=useRef(null);
+  const fileRef=useRef(null);
+
+  // Handle image file selection
+  const handleFileSelect = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target.result;
+      const base64  = dataUrl.split(',')[1];
+      setImage({ base64, mime: file.type, name: file.name, preview: dataUrl });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Fix timetable automatically
+  const handleFix = async () => {
+    setFixing(true);
+    setMessages(p=>[...p,{role:'user',content:'Fix my timetable — fill missing slots automatically'}]);
+    try {
+      const r = await aiFixTimetable({ academic_year_id: selYear, term_id: selTerm });
+      const d = r.data;
+      const msg = `✅ **Timetable fixed!**\n- **${d.inserted}** new slots inserted\n- **${d.skipped}** slots skipped (teacher conflicts)\n- **${d.total_attempted - d.inserted}** could not be placed\n\nRefresh the grid to see changes.`;
+      setMessages(p=>[...p,{role:'assistant',content:msg}]);
+      if (onSlotsFixed) onSlotsFixed();
+    } catch(e) {
+      setMessages(p=>[...p,{role:'assistant',content:`Fix failed: ${e.response?.data?.error||e.message}`}]);
+    } finally { setFixing(false); }
+  };
 
   useEffect(()=>{bottomRef.current?.scrollIntoView({behavior:'smooth'});},[messages]);
 
@@ -261,21 +291,24 @@ function AISmartPanel({ onClose, selYear, selTerm, selClass, dragging, slots, su
   const send=async(text)=>{
     const msg=(text||input).trim();if(!msg||busy)return;
     setInput('');
-    setMessages(p=>[...p,{role:'user',content:msg}]);
+    const hasImage=!!image;
+    setMessages(p=>[...p,{
+      role:'user',
+      content:msg,
+      image: hasImage?image.preview:null,
+    }]);
     setBusy(true);
     try{
       const history=messages.slice(1).map(m=>({role:m.role,content:m.content}));
-      const r=await aiTimetableChat({message:msg,history,academic_year_id:selYear,term_id:selTerm});
+      const payload={message:msg,history,academic_year_id:selYear,term_id:selTerm};
+      if(hasImage){payload.imageBase64=image.base64;payload.imageMime=image.mime;}
+      const r=await aiTimetableChat(payload);
       setMessages(p=>[...p,{role:'assistant',content:r.data.reply}]);
+      setImage(null); // clear image after sending
     }catch(e){
-      const errMsg = e.response?.data?.error || e.message;
-      const isKeyError = errMsg?.toLowerCase().includes('mistral') || errMsg?.toLowerCase().includes('api key');
-      setMessages(p=>[...p,{
-        role:'assistant',
-        content: isKeyError
-          ? `⚠️ AI not configured: ${errMsg}\n\nTo fix: Go to Render dashboard → your backend service → Environment tab → add MISTRAL_API_KEY.`
-          : `Sorry, I couldn't connect: ${errMsg}`
-      }]);
+      const errMsg=e.response?.data?.error||e.message;
+      const isKeyError=errMsg?.toLowerCase().includes('mistral')||errMsg?.toLowerCase().includes('api key');
+      setMessages(p=>[...p,{role:'assistant',content:isKeyError?`⚠️ AI not configured: ${errMsg}`:`Sorry: ${errMsg}`}]);
     }finally{setBusy(false);}
   };
 
@@ -365,6 +398,10 @@ function AISmartPanel({ onClose, selYear, selTerm, selClass, dragging, slots, su
               )}
               <div className={`max-w-[82%] rounded-2xl px-3 py-2 text-xs leading-relaxed
                 ${m.role==='user'?'bg-[#0a2156] text-white rounded-br-sm':'bg-gray-100 text-gray-800 rounded-bl-sm'}`}>
+                {/* Image preview in message */}
+                {m.image && (
+                  <img src={m.image} alt="uploaded" className="w-full rounded-xl mb-2 max-h-32 object-cover"/>
+                )}
                 {m.role === 'assistant' ? (
                   <div className="space-y-0.5">{renderMarkdown(m.content)}</div>
                 ) : m.content}
@@ -392,13 +429,46 @@ function AISmartPanel({ onClose, selYear, selTerm, selClass, dragging, slots, su
         )}
       </div>
 
+      {/* Fix Timetable button */}
+      {selYear && (
+        <div className="px-3 pb-2 shrink-0">
+          <button onClick={handleFix} disabled={fixing||busy}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold disabled:opacity-50 transition-colors">
+            {fixing
+              ? <><span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"/>Fixing timetable…</>
+              : <><Zap className="w-3.5 h-3.5 text-yellow-300"/>Fix Timetable Automatically</>}
+          </button>
+        </div>
+      )}
+
+      {/* Image preview before sending */}
+      {image && (
+        <div className="mx-3 mb-2 relative shrink-0">
+          <img src={image.preview} alt="preview" className="w-full rounded-xl max-h-24 object-cover border border-gray-200"/>
+          <button onClick={()=>setImage(null)}
+            className="absolute top-1 right-1 w-5 h-5 bg-gray-900/70 rounded-full flex items-center justify-center text-white hover:bg-red-600 transition-colors">
+            <X className="w-3 h-3"/>
+          </button>
+          <p className="text-[10px] text-gray-400 mt-0.5 truncate">{image.name}</p>
+        </div>
+      )}
+
       {/* Input */}
-      <div className="flex items-center gap-2 p-3 border-t border-gray-100 bg-white shrink-0">
+      <div className="flex items-center gap-1.5 p-3 border-t border-gray-100 bg-white shrink-0">
+        {/* File upload button */}
+        <button onClick={()=>fileRef.current?.click()} title="Upload image or file"
+          className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 flex items-center justify-center transition-colors shrink-0">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/>
+          </svg>
+        </button>
+        <input ref={fileRef} type="file" accept="image/*,.pdf" className="hidden"
+          onChange={e=>handleFileSelect(e.target.files[0])}/>
         <input ref={inputRef} value={input} onChange={e=>setInput(e.target.value)}
           onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&send()}
           placeholder="Ask about your timetable…"
           className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-300/40 focus:border-blue-400 transition-all"/>
-        <button onClick={()=>send()} disabled={!input.trim()||busy}
+        <button onClick={()=>send()} disabled={(!input.trim()&&!image)||busy}
           className="w-8 h-8 rounded-xl bg-[#0a2156] hover:bg-[#0c2a6a] text-white flex items-center justify-center transition-colors disabled:opacity-40 shrink-0">
           <Send className="w-3.5 h-3.5"/>
         </button>
@@ -909,6 +979,7 @@ export default function Timetable() {
               dragging={dragging} slots={slots} subjects={subjects}
               staff={staff} workload={workload} conflicts={conflicts}
               colorMap={colorMap}
+              onSlotsFixed={loadSlots}
             />
           </div>
         )}

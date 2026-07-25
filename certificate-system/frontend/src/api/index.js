@@ -199,3 +199,4 @@ export const exportSchoolTimetable  = (p)   => sms.get('/timetable/export/school
 // ── AI Timetable Assistant ────────────────────────────────────
 export const aiTimetableChat = (d) => sms.post('/ai/timetable-chat', d, { timeout: 30000 });
 export const aiCheckSlot     = (d) => sms.post('/ai/check-slot', d);
+export const aiFixTimetable  = (d) => sms.post('/ai/fix-timetable', d, { timeout: 60000 });
