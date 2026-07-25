@@ -254,45 +254,100 @@ exports.checkSlot = async (req, res) => {
     const schoolId = req.schoolId;
     const warnings = [];
 
+    // Base filter — always scope to school + academic year to avoid cross-year pollution
+    const scopeFilter = (q) => {
+      q = q.eq('school_id', schoolId);
+      if (academic_year_id) q = q.eq('academic_year_id', academic_year_id);
+      return q;
+    };
+
     if (teacher_id && period_id && day_of_week) {
-      // Teacher double-booking
-      const { data: clash } = await supabase.from('timetable_slots')
-        .select('id, class:classes(name)')
-        .eq('school_id', schoolId).eq('teacher_id', teacher_id)
-        .eq('period_id', period_id).eq('day_of_week', day_of_week)
-        .neq('class_id', class_id || '00000000-0000-0000-0000-000000000000');
-      if (clash?.length > 0) {
-        warnings.push({ type:'teacher_conflict', severity:'error', message:`Teacher already assigned to ${clash[0].class?.name || 'another class'} at this time.` });
+      // Teacher double-booking at same period+day (across all classes)
+      const { data: clash } = await scopeFilter(
+        supabase.from('timetable_slots')
+          .select('id, class:classes(name)')
+          .eq('teacher_id', teacher_id)
+          .eq('period_id', period_id)
+          .eq('day_of_week', day_of_week)
+      );
+      // Exclude current class if editing existing slot
+      const realClash = (clash || []).filter(s => !class_id || s.class_id !== class_id);
+      if (realClash.length > 0) {
+        const clashName = realClash[0].class?.name || 'another class';
+        warnings.push({
+          type: 'teacher_conflict',
+          severity: 'error',
+          message: `Teacher is already assigned to **${clashName}** at this period.`,
+        });
       }
-      // Teacher daily load
-      const { data: daySlots } = await supabase.from('timetable_slots')
-        .select('id').eq('school_id', schoolId).eq('teacher_id', teacher_id).eq('day_of_week', day_of_week);
-      if ((daySlots?.length || 0) >= 3) {
-        warnings.push({ type:'workload', severity:'warning', message:`Teacher already has ${daySlots.length} period(s) this day (recommended max: 3).` });
+
+      // Teacher daily load — count periods this teacher teaches this day in this year
+      const { data: daySlots } = await scopeFilter(
+        supabase.from('timetable_slots')
+          .select('id')
+          .eq('teacher_id', teacher_id)
+          .eq('day_of_week', day_of_week)
+      );
+      const dayCount = (daySlots || []).length;
+      if (dayCount >= 3) {
+        warnings.push({
+          type: 'workload',
+          severity: 'warning',
+          message: `Teacher already has **${dayCount} period(s)** this day (recommended max: 3).`,
+        });
       }
     }
 
     if (subject_id && class_id && day_of_week) {
-      // Subject max 2/day per class
-      const { data: daySubj } = await supabase.from('timetable_slots')
-        .select('id').eq('school_id', schoolId).eq('class_id', class_id)
-        .eq('subject_id', subject_id).eq('day_of_week', day_of_week);
-      if ((daySubj?.length || 0) >= 2) {
-        warnings.push({ type:'subject_per_day', severity:'warning', message:'This subject already appears twice today for this class.' });
+      // Subject max 2 per day per class
+      const { data: daySubj } = await scopeFilter(
+        supabase.from('timetable_slots')
+          .select('id')
+          .eq('class_id', class_id)
+          .eq('subject_id', subject_id)
+          .eq('day_of_week', day_of_week)
+      );
+      if ((daySubj || []).length >= 2) {
+        warnings.push({
+          type: 'subject_per_day',
+          severity: 'warning',
+          message: 'This subject already appears **twice today** for this class.',
+        });
       }
-      // Weekly max
-      const { data: sub } = await supabase.from('subjects').select('name,max_periods_week').eq('id', subject_id).single();
+
+      // Weekly max — count how many times this subject is already in the timetable for this class
+      const { data: sub } = await supabase
+        .from('subjects').select('name, max_periods_week').eq('id', subject_id).single();
       if (sub) {
-        const { data: weekSlots } = await supabase.from('timetable_slots')
-          .select('id').eq('school_id', schoolId).eq('class_id', class_id).eq('subject_id', subject_id);
-        const maxW = sub.max_periods_week || 7;
-        if ((weekSlots?.length || 0) >= maxW) {
-          warnings.push({ type:'weekly_max', severity:'error', message:`${sub.name} has reached its weekly maximum of ${maxW} periods.` });
+        const { data: weekSlots } = await scopeFilter(
+          supabase.from('timetable_slots')
+            .select('id')
+            .eq('class_id', class_id)
+            .eq('subject_id', subject_id)
+        );
+        const maxW    = sub.max_periods_week || 7;
+        const current = (weekSlots || []).length;
+        if (current >= maxW) {
+          warnings.push({
+            type: 'weekly_max',
+            severity: 'error',
+            message: `**${sub.name}** has reached its weekly maximum of **${maxW} periods** (currently: ${current}).`,
+          });
+        } else if (current >= maxW - 1) {
+          warnings.push({
+            type: 'weekly_near_max',
+            severity: 'warning',
+            message: `**${sub.name}** is at **${current}/${maxW}** periods this week — adding one more will hit the limit.`,
+          });
         }
       }
     }
 
-    res.json({ success: true, warnings, ok: warnings.filter(w => w.severity === 'error').length === 0 });
+    res.json({
+      success: true,
+      warnings,
+      ok: warnings.filter(w => w.severity === 'error').length === 0,
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

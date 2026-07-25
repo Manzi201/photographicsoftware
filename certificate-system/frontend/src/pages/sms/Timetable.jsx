@@ -498,7 +498,12 @@ export default function Timetable() {
       if(!data.subject_id)return;
       const check=await aiCheckSlot({teacher_id:data.teacher_id||null,period_id:period.id,day_of_week:day,class_id:selClass,subject_id:data.subject_id,academic_year_id:selYear});
       const errors=(check.data.warnings||[]).filter(w=>w.severity==='error');
-      if(errors.length>0){toast.error(`⚠ ${errors[0].message}`,{duration:4000});return;}
+      if(errors.length>0){
+        // Strip markdown for toast
+        const msg = errors[0].message.replace(/\*\*/g,'');
+        toast.error(`⚠ ${msg}`,{duration:4000});
+        return;
+      }
       await upsertTtSlot({class_id:selClass,period_id:period.id,day_of_week:day,subject_id:data.subject_id,teacher_id:data.teacher_id||null,room_id:data.room_id||null,term_id:selTerm||null,academic_year_id:selYear||null});
       const warns=(check.data.warnings||[]).filter(w=>w.severity==='warning');
       if(warns.length>0)toast(`⚠ ${warns[0].message}`,{icon:'⚠️',duration:3000});
