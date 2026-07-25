@@ -468,7 +468,11 @@ exports.generateSchoolTimetable = async (req, res) => {
     if (!academic_year_id) return res.status(400).json({ success:false, error:'academic_year_id required' });
 
     const { periods, slots, school, yearInfo, termInfo } = await fetchTimetableData(req.schoolId, academic_year_id, term_id);
-    const { data: classes } = await supabase.from('classes').select('id,name,level').eq('school_id', req.schoolId).order('level_order').order('name');
+    const { data: classes } = await supabase.from('classes')
+      .select('id,name,level')
+      .eq('school_id', req.schoolId)
+      .eq('academic_year_id', academic_year_id)
+      .order('level_order').order('name');
 
     const wb = new ExcelJS.Workbook();
     wb.creator = school.school_name || 'SchoolMS';
@@ -565,10 +569,12 @@ exports.autoGenerate = async (req, res) => {
     const { data: periods } = await pq.order('period_number');
     if (!periods?.length) return res.status(400).json({ success:false, error:'No lesson periods configured.' });
 
-    // ── Load classes ─────────────────────────────────────────
+    // ── Load classes — ONLY classes belonging to this academic year ──
     const { data: classes } = await supabase.from('classes')
-      .select('id,name').eq('school_id', schoolId).order('level_order').order('name');
-    if (!classes?.length) return res.status(400).json({ success:false, error:'No classes found.' });
+      .select('id,name').eq('school_id', schoolId)
+      .eq('academic_year_id', academic_year_id)
+      .order('level_order').order('name');
+    if (!classes?.length) return res.status(400).json({ success:false, error:'No classes found for this academic year. Create classes first.' });
 
     // ── Load class_subjects with subject details ─────────────
     const { data: allCS } = await supabase.from('class_subjects')
