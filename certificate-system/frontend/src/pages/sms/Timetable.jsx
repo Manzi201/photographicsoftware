@@ -283,16 +283,23 @@ function AISmartPanel({ onClose, selYear, selTerm, selClass, dragging, slots, su
 
   // Fix timetable automatically
   const handleFix = async () => {
+    if (!selYear) { toast.error('Select an academic year first'); return; }
     setFixing(true);
     setMessages(p=>[...p,{role:'user',content:'Fix my timetable — fill missing slots automatically'}]);
     try {
-      const r = await aiFixTimetable({ academic_year_id: selYear, term_id: selTerm });
-      const d = r.data;
-      const msg = `✅ **Timetable fixed!**\n- **${d.inserted}** new slots inserted\n- **${d.skipped}** slots skipped (teacher conflicts)\n- **${d.total_attempted - d.inserted}** could not be placed\n\nRefresh the grid to see changes.`;
+      const r = await aiFixTimetable({ academic_year_id: selYear, term_id: selTerm||null });
+      const d = r?.data || {};
+      const inserted = d.inserted ?? 0;
+      const skipped  = d.skipped  ?? 0;
+      const total    = d.total_attempted ?? 0;
+      const msg = inserted > 0
+        ? `✅ **Timetable fixed!**\n- **${inserted}** new slots inserted\n- **${skipped}** skipped (teacher conflicts)\n- **${total - inserted}** could not be placed\n\nThe grid has been refreshed.`
+        : `ℹ️ No new slots could be added. ${skipped > 0 ? `**${skipped}** slots were blocked by teacher conflicts.` : 'All subjects may already be fully scheduled.'} ${d.message||''}`;
       setMessages(p=>[...p,{role:'assistant',content:msg}]);
       if (onSlotsFixed) onSlotsFixed();
     } catch(e) {
-      setMessages(p=>[...p,{role:'assistant',content:`Fix failed: ${e.response?.data?.error||e.message}`}]);
+      const errMsg = e.response?.data?.error || e.message || 'Unknown error';
+      setMessages(p=>[...p,{role:'assistant',content:`❌ Fix failed: ${errMsg}`}]);
     } finally { setFixing(false); }
   };
 

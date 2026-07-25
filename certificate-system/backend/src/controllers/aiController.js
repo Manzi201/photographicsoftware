@@ -389,7 +389,7 @@ exports.checkSlot = async (req, res) => {
 exports.fixTimetable = async (req, res) => {
   try {
     const { academic_year_id, term_id, instruction } = req.body;
-    if (!MISTRAL_KEY) return res.status(500).json({ success: false, error: 'MISTRAL_API_KEY not set.' });
+    if (!academic_year_id) return res.status(400).json({ success: false, error: 'academic_year_id required' });
     const schoolId = req.schoolId;
 
     // ── 1. Load full data ─────────────────────────────────────
@@ -405,7 +405,6 @@ exports.fixTimetable = async (req, res) => {
       { data: subjects },
       { data: periods },
       { data: slots },
-      { data: classSubjectsRaw },
     ] = await Promise.all([
       supabase.from('classes').select('id,name').eq('school_id', schoolId)
         .eq('academic_year_id', academic_year_id).order('name'),
