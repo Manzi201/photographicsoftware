@@ -1,41 +1,84 @@
 'use strict';
-const axios       = require('axios');
+const axios        = require('axios');
 const { supabase } = require('../supabase');
 
 const MISTRAL_URL = 'https://api.mistral.ai/v1/chat/completions';
 const MISTRAL_KEY = process.env.MISTRAL_API_KEY;
 
-// ── POST /api/sms/ai/timetable-chat ───────────────────────────
-// Body: { message, history?: [{role,content}], academic_year_id?, term_id? }
+const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+// ── POST /api/sms/ai/timetable-chat ──────────────────────────
 exports.timetableChat = async (req, res) => {
   try {
     const { message, history = [], academic_year_id, term_id } = req.body;
     if (!message) return res.status(400).json({ success: false, error: 'message required' });
+    if (!MISTRAL_KEY) return res.status(500).json({ success: false, error: 'MISTRAL_API_KEY not set on server. Add it in Render dashboard → Environment.' });
 
     const schoolId = req.schoolId;
 
-    // ── Build timetable context snapshot ─────────────────────
+    // ── 1. Fetch all raw data ─────────────────────────────────
     const [
       { data: slots },
       { data: classes },
-      { data: teachers },
-      { data: subjects },
+      { data: allTeachers },
+      { data: allSubjects },
       { data: periods },
-      { data: conflicts },
+      { data: classSubjects },
     ] = await Promise.all([
       supabase.from('timetable_slots')
-        .select('day_of_week, period_id, class_id, subject_id, teacher_id, room_id, class:classes(name), subject:subjects(name,code), teacher:staff(full_name), period:school_periods(name,period_number), room:rooms(name)')
+        .select('day_of_week, period_id, class_id, subject_id, teacher_id, class:classes(name), subject:subjects(name,code,max_periods_week,is_core), teacher:staff(full_name), period:school_periods(name,period_number,is_break)')
         .eq('school_id', schoolId),
-      supabase.from('classes').select('id,name,level').eq('school_id', schoolId),
-      supabase.from('staff').select('id,full_name,role').eq('school_id', schoolId).eq('is_active', true).eq('role', 'teacher'),
+      supabase.from('classes').select('id,name,level').eq('school_id', schoolId).order('name'),
+      supabase.from('staff').select('id,full_name,role').eq('school_id', schoolId).eq('is_active', true).in('role',['teacher','dos']),
       supabase.from('subjects').select('id,name,code,max_periods_week,is_core').eq('school_id', schoolId),
-      supabase.from('school_periods').select('id,name,period_number,start_time,end_time,is_break').eq('school_id', schoolId).order('period_number'),
-      Promise.resolve({ data: [] }), // placeholder
+      supabase.from('school_periods').select('id,name,period_number,is_break,start_time,end_time').eq('school_id', schoolId).order('period_number'),
+      supabase.from('class_subjects').select('class_id,subject_id,teacher_id, class:classes(name), subject:subjects(name,code,max_periods_week), teacher:staff(full_name)').eq('school_id', schoolId),
     ]);
 
-    // Detect teacher conflicts from slots
-    const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-    const slotList = (slots || []);
+    const slotList  = slots || [];
+    const teachList = allTeachers || [];
+    const subList   = allSubjects || [];
+    const clsList   = classes || [];
+    const prdList   = (periods || []).filter(p => !p.is_break);
+    const cssList   = classSubjects || [];
+
+    // ── 2. Pre-compute analytics ──────────────────────────────
+
+    // Teacher workload: periods per week + per day
+    const teacherWorkload = {};
+    teachList.forEach(t => {
+      teacherWorkload[t.id] = { name: t.full_name, total: 0, byDay: {}, byClass: {}, bySubject: {} };
+    });
+    slotList.forEach(s => {
+      if (!s.teacher_id || !teacherWorkload[s.teacher_id]) return;
+      const tw = teacherWorkload[s.teacher_id];
+      tw.total++;
+      const day = DAYS[(s.day_of_week || 1) - 1];
+      tw.byDay[day] = (tw.byDay[day] || 0) + 1;
+      const cn = s.class?.name || s.class_id;
+      tw.byClass[cn] = (tw.byClass[cn] || 0) + 1;
+      const sn = s.subject?.code || s.subject?.name || s.subject_id;
+      tw.bySubject[sn] = (tw.bySubject[sn] || 0) + 1;
+    });
+
+    // Subject distribution per class
+    const classSubjectCount = {}; // classId -> subjectId -> count
+    slotList.forEach(s => {
+      if (!s.class_id || !s.subject_id) return;
+      if (!classSubjectCount[s.class_id]) classSubjectCount[s.class_id] = {};
+      classSubjectCount[s.class_id][s.subject_id] = (classSubjectCount[s.class_id][s.subject_id] || 0) + 1;
+    });
+
+    // Day load per class
+    const classDayLoad = {};
+    slotList.forEach(s => {
+      if (!s.class_id) return;
+      const day = DAYS[(s.day_of_week || 1) - 1];
+      if (!classDayLoad[s.class_id]) classDayLoad[s.class_id] = {};
+      classDayLoad[s.class_id][day] = (classDayLoad[s.class_id][day] || 0) + 1;
+    });
+
+    // Teacher conflicts
     const teacherConflicts = [];
     const teacherDayPeriod = {};
     slotList.forEach(s => {
@@ -43,113 +86,158 @@ exports.timetableChat = async (req, res) => {
       const key = `${s.teacher_id}:${s.day_of_week}:${s.period_id}`;
       if (teacherDayPeriod[key]) {
         teacherConflicts.push({
-          teacher: s.teacher?.full_name || s.teacher_id,
-          day: DAYS[(s.day_of_week || 1) - 1],
-          period: s.period?.name || s.period_id,
+          teacher: s.teacher?.full_name || '?',
+          day:     DAYS[(s.day_of_week || 1) - 1],
+          period:  s.period?.name || '?',
           classes: [teacherDayPeriod[key].class?.name, s.class?.name].filter(Boolean),
         });
-      } else {
-        teacherDayPeriod[key] = s;
+      } else { teacherDayPeriod[key] = s; }
+    });
+
+    // Subjects exceeding weekly max per class
+    const overloadedSubjects = [];
+    Object.entries(classSubjectCount).forEach(([classId, subMap]) => {
+      const cls = clsList.find(c => c.id === classId);
+      Object.entries(subMap).forEach(([subjectId, count]) => {
+        const sub = subList.find(s => s.id === subjectId);
+        const maxW = sub?.max_periods_week || 7;
+        if (count > maxW) {
+          overloadedSubjects.push({ class: cls?.name || classId, subject: sub?.name || subjectId, count, max: maxW });
+        }
+      });
+    });
+
+    // Subjects assigned but MISSING from timetable per class
+    const missingSubjects = [];
+    cssList.forEach(cs => {
+      const cls = clsList.find(c => c.id === cs.class_id);
+      const sub = subList.find(s => s.id === cs.subject_id);
+      if (!cls || !sub) return;
+      const count = classSubjectCount[cs.class_id]?.[cs.subject_id] || 0;
+      if (count === 0) {
+        missingSubjects.push({ class: cls.name, subject: sub.name });
       }
     });
 
-    // Workload summary
-    const workload = {};
-    slotList.forEach(s => {
-      if (!s.teacher_id) return;
-      const name = s.teacher?.full_name || s.teacher_id;
-      workload[name] = (workload[name] || 0) + 1;
-    });
+    // Teachers with no slots assigned
+    const unassignedTeachers = teachList.filter(t =>
+      !slotList.some(s => s.teacher_id === t.id)
+    ).map(t => t.full_name);
 
-    // Subject period count per class
-    const subjectCount = {};
-    slotList.forEach(s => {
-      const cls  = s.class?.name  || s.class_id;
-      const subj = s.subject?.name || s.subject_id;
-      if (!cls || !subj) return;
-      const k = `${cls}:${subj}`;
-      subjectCount[k] = (subjectCount[k] || 0) + 1;
-    });
+    // Classes with no slots at all
+    const emptyClasses = clsList.filter(c =>
+      !slotList.some(s => s.class_id === c.id)
+    ).map(c => c.name);
 
-    // Build context string
+    // ── 3. Build structured context ───────────────────────────
+    const teacherWorkloadLines = Object.values(teacherWorkload)
+      .filter(t => t.total > 0)
+      .sort((a, b) => b.total - a.total)
+      .map(t => {
+        const dayBreakdown = Object.entries(t.byDay).map(([d, n]) => `${d.slice(0,3)}: ${n}`).join(', ');
+        const classBreakdown = Object.entries(t.byClass).map(([c, n]) => `${c}×${n}`).join(', ');
+        return `  - ${t.name}: ${t.total} periods/wk | by day: ${dayBreakdown || 'none'} | classes: ${classBreakdown || 'none'}`;
+      }).join('\n');
+
+    const classSubjectLines = clsList.map(cls => {
+      const counts = classSubjectCount[cls.id] || {};
+      if (Object.keys(counts).length === 0) return `  - ${cls.name}: NO SLOTS ASSIGNED`;
+      const parts = Object.entries(counts).map(([sid, n]) => {
+        const sub = subList.find(s => s.id === sid);
+        const maxW = sub?.max_periods_week || 7;
+        const flag = n > maxW ? ` ⚠OVER(max ${maxW})` : '';
+        return `${sub?.code || sub?.name || '?'}:${n}${flag}`;
+      });
+      return `  - ${cls.name}: ${parts.join(', ')}`;
+    }).join('\n');
+
     const context = `
-SCHOOL TIMETABLE CONTEXT (School ID: ${schoolId})
-==============================================
-Classes: ${(classes || []).map(c => c.name).join(', ')}
-Teachers: ${(teachers || []).map(t => t.full_name).join(', ')}
-Subjects: ${(subjects || []).map(s => `${s.name}(max ${s.max_periods_week || 7}/wk${s.is_core ? ' core' : ''})`).join(', ')}
-Time Periods: ${(periods || []).filter(p => !p.is_break).map(p => `${p.name} ${p.start_time?.slice(0,5)}-${p.end_time?.slice(0,5)}`).join(', ')}
+=== SCHOOL TIMETABLE ANALYSIS REPORT ===
+School ID: ${schoolId}
+Total slots filled: ${slotList.length}
+Classes: ${clsList.map(c => c.name).join(', ')}
+Active teaching periods per day: ${prdList.length}
 
-CURRENT TIMETABLE SUMMARY (${slotList.length} slots filled):
-${slotList.slice(0, 80).map(s => `${s.class?.name || '?'} | ${DAYS[(s.day_of_week||1)-1]} | ${s.period?.name || '?'} | ${s.subject?.name || '?'} | ${s.teacher?.full_name || 'No teacher'}`).join('\n')}
-${slotList.length > 80 ? `... and ${slotList.length - 80} more slots` : ''}
+=== TEACHER WORKLOAD ===
+${teacherWorkloadLines || '  (no teacher assignments found)'}
 
-TEACHER WORKLOAD (periods/week):
-${Object.entries(workload).map(([t, n]) => `${t}: ${n}`).join(', ') || 'No data'}
+=== SUBJECT DISTRIBUTION PER CLASS ===
+(format: SUBJECT_CODE:periods_per_week)
+${classSubjectLines || '  (no class data)'}
 
-CONFLICTS: ${teacherConflicts.length === 0 ? 'None detected' : teacherConflicts.map(c => `${c.teacher} is double-booked on ${c.day} ${c.period} (${c.classes.join(' & ')})`).join('; ')}
+=== CONFLICTS DETECTED ===
+Teacher double-bookings: ${teacherConflicts.length === 0 ? 'NONE' : teacherConflicts.map(c =>
+  `${c.teacher} is double-booked on ${c.day} during ${c.period} (${c.classes.join(' AND ')})`
+).join('; ')}
 
-RULES:
-- MATH: max 9 periods/week per class
-- KINY/ENG: max 8 periods/week per class  
-- SRS/SET: max 6 periods/week per class
-- CREATIVE ARTS: max 1 period/week
-- No teacher should exceed 3 periods/day
-- No subject more than 2 periods/day per class
-- Teachers should not have back-to-back periods on same day > 3 times
+=== OVERLOADED SUBJECTS (exceeds weekly max) ===
+${overloadedSubjects.length === 0 ? 'NONE' : overloadedSubjects.map(o =>
+  `${o.class} - ${o.subject}: ${o.count} periods (max allowed: ${o.max})`
+).join('\n')}
+
+=== MISSING SUBJECTS (assigned but not in timetable) ===
+${missingSubjects.length === 0 ? 'NONE' : missingSubjects.map(m => `${m.class} - ${m.subject}`).join('\n')}
+
+=== TEACHERS WITH ZERO SLOTS ===
+${unassignedTeachers.length === 0 ? 'NONE — all teachers have at least one slot' : unassignedTeachers.join(', ')}
+
+=== CLASSES WITH NO SLOTS ===
+${emptyClasses.length === 0 ? 'NONE' : emptyClasses.join(', ')}
+
+=== RWANDA PRIMARY SCHOOL RULES ===
+- MATH: max 9 periods/week (ideally 8)
+- KINY/ENG: max 8 periods/week
+- SRS/SET: max 6 periods/week
+- Creative Arts (CA): max 1 period/week
+- Physical Education (PES): max 1 period/week
+- No teacher > 3 periods/day
+- No subject > 2 periods/day per class
+- No subject on consecutive days > 2 times in a row
+- Every assigned subject must appear in the timetable
 `.trim();
 
-    // ── Call Mistral AI ───────────────────────────────────────
+    // ── 4. Call Mistral ───────────────────────────────────────
+    const systemPrompt = `You are a highly intelligent school timetable analyst for SchoolMS, a Rwandan primary school management system.
+
+Your role:
+- Analyze the EXACT timetable data provided in every message — never invent data
+- Give precise, fact-based answers referring to actual teacher names, class names, subject codes, and period counts from the data
+- Detect and explain real problems: conflicts, overloaded teachers, missing subjects, unbalanced days
+- Suggest specific, actionable fixes (e.g., "Move Math from Redempta on P1-Monday to Dieudonne on P2-Tuesday")
+- Follow Rwanda Primary School curriculum rules strictly
+- Format responses clearly with **bold** for names/numbers, bullet points for lists
+- Be concise but thorough — 3-6 sentences or a short list per answer
+- Respond in the same language the user writes in (English, French, or Kinyarwanda)
+- NEVER say you cannot access the timetable — the full data is provided to you`;
+
     const messages = [
-      {
-        role: 'system',
-        content: `You are an intelligent school timetable assistant for SchoolMS, a Rwandan primary school management system. 
-You help the Director of Studies (DoS) and admin staff understand, analyze, and improve the school timetable.
-You speak in a helpful, concise, professional tone.
-When asked for suggestions, be specific: mention teacher names, subject names, class names, days, and periods.
-Always base your answers on the timetable context provided.
-When you detect issues, explain them clearly and suggest specific fixes.
-If asked in French or Kinyarwanda, respond in that language.
-Keep responses concise — max 4-5 paragraphs.`,
-      },
-      ...history.slice(-6), // last 6 messages for context window efficiency
-      {
-        role: 'user',
-        content: `${context}\n\n---\nUSER QUESTION: ${message}`,
-      },
+      { role: 'system', content: systemPrompt },
+      ...history.slice(-6).map(m => ({ role: m.role, content: m.content })),
+      { role: 'user', content: `${context}\n\n---\nQUESTION: ${message}` },
     ];
 
     const response = await axios.post(MISTRAL_URL, {
-      model: 'mistral-small-latest',
+      model:       'mistral-small-latest',
       messages,
-      max_tokens: 600,
-      temperature: 0.4,
+      max_tokens:  700,
+      temperature: 0.3,
     }, {
-      headers: {
-        'Authorization': `Bearer ${MISTRAL_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      timeout: 20000,
+      headers: { 'Authorization': `Bearer ${MISTRAL_KEY}`, 'Content-Type': 'application/json' },
+      timeout: 25000,
     });
 
-    const reply = response.data.choices?.[0]?.message?.content || 'No response from AI.';
-    res.json({ success: true, reply, conflicts: teacherConflicts });
+    const reply = response.data.choices?.[0]?.message?.content || 'No response.';
+    res.json({ success: true, reply, conflicts: teacherConflicts, stats: { totalSlots: slotList.length, conflicts: teacherConflicts.length, overloaded: overloadedSubjects.length, missing: missingSubjects.length } });
 
   } catch (err) {
     console.error('AI timetable chat error:', err.response?.data || err.message);
-    if (err.response?.status === 401) {
-      return res.status(500).json({ success: false, error: 'Mistral API key invalid or not set. Go to Render dashboard → Environment → add MISTRAL_API_KEY.' });
-    }
-    if (err.response?.status === 422) {
-      return res.status(500).json({ success: false, error: 'Mistral API request format error: ' + (err.response?.data?.message || err.message) });
-    }
+    if (err.response?.status === 401) return res.status(500).json({ success: false, error: 'MISTRAL_API_KEY is invalid or expired. Generate a new one at console.mistral.ai and set it in Render → Environment.' });
+    if (err.response?.status === 422) return res.status(500).json({ success: false, error: 'Mistral request error: ' + (err.response?.data?.message || err.message) });
     res.status(500).json({ success: false, error: err.message });
   }
 };
 
 // ── POST /api/sms/ai/check-slot ───────────────────────────────
-// Quick conflict check before placing a slot manually
-// Body: { teacher_id, period_id, day_of_week, class_id, subject_id, academic_year_id }
 exports.checkSlot = async (req, res) => {
   try {
     const { teacher_id, period_id, day_of_week, class_id, subject_id, academic_year_id } = req.body;
@@ -157,75 +245,39 @@ exports.checkSlot = async (req, res) => {
     const warnings = [];
 
     if (teacher_id && period_id && day_of_week) {
-      // Check teacher double-booking
-      const { data: clash } = await supabase
-        .from('timetable_slots')
+      // Teacher double-booking
+      const { data: clash } = await supabase.from('timetable_slots')
         .select('id, class:classes(name)')
-        .eq('school_id', schoolId)
-        .eq('teacher_id', teacher_id)
-        .eq('period_id', period_id)
-        .eq('day_of_week', day_of_week)
-        .neq('class_id', class_id);
-
-      if (clash && clash.length > 0) {
-        warnings.push({
-          type: 'teacher_conflict',
-          severity: 'error',
-          message: `Teacher is already assigned to ${clash[0].class?.name || 'another class'} at this time.`,
-        });
+        .eq('school_id', schoolId).eq('teacher_id', teacher_id)
+        .eq('period_id', period_id).eq('day_of_week', day_of_week)
+        .neq('class_id', class_id || '00000000-0000-0000-0000-000000000000');
+      if (clash?.length > 0) {
+        warnings.push({ type:'teacher_conflict', severity:'error', message:`Teacher already assigned to ${clash[0].class?.name || 'another class'} at this time.` });
       }
-
-      // Check teacher daily load (max 3 periods/day)
-      if (day_of_week && teacher_id) {
-        const { data: daySlots } = await supabase
-          .from('timetable_slots')
-          .select('id')
-          .eq('school_id', schoolId)
-          .eq('teacher_id', teacher_id)
-          .eq('day_of_week', day_of_week);
-        if ((daySlots?.length || 0) >= 3) {
-          warnings.push({
-            type: 'workload',
-            severity: 'warning',
-            message: `Teacher already has ${daySlots.length} period(s) this day (max recommended: 3).`,
-          });
-        }
+      // Teacher daily load
+      const { data: daySlots } = await supabase.from('timetable_slots')
+        .select('id').eq('school_id', schoolId).eq('teacher_id', teacher_id).eq('day_of_week', day_of_week);
+      if ((daySlots?.length || 0) >= 3) {
+        warnings.push({ type:'workload', severity:'warning', message:`Teacher already has ${daySlots.length} period(s) this day (recommended max: 3).` });
       }
     }
 
     if (subject_id && class_id && day_of_week) {
-      // Check subject max 2 per day per class
-      const { data: daySubj } = await supabase
-        .from('timetable_slots')
-        .select('id')
-        .eq('school_id', schoolId)
-        .eq('class_id', class_id)
-        .eq('subject_id', subject_id)
-        .eq('day_of_week', day_of_week);
+      // Subject max 2/day per class
+      const { data: daySubj } = await supabase.from('timetable_slots')
+        .select('id').eq('school_id', schoolId).eq('class_id', class_id)
+        .eq('subject_id', subject_id).eq('day_of_week', day_of_week);
       if ((daySubj?.length || 0) >= 2) {
-        warnings.push({
-          type: 'subject_per_day',
-          severity: 'warning',
-          message: 'This subject already appears twice today for this class.',
-        });
+        warnings.push({ type:'subject_per_day', severity:'warning', message:'This subject already appears twice today for this class.' });
       }
-
-      // Check subject weekly max
+      // Weekly max
       const { data: sub } = await supabase.from('subjects').select('name,max_periods_week').eq('id', subject_id).single();
       if (sub) {
-        const { data: weekSlots } = await supabase
-          .from('timetable_slots')
-          .select('id')
-          .eq('school_id', schoolId)
-          .eq('class_id', class_id)
-          .eq('subject_id', subject_id);
+        const { data: weekSlots } = await supabase.from('timetable_slots')
+          .select('id').eq('school_id', schoolId).eq('class_id', class_id).eq('subject_id', subject_id);
         const maxW = sub.max_periods_week || 7;
         if ((weekSlots?.length || 0) >= maxW) {
-          warnings.push({
-            type: 'weekly_max',
-            severity: 'error',
-            message: `${sub.name} has reached its weekly maximum (${maxW} periods).`,
-          });
+          warnings.push({ type:'weekly_max', severity:'error', message:`${sub.name} has reached its weekly maximum of ${maxW} periods.` });
         }
       }
     }
