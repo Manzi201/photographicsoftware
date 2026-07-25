@@ -154,6 +154,14 @@ exports.timetableChat = async (req, res) => {
       .filter(c => !slotList.some(s => s.class_id === c.id))
       .map(c => c.name);
 
+    // ── 4. Call Mistral (with optional image) ────────────────
+    const { imageBase64, imageMime } = req.body;
+
+    // Fetch year name first so it can be used in both context and system prompt
+    const yearName = academic_year_id
+      ? ((await supabase.from('academic_years').select('name').eq('id', academic_year_id).single()).data?.name || academic_year_id)
+      : 'All years';
+
     const context = `
 === SCHOOL TIMETABLE DATA — Academic Year: ${yearName} ===
 Scope: ${academic_year_id ? `Year ID ${academic_year_id}` : 'ALL years'} | Term: ${term_id ? `Term ID ${term_id}` : 'ALL terms'}
@@ -216,10 +224,6 @@ Teacher max 3 periods/day, Subject max 2 periods/day per class
 
     // ── 4. Call Mistral (with optional image) ────────────────
     const { imageBase64, imageMime } = req.body;
-
-    const yearName = academic_year_id
-      ? (await supabase.from('academic_years').select('name').eq('id', academic_year_id).single()).data?.name || academic_year_id
-      : 'All years';
 
     const systemPrompt = `You are a professional school timetable analyst for SchoolMS, a Rwandan primary school management system.
 
