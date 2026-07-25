@@ -49,7 +49,6 @@ exports.timetableChat = async (req, res) => {
     if (slotErr) console.warn('Slot query error:', slotErr.message);
 
     const clsList   = classes    || [];
-    const teachList = allTeachers || [];
     const subList   = allSubjects || [];
     const prdList   = (periods   || []).filter(p => !p.is_break);
     const slotList  = slots      || [];
@@ -68,6 +67,15 @@ exports.timetableChat = async (req, res) => {
         .in('class_id', [...activeClassIds]);
       cssList = cs || [];
     }
+
+    // Build teacher list scoped to this academic year
+    // = teachers who are assigned to at least one class in this year
+    const activeTeacherIds = new Set(
+      cssList.filter(cs => cs.teacher_id).map(cs => cs.teacher_id)
+    );
+    // Also include teachers who have slots in this year
+    slotList.forEach(s => { if (s.teacher_id) activeTeacherIds.add(s.teacher_id); });
+    const teachList = (allTeachers || []).filter(t => activeTeacherIds.has(t.id));
 
     // ── 2. Pre-compute analytics ──────────────────────────────
 
@@ -147,84 +155,88 @@ exports.timetableChat = async (req, res) => {
       .map(c => c.name);
 
     const context = `
-=== SCHOOL TIMETABLE ANALYSIS REPORT ===
-School ID: ${schoolId}
-Academic Year filter: ${academic_year_id || 'ALL'}
-Term filter: ${term_id || 'ALL'}
+=== SCHOOL TIMETABLE DATA — Academic Year: ${yearName} ===
+Scope: ${academic_year_id ? `Year ID ${academic_year_id}` : 'ALL years'} | Term: ${term_id ? `Term ID ${term_id}` : 'ALL terms'}
 Total slots analysed: ${slotList.length}
-Classes in scope: ${activeClasses.map(c => c.name).join(', ') || 'none'}
+Classes in this year: ${activeClasses.map(c => c.name).join(', ') || 'none'}
+Teachers assigned this year: ${teachList.map(t => t.name || t.full_name).join(', ') || 'none'}
 Teaching periods per day: ${prdList.length}
 
-=== TEACHER WORKLOAD (periods/week) ===
+--- TEACHER WORKLOAD (this year only) ---
 ${Object.values(teacherWorkload).filter(t => t.total > 0).sort((a,b) => b.total - a.total).map(t => {
-  const dayBd  = Object.entries(t.byDay).map(([d,n]) => `${d.slice(0,3)}:${n}`).join(', ');
-  const clsBd  = Object.entries(t.byClass).map(([c,n]) => `${c}×${n}`).join(', ');
-  const subBd  = Object.entries(t.bySubject).map(([s,n]) => `${s}×${n}`).join(', ');
-  const flag   = t.total > 35 ? ' ⚠OVERLOADED' : t.total > 28 ? ' ⚠HIGH' : '';
-  return `  ${t.name}: ${t.total} periods${flag}\n    Days: ${dayBd || 'none'}\n    Classes: ${clsBd || 'none'}\n    Subjects: ${subBd || 'none'}`;
+  const dayBd = Object.entries(t.byDay).map(([d,n]) => `${d.slice(0,3)}:${n}`).join(' | ');
+  const clsBd = Object.entries(t.byClass).map(([c,n]) => `${c}(${n})`).join(', ');
+  const flag  = t.total > 35 ? ' OVERLOADED' : t.total > 28 ? ' HIGH' : '';
+  return `${t.name}: ${t.total} periods/wk${flag} | days: ${dayBd || 'none'} | classes: ${clsBd || 'none'}`;
 }).join('\n') || '  No teacher assignments found.'}
 
-=== SUBJECT DISTRIBUTION PER CLASS ===
-(SUBJECT_CODE:count, ⚠ = exceeds weekly max)
+--- SUBJECT COUNT PER CLASS (this year only) ---
 ${activeClasses.map(cls => {
   const counts = classSubjectCount[cls.id] || {};
-  if (Object.keys(counts).length === 0) return `  ${cls.name}: NO SLOTS`;
+  if (Object.keys(counts).length === 0) return `${cls.name}: NO SLOTS ASSIGNED`;
   const parts = Object.entries(counts).map(([sid, n]) => {
     const sub  = subList.find(s => s.id === sid);
     const maxW = sub?.max_periods_week || 7;
-    const flag = n > maxW ? `⚠(max ${maxW})` : '';
-    return `${sub?.code || sub?.name || '?'}:${n}${flag}`;
+    const flag = n > maxW ? `(OVER max=${maxW})` : n < maxW ? `(UNDER max=${maxW})` : '(OK)';
+    return `${sub?.code || sub?.name || '?'}=${n}${flag}`;
   });
-  return `  ${cls.name}: ${parts.join(', ')}`;
-}).join('\n') || '  No class data.'}
+  return `${cls.name}: ${parts.join(', ')}`;
+}).join('\n') || '  No data.'}
 
-=== TEACHER DOUBLE-BOOKING CONFLICTS ===
-${teacherConflicts.length === 0 ? '  NONE' : teacherConflicts.map(c =>
-  `  ⚠ ${c.teacher}: double-booked on ${c.day} ${c.period} → ${c.classes.join(' AND ')}`
+--- TEACHER CLASS ASSIGNMENTS (this year) ---
+${cssList.filter(cs => cs.teacher_id).map(cs =>
+  `${cs.teacher?.full_name || '?'} teaches ${cs.subject?.code || cs.subject?.name || '?'} in ${cs.class?.name || '?'}`
+).join('\n') || '  No assignments found.'}
+
+--- CONFLICTS (double-bookings) ---
+${teacherConflicts.length === 0 ? 'NONE' : teacherConflicts.map(c =>
+  `${c.teacher} is double-booked on ${c.day} ${c.period} in: ${c.classes.join(' AND ')}`
 ).join('\n')}
 
-=== OVERLOADED SUBJECTS (exceed weekly max) ===
-${overloadedSubjects.length === 0 ? '  NONE' : overloadedSubjects.map(o =>
-  `  ⚠ ${o.class} — ${o.subject}: ${o.count} periods (max: ${o.max})`
+--- OVERLOADED SUBJECTS ---
+${overloadedSubjects.length === 0 ? 'NONE' : overloadedSubjects.map(o =>
+  `${o.class}: ${o.subject} has ${o.count} periods but max is ${o.max}`
 ).join('\n')}
 
-=== MISSING SUBJECTS (assigned but absent from timetable) ===
-${missingSubjects.length === 0 ? '  NONE' : missingSubjects.map(m =>
-  `  ⚠ ${m.class} — ${m.subject}: 0 periods in timetable`
+--- MISSING SUBJECTS (assigned but 0 periods in timetable) ---
+${missingSubjects.length === 0 ? 'NONE' : missingSubjects.map(m =>
+  `${m.class}: ${m.subject} is assigned but has no slot in the timetable`
 ).join('\n')}
 
-=== TEACHERS WITH NO SLOTS ===
-${unassignedTeachers.length === 0 ? '  NONE' : '  ' + unassignedTeachers.join(', ')}
+--- TEACHERS WITH ZERO SLOTS THIS YEAR ---
+${unassignedTeachers.length === 0 ? 'NONE' : unassignedTeachers.join(', ')}
 
-=== EMPTY CLASSES (no timetable) ===
-${emptyClasses.length === 0 ? '  NONE' : '  ' + emptyClasses.join(', ')}
+--- EMPTY CLASSES (no timetable at all) ---
+${emptyClasses.length === 0 ? 'NONE' : emptyClasses.join(', ')}
 
-=== RWANDA PRIMARY RULES ===
-- MATH: max 9/wk (ideal 8) | KINY/ENG: max 8/wk | SRS/SET: max 6/wk
-- Creative Arts (CA) & PES: max 1/wk
-- Teacher: max 3 periods/day | Subject: max 2 periods/day per class
-- Every assigned subject must appear in timetable
+--- RWANDA PRIMARY RULES ---
+MATH max 9/wk, KINY/ENG max 8/wk, SRS/SET max 6/wk, CA/PES max 1/wk
+Teacher max 3 periods/day, Subject max 2 periods/day per class
 `.trim();
 
     // ── 4. Call Mistral (with optional image) ────────────────
-    const { imageBase64, imageMime } = req.body; // optional image from user
+    const { imageBase64, imageMime } = req.body;
 
-    const systemPrompt = `You are a highly intelligent school timetable analyst for SchoolMS, a Rwandan primary school management system.
+    const yearName = academic_year_id
+      ? (await supabase.from('academic_years').select('name').eq('id', academic_year_id).single()).data?.name || academic_year_id
+      : 'All years';
 
-Your role:
-- Analyze the EXACT timetable data provided — never invent data
-- Give precise, fact-based answers with actual teacher names, class names, subject codes, period counts
-- Detect problems: conflicts, overloaded teachers, missing subjects, unbalanced days
-- Suggest specific actionable fixes (e.g., "Move MATH from Redempta on P1-Monday to Dieudonne on P2-Tuesday")
-- When asked to "fix" or "fill" the timetable, respond with a JSON block like:
-  \`\`\`json
-  {"action":"fix_slots","slots":[{"class":"P1","subject":"MATH","teacher":"Jean Bosco","day":1,"period":3},{"class":"P1","subject":"ENG","teacher":"Alice","day":2,"period":1}]}
-  \`\`\`
-  Day: 1=Monday 2=Tuesday 3=Wednesday 4=Thursday 5=Friday. Include only NEW slots to add (not existing ones).
-- When analyzing an uploaded image/photo of a timetable, extract and analyze its content
-- Format responses with **bold** for names/numbers, bullet lists for multiple items
-- Be concise but thorough — respond in the same language the user writes in (English, French, Kinyarwanda)
-- NEVER say you cannot access the data — everything is provided`;
+    const systemPrompt = `You are a professional school timetable analyst for SchoolMS, a Rwandan primary school management system.
+
+STRICT RULES FOR YOUR RESPONSES:
+1. NEVER output JSON, code blocks, or programming syntax. Write in plain human language only.
+2. Use **bold** for teacher names, class names, subject codes, and numbers.
+3. Use bullet lists (- item) for multiple points.
+4. Use tables when comparing data across classes or teachers. Format tables like:
+   | Teacher | Class | Periods/week |
+   |---------|-------|-------------|
+   | Jean Bosco | P1 | 8 |
+5. Keep answers focused and structured with clear headings using **Heading:** format.
+6. Respond in the same language the user writes in (English, French, or Kinyarwanda).
+7. Base ALL answers strictly on the data provided — never invent or assume data.
+8. The current scope is Academic Year: ${yearName}. Only reference data from this year.
+9. When you see problems, always suggest a specific, named fix.
+10. Be concise — max 200 words per answer unless a table or full analysis is requested.`;
 
     // Build user content — supports text + optional image
     let userContent;

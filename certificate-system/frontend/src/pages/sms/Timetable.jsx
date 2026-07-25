@@ -163,7 +163,6 @@ function SlotModal({ slot, classId, periodId, dayOfWeek, termId, yearId, subject
 /* ── Simple markdown renderer for AI messages ─────────────── */
 function renderMarkdown(text) {
   if (!text) return null;
-  // Split into lines for block-level handling
   const lines = text.split('\n');
   const elements = [];
   let i = 0;
@@ -172,34 +171,73 @@ function renderMarkdown(text) {
     const line = lines[i];
 
     // Empty line → spacer
-    if (line.trim() === '') {
-      elements.push(<div key={i} className="h-2"/>);
-      i++; continue;
-    }
+    if (line.trim() === '') { elements.push(<div key={i} className="h-1.5"/>); i++; continue; }
 
-    // Bullet point: lines starting with - or •
-    if (/^[-•]\s/.test(line.trim())) {
-      const bullets = [];
-      while (i < lines.length && /^[-•]\s/.test(lines[i].trim())) {
-        bullets.push(<li key={i} className="ml-3 list-disc">{inlineFormat(lines[i].replace(/^[-•]\s/,''))}</li>);
+    // Table: lines with | character
+    if (line.includes('|') && line.trim().startsWith('|')) {
+      const tableLines = [];
+      while (i < lines.length && lines[i].includes('|')) {
+        tableLines.push(lines[i]);
         i++;
       }
-      elements.push(<ul key={`ul-${i}`} className="space-y-0.5 my-1">{bullets}</ul>);
+      // Skip separator rows (---|---|---)
+      const rows = tableLines.filter(l => !l.replace(/[\s|:-]/g,'').length === 0 && !/^[\s|:-]+$/.test(l));
+      const headerRow = rows[0];
+      const dataRows  = rows.slice(1);
+      if (headerRow) {
+        const headers = headerRow.split('|').map(c=>c.trim()).filter(Boolean);
+        elements.push(
+          <div key={i} className="overflow-x-auto my-1.5">
+            <table className="w-full text-[10px] border-collapse">
+              <thead>
+                <tr className="bg-[#0a2156] text-white">
+                  {headers.map((h,hi) => (
+                    <th key={hi} className="px-2 py-1 text-left font-bold border border-blue-800/40 whitespace-nowrap">{inlineFormat(h)}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {dataRows.map((row, ri) => {
+                  const cells = row.split('|').map(c=>c.trim()).filter(Boolean);
+                  return (
+                    <tr key={ri} className={ri%2===0?'bg-white':'bg-gray-50'}>
+                      {cells.map((cell,ci) => (
+                        <td key={ci} className="px-2 py-1 border border-gray-200 text-gray-700">{inlineFormat(cell)}</td>
+                      ))}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        );
+      }
       continue;
     }
 
-    // Numbered list: 1. 2. etc
+    // Bullet point
+    if (/^[-•*]\s/.test(line.trim())) {
+      const bullets = [];
+      while (i < lines.length && /^[-•*]\s/.test(lines[i].trim())) {
+        bullets.push(<li key={i} className="ml-3">{inlineFormat(lines[i].replace(/^[-•*]\s/,''))}</li>);
+        i++;
+      }
+      elements.push(<ul key={`ul-${i}`} className="space-y-0.5 my-1 list-disc list-inside">{bullets}</ul>);
+      continue;
+    }
+
+    // Numbered list
     if (/^\d+\.\s/.test(line.trim())) {
       const items = [];
       while (i < lines.length && /^\d+\.\s/.test(lines[i].trim())) {
-        items.push(<li key={i} className="ml-3 list-decimal">{inlineFormat(lines[i].replace(/^\d+\.\s/,''))}</li>);
+        items.push(<li key={i} className="ml-3">{inlineFormat(lines[i].replace(/^\d+\.\s/,''))}</li>);
         i++;
       }
-      elements.push(<ol key={`ol-${i}`} className="space-y-0.5 my-1">{items}</ol>);
+      elements.push(<ol key={`ol-${i}`} className="space-y-0.5 my-1 list-decimal list-inside">{items}</ol>);
       continue;
     }
 
-    // Normal paragraph line
+    // Normal paragraph
     elements.push(<p key={i} className="leading-relaxed">{inlineFormat(line)}</p>);
     i++;
   }
@@ -207,15 +245,12 @@ function renderMarkdown(text) {
 }
 
 function inlineFormat(text) {
-  // Split by **bold**, *italic*, `code`
   const parts = [];
   const regex = /(\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`)/g;
-  let last = 0;
-  let m;
-  let key = 0;
+  let last = 0, m, key = 0;
   while ((m = regex.exec(text)) !== null) {
     if (m.index > last) parts.push(<span key={key++}>{text.slice(last, m.index)}</span>);
-    if (m[2] != null) parts.push(<strong key={key++} className="font-bold text-current">{m[2]}</strong>);
+    if (m[2] != null) parts.push(<strong key={key++} className="font-bold">{m[2]}</strong>);
     else if (m[3] != null) parts.push(<em key={key++} className="italic">{m[3]}</em>);
     else if (m[4] != null) parts.push(<code key={key++} className="bg-black/10 rounded px-1 font-mono text-[10px]">{m[4]}</code>);
     last = m.index + m[0].length;
