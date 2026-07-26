@@ -97,6 +97,11 @@ exports.generateReceipt = async (req, res) => {
       .eq('id', req.params.id).eq('school_id', req.schoolId).single();
     if (error) throw error;
 
+    // Fetch school info (req.school doesn't exist — only req.schoolId is set by middleware)
+    const { data: school } = await supabase.from('schools')
+      .select('school_name,city,phone').eq('id', req.schoolId).single();
+    const schoolName = school?.school_name || 'SCHOOL';
+
     const doc = await PDFDocument.create();
     const page = doc.addPage([420, 250]); // Receipt size
     const W = 420, H = 250;
@@ -107,7 +112,7 @@ exports.generateReceipt = async (req, res) => {
 
     page.drawRectangle({ x:0, y:H-50, width:W, height:50, color:navy });
     page.drawText('PAYMENT RECEIPT', { x:16, y:H-28, size:16, font:B, color:rgb(1,1,1) });
-    page.drawText(req.school.school_name || 'SCHOOL', { x:16, y:H-42, size:9, font:R, color:gold });
+    page.drawText(schoolName, { x:16, y:H-42, size:9, font:R, color:gold });
     page.drawText(payment.receipt_number, { x:W-130, y:H-28, size:10, font:B, color:gold });
 
     const rows = [
