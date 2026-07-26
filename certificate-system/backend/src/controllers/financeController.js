@@ -92,52 +92,84 @@ exports.recordPayment = async (req, res) => {
 // GET /api/sms/finance/payments/:id/receipt — generate receipt PDF
 exports.generateReceipt = async (req, res) => {
   try {
+    // Fetch payment with safe joins
     const { data: payment, error } = await supabase.from('payments')
-      .select('*, student:student_profiles(first_name,last_name,student_id,current_class_id,classes(name)), term:terms(name)')
+      .select('*, student:student_profiles(first_name,last_name,student_id,current_class_id), term:terms(name)')
       .eq('id', req.params.id).eq('school_id', req.schoolId).single();
     if (error) throw error;
+    if (!payment) return res.status(404).json({ success: false, error: 'Payment not found' });
 
-    // Fetch school info (req.school doesn't exist — only req.schoolId is set by middleware)
+    // Fetch class name separately (avoids ambiguous FK join)
+    let className = '—';
+    if (payment.student?.current_class_id) {
+      const { data: cls } = await supabase.from('classes')
+        .select('name').eq('id', payment.student.current_class_id).single();
+      className = cls?.name || '—';
+    }
+
+    // Fetch school info
     const { data: school } = await supabase.from('schools')
-      .select('school_name,city,phone').eq('id', req.schoolId).single();
+      .select('school_name').eq('id', req.schoolId).single();
     const schoolName = school?.school_name || 'SCHOOL';
 
-    const doc = await PDFDocument.create();
-    const page = doc.addPage([420, 250]); // Receipt size
-    const W = 420, H = 250;
+    // Safe value helper — ensure no undefined passed to pdf-lib
+    const safe = (v) => String(v ?? '—');
+
+    const doc  = await PDFDocument.create();
+    const page = doc.addPage([420, 260]);
+    const W = 420, H = 260;
     const B = await doc.embedFont(StandardFonts.HelveticaBold);
     const R = await doc.embedFont(StandardFonts.Helvetica);
     const navy = rgb(0.05, 0.14, 0.40);
     const gold = rgb(0.75, 0.55, 0.00);
+    const white = rgb(1, 1, 1);
+    const dark  = rgb(0.1, 0.1, 0.1);
 
-    page.drawRectangle({ x:0, y:H-50, width:W, height:50, color:navy });
-    page.drawText('PAYMENT RECEIPT', { x:16, y:H-28, size:16, font:B, color:rgb(1,1,1) });
-    page.drawText(schoolName, { x:16, y:H-42, size:9, font:R, color:gold });
-    page.drawText(payment.receipt_number, { x:W-130, y:H-28, size:10, font:B, color:gold });
+    // Header bar
+    page.drawRectangle({ x:0, y:H-52, width:W, height:52, color:navy });
+    page.drawText('PAYMENT RECEIPT', { x:16, y:H-28, size:15, font:B, color:white });
+    page.drawText(schoolName.substring(0, 45), { x:16, y:H-44, size:8, font:R, color:gold });
+    const receiptNum = safe(payment.receipt_number);
+    const rnW = B.widthOfTextAtSize(receiptNum, 9);
+    page.drawText(receiptNum, { x: W - rnW - 12, y:H-26, size:9, font:B, color:gold });
+
+    // Date
+    const dateStr = payment.payment_date || payment.created_at
+      ? new Date(payment.payment_date || payment.created_at).toLocaleDateString('en-GB', { day:'2-digit', month:'long', year:'numeric' })
+      : '—';
 
     const rows = [
-      ['Student:', `${payment.student?.first_name} ${payment.student?.last_name}`],
-      ['Student ID:', payment.student?.student_id || '—'],
-      ['Class:', payment.student?.classes?.name || '—'],
-      ['Term:', payment.term?.name || '—'],
-      ['Amount Paid:', `RWF ${parseFloat(payment.amount).toLocaleString()}`],
-      ['Method:', payment.payment_method?.toUpperCase()],
-      ['Reference:', payment.reference || '—'],
-      ['Date:', new Date(payment.payment_date).toLocaleDateString('en-GB', { day:'2-digit', month:'long', year:'numeric' })],
+      ['Student:',    `${safe(payment.student?.first_name)} ${safe(payment.student?.last_name)}`.trim()],
+      ['Student ID:', safe(payment.student?.student_id)],
+      ['Class:',      className],
+      ['Term:',       safe(payment.term?.name)],
+      ['Amount Paid:',`RWF ${parseFloat(payment.amount || 0).toLocaleString()}`],
+      ['Method:',     safe(payment.payment_method).toUpperCase()],
+      ['Reference:',  payment.reference || '—'],
+      ['Date:',       dateStr],
+      ['Status:',     safe(payment.status).toUpperCase()],
     ];
+
     rows.forEach(([label, value], i) => {
-      const y = H - 70 - i * 20;
-      page.drawText(label, { x:16, y, size:9, font:B, color:navy });
-      page.drawText(value, { x:150, y, size:9, font:R, color:rgb(0.1,0.1,0.1) });
+      const y = H - 68 - i * 18;
+      if (y < 28) return; // don't overflow footer
+      page.drawText(label, { x:16,  y, size:8.5, font:B, color:navy });
+      page.drawText(safe(value).substring(0, 55), { x:140, y, size:8.5, font:R, color:dark });
     });
 
+    // Footer
     page.drawRectangle({ x:0, y:0, width:W, height:22, color:navy });
-    page.drawText('Thank you for your payment. Keep this receipt for your records.', { x:16, y:6, size:8, font:R, color:gold });
+    page.drawText('Thank you for your payment. Please keep this receipt for your records.', { x:12, y:6, size:7.5, font:R, color:gold });
 
+    const pdfBytes = await doc.save();
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="receipt_${payment.receipt_number}.pdf"`);
-    res.send(Buffer.from(await doc.save()));
-  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+    res.setHeader('Content-Disposition', `attachment; filename="receipt_${receiptNum}.pdf"`);
+    res.end(Buffer.from(pdfBytes));
+  } catch (err) {
+    console.error('generateReceipt error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
 };
 
 // GET /api/sms/finance/summary
