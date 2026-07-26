@@ -170,7 +170,6 @@ exports.generateReceipt = async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 };
-};
 
 // GET /api/sms/finance/summary
 exports.getFinanceSummary = async (req, res) => {
