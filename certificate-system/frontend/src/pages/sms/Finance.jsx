@@ -14,7 +14,12 @@ function PaymentModal({ student, terms, onSave, onClose }) {
     if (!form.amount || !form.term_id) { toast.error('Amount and Term required'); return; }
     setLoading(true);
     try {
-      const res = await recordPayment({ ...form, student_id: student.id, academic_year_id: '' });
+      const res = await recordPayment({
+        ...form,
+        student_id:       student.id,
+        term_id:          form.term_id || null,
+        academic_year_id: student.academic_year_id || null,
+      });
       toast.success(`Payment recorded! Receipt: ${res.data.receipt_number}`);
       onSave();
     } catch (err) { toast.error(err.response?.data?.error || 'Failed'); }

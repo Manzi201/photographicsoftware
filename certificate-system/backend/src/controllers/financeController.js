@@ -49,18 +49,33 @@ exports.getPayments = async (req, res) => {
 // POST /api/sms/finance/payments — record a payment
 exports.recordPayment = async (req, res) => {
   try {
-    const { student_id, term_id, academic_year_id, amount, payment_method, reference, notes } = req.body;
+    const {
+      student_id, amount, payment_method, reference, notes,
+    } = req.body;
+
+    // Sanitize UUID fields — empty string → null (Postgres rejects "" for uuid type)
+    const term_id         = req.body.term_id         || null;
+    const academic_year_id = req.body.academic_year_id || null;
+
+    if (!student_id) return res.status(400).json({ success: false, error: 'student_id required' });
+    if (!amount || isNaN(parseFloat(amount))) return res.status(400).json({ success: false, error: 'Valid amount required' });
 
     // Generate receipt number
     const { count } = await supabase.from('payments').select('*', { count: 'exact', head: true }).eq('school_id', req.schoolId);
     const receipt_number = `RCP-${new Date().getFullYear()}-${String((count || 0) + 1).padStart(5, '0')}`;
 
     const { data: payment, error } = await supabase.from('payments').insert([{
-      school_id: req.schoolId, student_id, term_id, academic_year_id,
-      amount: parseFloat(amount), payment_method: payment_method || 'cash',
-      reference, notes, receipt_number,
-      received_by: req.staff?.id || null,
-      status: 'confirmed',
+      school_id:      req.schoolId,
+      student_id,
+      term_id,
+      academic_year_id,
+      amount:         parseFloat(amount),
+      payment_method: payment_method || 'cash',
+      reference:      reference || null,
+      notes:          notes     || null,
+      receipt_number,
+      received_by:    req.staff?.id || null,
+      status:         'confirmed',
     }]).select().single();
     if (error) throw error;
 
