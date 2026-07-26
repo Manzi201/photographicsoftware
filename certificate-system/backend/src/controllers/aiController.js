@@ -154,10 +154,7 @@ exports.timetableChat = async (req, res) => {
       .filter(c => !slotList.some(s => s.class_id === c.id))
       .map(c => c.name);
 
-    // ── 4. Call Mistral (with optional image) ────────────────
-    const { imageBase64, imageMime } = req.body;
-
-    // Fetch year name first so it can be used in both context and system prompt
+    // ── 4. Fetch year name (before context template) ─────────
     const yearName = academic_year_id
       ? ((await supabase.from('academic_years').select('name').eq('id', academic_year_id).single()).data?.name || academic_year_id)
       : 'All years';
