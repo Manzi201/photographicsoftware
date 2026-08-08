@@ -27,38 +27,15 @@ function PhotoUploadModal({ student, onSave, onClose }) {
     if (!photo) { onClose(); return; }
     setLoading(true);
     try {
-      const fd = new FormData();
-      fd.append('photo', photo);
-      // Send all existing fields + new photo
-      Object.entries({
-        first_name:    student.first_name,
-        last_name:     student.last_name,
-        other_names:   student.other_names   || '',
-        date_of_birth: student.date_of_birth || '',
-        gender:        student.gender        || 'M',
-        nationality:   student.nationality   || 'Rwandan',
-        parent_name:   student.parent_name   || '',
-        parent_phone:  student.parent_phone  || '',
-        parent_email:  student.parent_email  || '',
-        parent_phone2: student.parent_phone2 || '',
-        address:       student.address       || '',
-        current_class_id:  student.current_class_id  || '',
-        academic_year_id:  student.academic_year_id  || '',
-        status:        student.status || 'active',
-      }).forEach(([k, v]) => { if (v) fd.append(k, v); });
-      fd.append('photo', photo);
-      // Use PUT with form data — but updateSmsStudent sends JSON, so use separate photo endpoint via createSmsStudent pattern
-      // Actually use the update endpoint with FormData
-      const api = (await import('../../api')).default || (await import('../../api'));
-      const sms = api.sms || (await import('axios')).default;
-
-      // Call the update endpoint as multipart
       const { default: axios } = await import('axios');
       const token = localStorage.getItem('staff_token');
       const base  = import.meta.env.VITE_API_URL?.replace('/api','/api/sms') ||
         (window.location.hostname !== 'localhost'
           ? 'https://photographicsoftware-1.onrender.com/api/sms' : '/api/sms');
-      await axios.put(`${base}/students/${student.id}`, fd, {
+
+      const fd = new FormData();
+      fd.append('photo', photo);
+      await axios.patch(`${base}/students/${student.id}/photo`, fd, {
         headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` },
         timeout: 30000,
       });
@@ -109,14 +86,26 @@ function BulkPhotoModal({ students, onSave, onClose }) {
   const handleFiles = (fileList) => {
     const arr = Array.from(fileList);
     setFiles(arr);
-    // Auto-match by student_id in filename: "2026_0001.jpg" or "MANZI.jpg"
+    // Auto-match by various patterns
     const m = {};
     arr.forEach(f => {
-      const base = f.name.replace(/\.[^.]+$/, '').toLowerCase().replace(/[_\s-]/g, '');
+      // Normalize filename: remove extension, lowercase, remove separators
+      const base = f.name.replace(/\.[^.]+$/, '').toLowerCase().replace(/[_\s\-\.]/g, '');
       const match = students.find(st => {
-        const sid = (st.student_id || '').toLowerCase().replace(/[/\s]/g, '');
-        const name = `${st.first_name}${st.last_name}`.toLowerCase();
-        return base.includes(sid) || base === name || name.startsWith(base);
+        // Try student_id match (e.g. "2026/0001" → "20260001")
+        const sid = (st.student_id || '').toLowerCase().replace(/[/\\\s_\-]/g, '');
+        if (base === sid || base.includes(sid) || sid.includes(base)) return true;
+        // Try full name match
+        const fullName = `${st.first_name}${st.last_name}`.toLowerCase().replace(/\s/g, '');
+        const fullNameRev = `${st.last_name}${st.first_name}`.toLowerCase().replace(/\s/g, '');
+        if (base === fullName || base === fullNameRev) return true;
+        // Try partial: starts with last name
+        const lastName = (st.last_name || '').toLowerCase().replace(/\s/g, '');
+        const firstName = (st.first_name || '').toLowerCase().replace(/\s/g, '');
+        if (base.startsWith(lastName) || base.startsWith(firstName)) return true;
+        if (lastName.length >= 3 && base.includes(lastName)) return true;
+        if (firstName.length >= 4 && base.includes(firstName)) return true;
+        return false;
       });
       if (match) m[f.name] = match.id;
     });
@@ -135,25 +124,31 @@ function BulkPhotoModal({ students, onSave, onClose }) {
 
       for (const file of files) {
         const studentId = matches[file.name];
-        if (!studentId) { fail.push({ file: file.name, reason: 'No student match' }); continue; }
+        if (!studentId) { fail.push({ file: file.name, reason: 'No student matched — assign manually' }); continue; }
         try {
-          const student = students.find(s => s.id === studentId);
-          const fd = new FormData();
-          fd.append('photo', file);
-          if (student) {
-            Object.entries({ first_name: student.first_name, last_name: student.last_name, gender: student.gender || 'M', status: student.status || 'active' })
-              .forEach(([k,v]) => { if(v) fd.append(k, v); });
+          // Use the dedicated PATCH /students/:id/photo endpoint
+          try {
+            const photoFd = new FormData();
+            photoFd.append('photo', file);
+            await axios.patch(`${base}/students/${studentId}/photo`, photoFd, {
+              headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` },
+              timeout: 30000,
+            });
+          } catch {
+            // fallback: PUT with full form data
+            await axios.put(`${base}/students/${studentId}`, fd, {
+              headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` },
+              timeout: 30000,
+            });
           }
-          await axios.put(`${base}/students/${studentId}`, fd, {
-            headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` },
-            timeout: 30000,
-          });
           ok.push(file.name);
-        } catch { fail.push({ file: file.name, reason: 'Upload error' }); }
+        } catch (e) {
+          fail.push({ file: file.name, reason: e.response?.data?.error || e.message || 'Upload error' });
+        }
       }
       setResults({ ok, fail });
-      if (ok.length > 0) { toast.success(`${ok.length} photos uploaded!`); onSave(); }
-      if (fail.length > 0) toast.error(`${fail.length} failed`);
+      if (ok.length > 0) { toast.success(`${ok.length} photo${ok.length!==1?'s':''} uploaded!`); onSave(); }
+      if (fail.length > 0 && ok.length === 0) toast.error(`All ${fail.length} uploads failed`);
     } finally { setUploading(false); }
   };
 

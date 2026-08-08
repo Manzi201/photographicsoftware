@@ -328,3 +328,37 @@ exports.importStudents = async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 };
+
+// PATCH /api/sms/students/:id/photo — update only the photo
+exports.updatePhoto = async (req, res) => {
+  try {
+    const studentId = req.params.id;
+    const schoolId  = req.schoolId;
+
+    if (!req.files?.photo) return res.status(400).json({ success: false, error: 'No photo file provided. Field name must be "photo".' });
+
+    const ph    = req.files.photo;
+    const ext   = ph.name ? ph.name.split('.').pop().toLowerCase() : 'jpg';
+    const fname = `${schoolId}/students/${studentId}_${Date.now()}.${ext}`;
+
+    const { error: upErr } = await supabase.storage
+      .from('assets')
+      .upload(fname, ph.data, { contentType: ph.mimetype || 'image/jpeg', upsert: true });
+    if (upErr) throw upErr;
+
+    const { data: urlData } = supabase.storage.from('assets').getPublicUrl(fname);
+    const photo_url = urlData.publicUrl;
+
+    const { data, error } = await supabase.from('student_profiles')
+      .update({ photo_url, updated_at: new Date().toISOString() })
+      .eq('id', studentId).eq('school_id', schoolId)
+      .select('id, first_name, last_name, student_id, photo_url')
+      .single();
+    if (error) throw error;
+
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('updatePhoto error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+};

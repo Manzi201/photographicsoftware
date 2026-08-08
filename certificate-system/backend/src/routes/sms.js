@@ -27,6 +27,7 @@ router.get   ('/students/:id',    students.getStudent);
 // WRITE: only secretary, dos, finance (accountant), admin
 router.post  ('/students',        requireRole('admin','secretary','dos','finance'), students.createStudent);
 router.put   ('/students/:id',    requireRole('admin','secretary','dos','finance'), students.updateStudent);
+router.patch ('/students/:id/photo', requireRole('admin','secretary','dos','finance'), students.updatePhoto);
 router.delete('/students/:id',    requireRole('admin','secretary','dos','finance'), students.deleteStudent);
 
 // ── Academic ──────────────────────────────────────────────────
