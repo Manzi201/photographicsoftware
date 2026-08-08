@@ -511,15 +511,19 @@ function AssignModal({ cls, subjects, staffList, allClasses, onSave, onClose }) 
   const [classSubjects, setClassSubjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [teacherSelects, setTeacherSelects] = useState({}); // { subjectId: teacherId }
+  const [periodsEdits,   setPeriodsEdits]   = useState({}); // { subjectId: max_periods_week }
 
   const reload = async () => {
     const r = await getSmsSubjects({ class_id: cls.id });
     const cs = r.data.data || [];
     setClassSubjects(cs);
-    // Prefill teacher selects
-    const ts = {};
-    cs.forEach(s => { ts[s.id] = s.teacher?.id || ''; });
+    const ts = {}, pe = {};
+    cs.forEach(s => {
+      ts[s.id] = s.teacher?.id || '';
+      pe[s.id] = s.max_periods_week ?? 7;
+    });
     setTeacherSelects(ts);
+    setPeriodsEdits(pe);
   };
 
   useEffect(() => { reload().finally(() => setLoading(false)); }, [cls.id]);
@@ -553,6 +557,7 @@ function AssignModal({ cls, subjects, staffList, allClasses, onSave, onClose }) 
         class_id: cls.id, subject_id: cs.id,
         teacher_id: cs.teacher?.id || null,
         is_core: !cs.is_core, sort_order: cs.sort_order ?? 999,
+        max_periods_week: periodsEdits[cs.id] ?? cs.max_periods_week ?? 7,
       });
       await reload(); onSave();
     } catch(err) { toast.error('Error'); }
@@ -565,9 +570,28 @@ function AssignModal({ cls, subjects, staffList, allClasses, onSave, onClose }) 
         class_id: cls.id, subject_id: cs.id,
         teacher_id: cs.teacher?.id || null,
         is_core: cs.is_core ?? false, sort_order: parseInt(newOrder) || 999,
+        max_periods_week: periodsEdits[cs.id] ?? cs.max_periods_week ?? 7,
       });
       await reload();
     } catch(err) { toast.error('Error'); }
+  };
+
+  // Update max_periods_week for this class
+  const updatePeriods = async (cs, newPW) => {
+    const pw = Math.max(1, Math.min(20, parseInt(newPW) || 7));
+    setPeriodsEdits(p => ({ ...p, [cs.id]: pw }));
+    try {
+      await SMS_API.post('/class-subjects', {
+        class_id: cls.id, subject_id: cs.id,
+        teacher_id: cs.teacher?.id || null,
+        is_core: cs.is_core ?? false, sort_order: cs.sort_order ?? 999,
+        max_periods_week: pw,
+      });
+      // Also update the subjects table so auto-generate picks it up
+      await SMS_API.put(`/subjects/${cs.id}`, { max_periods_week: pw });
+      toast.success(`${cs.name}: ${pw} periods/week`);
+      await reload();
+    } catch(err) { toast.error('Error updating periods'); }
   };
 
   // Set teacher for THIS class only
@@ -577,6 +601,7 @@ function AssignModal({ cls, subjects, staffList, allClasses, onSave, onClose }) 
         class_id: cls.id, subject_id: cs.id,
         teacher_id: teacher_id || null,
         is_core: cs.is_core ?? false, sort_order: cs.sort_order ?? 999,
+        max_periods_week: periodsEdits[cs.id] ?? cs.max_periods_week ?? 7,
       });
       toast.success(`Teacher set for ${cls.name}`);
       await reload(); onSave();
@@ -610,7 +635,7 @@ function AssignModal({ cls, subjects, staffList, allClasses, onSave, onClose }) 
                 <div key={cs.class_subject_id||cs.id}
                   className="bg-gray-50 border border-gray-100 rounded-xl p-3 space-y-2">
 
-                  {/* Row 1: order | name | core | remove */}
+                  {/* Row 1: order | name | periods/wk | core | remove */}
                   <div className="flex items-center gap-2">
                     <input type="number" min="1" max="99"
                       defaultValue={cs.sort_order ?? 999}
@@ -621,6 +646,18 @@ function AssignModal({ cls, subjects, staffList, allClasses, onSave, onClose }) 
                       <span className="font-bold text-gray-900 text-sm">{cs.name}</span>
                       {cs.code && <span className="ml-1.5 text-[10px] font-mono text-blue-500 bg-blue-50 px-1 rounded">{cs.code}</span>}
                       {cs.coefficient > 1 && <span className="ml-1.5 text-xs text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded">×{cs.coefficient}</span>}
+                    </div>
+                    {/* Periods per week input */}
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className="text-[10px] text-gray-400 whitespace-nowrap">Periods/wk</span>
+                      <input
+                        type="number" min="1" max="20"
+                        value={periodsEdits[cs.id] ?? cs.max_periods_week ?? 7}
+                        onChange={e => setPeriodsEdits(p => ({ ...p, [cs.id]: e.target.value }))}
+                        onBlur={e => updatePeriods(cs, e.target.value)}
+                        className="w-12 text-center text-sm font-bold border-2 border-blue-200 rounded-lg py-1 focus:outline-none focus:border-blue-500 bg-blue-50 text-blue-800"
+                        title="Max periods per week for this subject in timetable"
+                      />
                     </div>
                     <button onClick={() => toggleCore(cs)}
                       className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border transition-all

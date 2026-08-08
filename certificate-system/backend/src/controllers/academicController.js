@@ -472,7 +472,7 @@ exports.getClassSubjects = async (req, res) => {
 
 exports.assignSubject = async (req, res) => {
   try {
-    const { class_id, subject_id, teacher_id, sort_order, is_core } = req.body;
+    const { class_id, subject_id, teacher_id, sort_order, is_core, max_periods_week } = req.body;
     if (!class_id || !subject_id) return res.status(400).json({ success: false, error: 'class_id and subject_id required' });
     const row = {
       class_id, subject_id,
@@ -480,6 +480,12 @@ exports.assignSubject = async (req, res) => {
       sort_order: sort_order != null ? parseInt(sort_order) : 999,
       is_core:    is_core != null ? !!is_core : false,
     };
+    // If max_periods_week provided, update the subject table too
+    if (max_periods_week != null) {
+      const pw = Math.max(1, Math.min(20, parseInt(max_periods_week) || 7));
+      await supabase.from('subjects').update({ max_periods_week: pw })
+        .eq('id', subject_id).eq('school_id', req.schoolId);
+    }
     const { data, error } = await supabase.from('class_subjects')
       .upsert([row], { onConflict: 'class_id,subject_id' })
       .select('*, subject:subjects(*), teacher:staff(id,full_name)').single();
