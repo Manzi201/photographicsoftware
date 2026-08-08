@@ -124,6 +124,11 @@ router.get   ('/timetable/export/class',            requireRole('admin','dos','t
 router.get   ('/timetable/export/teacher',          requireRole('admin','dos','teacher'), tt.generateTeacherTimetable);
 router.get   ('/timetable/export/school',           requireRole('admin','dos'),           tt.generateSchoolTimetable);
 
+// ── Student Badges ────────────────────────────────────────────
+const badges = require('../controllers/badgeController');
+router.get('/badges/class',   requireRole('admin','dos','secretary'), badges.generateClassBadges);
+router.get('/badges/student', requireRole('admin','dos','secretary'), badges.generateStudentBadge);
+
 // ── AI Assistant ──────────────────────────────────────────────
 const ai = require('../controllers/aiController');
 router.post('/ai/timetable-chat', requireRole('admin','dos'), ai.timetableChat);

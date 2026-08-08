@@ -200,3 +200,7 @@ export const exportSchoolTimetable  = (p)   => sms.get('/timetable/export/school
 export const aiTimetableChat = (d) => sms.post('/ai/timetable-chat', d, { timeout: 30000 });
 export const aiCheckSlot     = (d) => sms.post('/ai/check-slot', d);
 export const aiFixTimetable  = (d) => sms.post('/ai/fix-timetable', d, { timeout: 60000 });
+
+// ── Student Badges ────────────────────────────────────────────
+export const generateClassBadges   = (p) => sms.get('/badges/class',   { params: p, responseType: 'blob', timeout: 60000 });
+export const generateStudentBadge  = (p) => sms.get('/badges/student', { params: p, responseType: 'blob', timeout: 30000 });

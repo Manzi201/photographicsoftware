@@ -3,7 +3,7 @@ import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   GraduationCap, LayoutDashboard, Users, Folder, LogOut, Menu, X,
   BookOpen, FileText, CreditCard, Bell, TrendingUp, Layers, Calendar,
-  Settings, UserCircle, Shield, ChevronLeft, ChevronRight
+  Settings, UserCircle, Shield, ChevronLeft, ChevronRight, BadgeCheck
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
@@ -30,6 +30,7 @@ const NAV_BY_ROLE = {
     { to:'/sms/dashboard', icon:LayoutDashboard, label:'Dashboard'       },
     { divider:true, label:'TASKS' },
     { to:'/sms/students',  icon:Users,           label:'Students'        },
+    { to:'/sms/badges',    icon:BadgeCheck,      label:'ID Badges'       },
     { to:'/sms/bulletins', icon:FileText,        label:'Print Bulletins' },
     { to:'/sms/documents', icon:Folder,          label:'Documents'       },
   ],
@@ -56,6 +57,7 @@ const NAV_BY_ROLE = {
     { to:'/sms/promotion', icon:TrendingUp,      label:'Promotion'       },
     { divider:true, label:'PEOPLE' },
     { to:'/sms/students',  icon:Users,           label:'Students'        },
+    { to:'/sms/badges',    icon:BadgeCheck,      label:'ID Badges'       },
   ],
 };
 
