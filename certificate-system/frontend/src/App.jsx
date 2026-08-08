@@ -6,6 +6,7 @@ import Layout from './components/Layout';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import Dashboard from './pages/Dashboard';
 import ClassesManager from './pages/ClassesManager';
 import UploadStudents from './pages/UploadStudents';
@@ -90,6 +91,7 @@ function AppRoutes() {
         <Route path="/login"           element={<PublicRoute><Login /></PublicRoute>} />
         <Route path="/register"        element={<PublicRoute><Register /></PublicRoute>} />
         <Route path="/forgot-password" element={<PublicRoute><ForgotPassword /></PublicRoute>} />
+        <Route path="/reset-password"  element={<ResetPassword />} />
         <Route path="/staff-login"     element={<Navigate to="/login" replace />} />
 
         {/* Protected — all inside Layout */}
